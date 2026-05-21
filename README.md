@@ -2,13 +2,13 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, dosyalarla çalışır, ekrana bakar, bilgisayarı kullanır.
 
-<!-- BADGES (placeholder) -->
-![build](https://img.shields.io/badge/build-pending-lightgrey)
-![tests](https://img.shields.io/badge/tests-7%20passing-brightgreen)
-![coverage](https://img.shields.io/badge/coverage-pending-lightgrey)
+<!-- BADGES -->
+![version](https://img.shields.io/badge/version-0.1.0-blue)
+![tests](https://img.shields.io/badge/tests-91%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
-![license](https://img.shields.io/badge/license-tbd-lightgrey)
+![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
+![license](https://img.shields.io/badge/license-MIT-blue)
 
 <!-- DEMO (placeholder) -->
 <!-- ![demo](docs/assets/demo.gif) -->
@@ -92,25 +92,36 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Sprint:** Hafta 1 / 6 — Foundation
-**Versiyon:** `0.0.0` (henüz tag yok)
+**Versiyon:** `0.1.0` — ilk public release (21 May 2026)
+**Test:** 91 yeşil
+**ADR:** 13 belge
 
-| Hafta | Hedef | Durum |
+| Sprint | Hedef | Durum |
 |---|---|---|
-| 1 | Foundation: monorepo, Package.swift, CI, lint, README, 9 ADR | 🔄 devam ediyor |
-| 2 | Mac chat core: `PixelCore` + Anthropic backend + minimal SwiftUI pencere | ⏸ planlı |
-| 3 | `PixelTools`: dispatcher + arbiter + 6 araç (read/write/list/shell/screenshot/web_fetch) | ⏸ planlı |
-| 4 | `PixelMemory` JSONL + `PixelMascot` sprite + tool→mascot state | ⏸ planlı |
-| 5 | iOS uzak istemci + Cloudflare Worker relay + pairing | ✅ tamamlandı |
-| 6 | Polish: demo GIF, DocC GitHub Pages, v0.1.0 release | ⏸ planlı |
+| Hafta 1 | Foundation: SPM monorepo, CI, lint, 9 ADR | ✅ |
+| Hafta 2 | PixelCore tipleri + ChatBackend protokol + SwiftUI chat | ✅ |
+| Hafta 2.5 | Anthropic API → CLI subprocess (claude/codex/gemini) | ✅ |
+| Hafta 3 | PixelMascot 48×48 sprite + PixelTools native toolkit | ✅ |
+| Hafta 4 | PixelMemory JSONL conversation store + Remote envelope | ✅ |
+| Hafta 5 | Cloudflare Worker relay + RelayClient + PairingView + iOS source | ✅ |
+| Hafta 6 | MIT lisansı + DocC GitHub Pages + iOS↔Mac bidirectional + v0.1.0 release | ✅ |
 
 ### iOS app & relay
 
-iOS app source dosyaları `ios/PixelAgentRemote/` altında; Xcode project setup için bkz. [ios/README.md](ios/README.md). Cloudflare Worker relay için bkz. [relay/README.md](relay/README.md). Pairing protokolü: [ADR-0013](docs/adr/0013-pairing-and-relay-protocol.md).
+iOS uzak istemci source dosyaları `ios/PixelAgentRemote/` altında; Xcode project setup için bkz. [ios/README.md](ios/README.md). Cloudflare Worker relay için bkz. [relay/README.md](relay/README.md). Pairing protokolü: [ADR-0013](docs/adr/0013-pairing-and-relay-protocol.md).
+
+### v0.2 yol haritası
+
+- `--output-format stream-json` parser (gerçek token-by-token streaming)
+- Multi-backend simultane (dual-agent paralel sohbet)
+- Plan Mode (read-only tool allowlist)
+- Subagent dispatching (ephemeral runtime + budget)
+- MCP server expose (CLI'ların pixel-agent tool'larını çağırması)
+- Ed25519 envelope signing (Faz 2 auth)
 
 ## Lisans
 
-Henüz belirlenmedi.
+MIT — bkz. [LICENSE](LICENSE).
 
 ## Teşekkür
 

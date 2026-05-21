@@ -9,6 +9,8 @@ import SwiftUI
 struct ChatView: View {
     let backend: any ChatBackend
     let conversationStore: ConversationStore
+    @Binding var incomingRemoteText: String?
+    let onAssistantComplete: ((String) -> Void)?
 
     @State private var messages: [Message] = []
     @State private var draft: String = ""
@@ -89,6 +91,11 @@ struct ChatView: View {
             didRestore = true
             await restoreMessages()
         }
+        .onChange(of: incomingRemoteText) { _, newValue in
+            guard let text = newValue, !text.isEmpty, !isStreaming else { return }
+            send(text: text)
+            incomingRemoteText = nil
+        }
     }
 
     private var statusText: String {
@@ -122,11 +129,17 @@ struct ChatView: View {
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
+        send(text: text)
+        if !text.isEmpty {
+            draft = ""
+        }
+    }
+
+    private func send(text: String) {
+        guard !text.isEmpty, !isStreaming else { return }
 
         let userMsg = Message(role: .user, text: text)
         messages.append(userMsg)
-        draft = ""
 
         let assistantMsg = Message(role: .assistant, text: "")
         messages.append(assistantMsg)
@@ -179,7 +192,9 @@ struct ChatView: View {
         if success {
             if let assistant = messages.first(where: { $0.id == assistantID }), !assistant.text.isEmpty {
                 let store = conversationStore
+                let assistantText = assistant.text
                 Task { try? await store.append(assistant) }
+                onAssistantComplete?(assistantText)
             }
 
             if NSApp.isActive {

@@ -3,12 +3,11 @@ import PixelRemote
 import SwiftUI
 
 struct PairingView: View {
-    let relayURL: String
-    @State private var code: String = PairingCode.generate()
+    @ObservedObject var remoteHost: RemoteHost
     @Environment(\.dismiss) private var dismiss
 
     private var qrPayload: String {
-        "pixel-agent-pair://?code=\(code)&relay=\(relayURL)"
+        "pixel-agent-pair://?code=\(remoteHost.pairingCode)&relay=\(remoteHost.relayURL)"
     }
 
     var body: some View {
@@ -30,22 +29,45 @@ struct PairingView: View {
                 .padding(8)
                 .background(.white, in: RoundedRectangle(cornerRadius: 12))
 
-            Text(code)
+            Text(remoteHost.pairingCode)
                 .font(.system(size: 28, weight: .bold, design: .monospaced))
                 .tracking(6)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(.quaternary, in: Capsule())
 
-            Text(relayURL)
+            Text(remoteHost.relayURL)
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
 
+            statusRow
+
+            if let error = remoteHost.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
             HStack(spacing: 12) {
                 Button("Yeni kod") {
-                    code = PairingCode.generate()
+                    remoteHost.regenerateCode()
                 }
+                .disabled(remoteHost.isConnected)
+
+                if remoteHost.isConnected {
+                    Button("Bağlantıyı kes") {
+                        Task { await remoteHost.disconnect() }
+                    }
+                } else {
+                    Button("Bağlan") {
+                        Task { await remoteHost.connect() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+
                 Button("Kapat") {
                     dismiss()
                 }
@@ -54,7 +76,18 @@ struct PairingView: View {
             .padding(.top, 8)
         }
         .padding(28)
-        .frame(width: 360)
+        .frame(width: 380)
+    }
+
+    private var statusRow: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(remoteHost.isConnected ? .green : .secondary.opacity(0.6))
+                .frame(width: 8, height: 8)
+            Text(remoteHost.isConnected ? "Bağlı (relay'i dinliyor)" : "Bağlı değil")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var qrImage: Image {

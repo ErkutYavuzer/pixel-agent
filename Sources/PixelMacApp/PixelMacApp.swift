@@ -81,6 +81,8 @@ struct ChatHost: View {
     let conversationStore: ConversationStore
     @State private var selectedKind: CLIKind
     @State private var showPairing: Bool = false
+    @State private var incomingFromRemote: String?
+    @StateObject private var remoteHost: RemoteHost
 
     static let defaultRelayURL: String = "ws://localhost:8787"
 
@@ -89,6 +91,7 @@ struct ChatHost: View {
         self.conversationStore = conversationStore
         let initial = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
         _selectedKind = State(initialValue: initial)
+        _remoteHost = StateObject(wrappedValue: RemoteHost(relayURL: Self.defaultRelayURL))
     }
 
     var body: some View {
@@ -104,6 +107,12 @@ struct ChatHost: View {
                 .frame(maxWidth: 320)
 
                 Spacer()
+
+                if remoteHost.isConnected {
+                    Image(systemName: "iphone.gen3.radiowaves.left.and.right")
+                        .foregroundStyle(.green)
+                        .help("iOS bağlı")
+                }
 
                 Button { showPairing = true } label: {
                     Image(systemName: "qrcode")
@@ -122,13 +131,25 @@ struct ChatHost: View {
             Divider()
 
             if let backend = backends[selectedKind] {
-                ChatView(backend: backend, conversationStore: conversationStore)
+                ChatView(
+                    backend: backend,
+                    conversationStore: conversationStore,
+                    incomingRemoteText: $incomingFromRemote,
+                    onAssistantComplete: { text in
+                        Task { await remoteHost.sendAssistantMessage(text) }
+                    }
+                )
             } else {
                 MissingBackendView(kind: selectedKind)
             }
         }
         .sheet(isPresented: $showPairing) {
-            PairingView(relayURL: Self.defaultRelayURL)
+            PairingView(remoteHost: remoteHost)
+        }
+        .task {
+            for await text in remoteHost.inboundTexts {
+                incomingFromRemote = text
+            }
         }
     }
 
