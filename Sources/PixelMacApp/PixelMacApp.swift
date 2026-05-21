@@ -219,6 +219,10 @@ struct ChatHost: View {
                             Task { await remoteHost.sendAssistantMessage(text) }
                         }
                     )
+                    // Backend değişiminde ChatViewModel @StateObject sıfırlansın diye
+                    // .id'yi backend kind'ına bağla. Aksi halde picker değiştiğinde
+                    // view yeniden init olur ama ViewModel eski backend'i tutar.
+                    .id(selectedKind)
                 } else {
                     MissingBackendView(kind: selectedKind)
                 }
