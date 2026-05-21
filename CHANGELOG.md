@@ -7,11 +7,20 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Removed — Hafta 2.5 (21 May 2026)
+- `AnthropicBackend` (URLSession + SSE streaming) silindi. Yerine `CLIBackend` geldi — gerekçe ve detay için bkz. [ADR-0010](docs/adr/0010-cli-subprocess-backend.md).
+- `AnthropicError` → yerine jenerik `BackendError`.
+- `SSEParser` → CLI subprocess'lerinde SSE yok, gereksiz.
+- İlgili 12 test silindi.
+
+### Added — Hafta 2.5 (21 May 2026)
+- `PixelBackends`: `CLIBackend` (subprocess wrapper, claude/codex/gemini); `CLIDetector` (bilinen path + `which` fallback); `CLIProcessRunner` (Process API + async byte stream); `BackendError` (cliNotFound / processFailed / exitNonZero / noBackendAvailable, Türkçe LocalizedError).
+- `PixelMacApp`: `RootView` artık `CLIDetector` ile yüklü CLI'ları tespit eder; `ChatHost` segmented Picker ile anlık backend değişimi; `MissingBackendView` seçili CLI yüklü değilse; `ErrorView` hiçbir CLI yoksa "Tekrar tara".
+- Test: 20 yeni — `BackendErrorTests`, `CLIDetectorTests`, `CLIProcessRunnerTests` (echo/printf/exit/missing/stdin), `CLIBackendTests` (init + e2e echo backend). Toplam **37 test yeşil**.
+
 ### Added — Hafta 2 (21 May 2026)
 - `PixelCore`: `Message`, `MessageRole`, `StreamDelta`, `ChatBackend` protokolü, `AgentID`, `AgentContext` (TaskLocal scoping). ADR-0003 ve ADR-0004 hayata geçti.
-- `PixelBackends`: `AnthropicBackend` (URLSession + SSE streaming, default model `claude-sonnet-4-6`, ANTHROPIC_API_KEY ENV var); pure `SSEParser`; `AnthropicError` (LocalizedError).
-- `PixelMacApp`: SwiftUI `ChatView` (mesaj listesi + canlı streaming composer + ESC ile iptal); `RootView` composition root; `ErrorView` (API key eksikse kullanıcı dostu mesaj + "Tekrar dene").
-- Test kapsamı: **29 yeşil test** (Hafta 1: 7 placeholder + Hafta 2: 22 yeni — `MessageTests`, `AgentContextTests` (TaskLocal scope + child Task propagation), `MockChatBackendTests`, `AnthropicBackendTests` (init validation + localized error), `SSEParserTests` (content_block_delta, message_stop, edge cases, Unicode)).
+- `PixelMacApp`: SwiftUI `ChatView` (mesaj listesi + canlı streaming composer + ESC ile iptal).
 
 ### Added — Hafta 1 (21 May 2026)
 - Swift Package Manager monorepo iskeleti (6 library + 1 executable target).

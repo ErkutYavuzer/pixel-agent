@@ -46,6 +46,11 @@ Her provider bu protokolü implement eder. Tool schema format çevirisi her impl
 
 v2'de `ChatBackend` 7 provider'ı aynı dispatch path'inde yönetti (Anthropic API + CLI, OpenAI-compat, Gemini, Ollama, MiniMax, Apple Intelligence, Codex CLI). Yeni provider eklemek günler değil saatler aldı. Vision fallback chain (Anthropic → Gemini → OpenAI) `oneShotMultimodal` default impl üzerinde kuruldu.
 
+## Update — 2026-05-21
+
+İlk implementasyon (Hafta 2) `AnthropicBackend` ile HTTP API kullandı. Hafta 2.5'te bu silindi, yerine `CLIBackend` (subprocess wrapper) geldi. Detay: [ADR-0010](0010-cli-subprocess-backend.md). `ChatBackend` protokolünün şekli değişmedi — protokol soyutlamasının değeri tam burada görüldü: implementasyon swap, çağıran kod (ChatView) sıfır değişiklikle çalıştı.
+
 ## References
 
+- [ADR-0010 — CLI subprocess backend](0010-cli-subprocess-backend.md) (Hafta 2.5'te eklendi)
 - [docs/architecture-decisions-from-v2.md](../architecture-decisions-from-v2.md#karar-2)

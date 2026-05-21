@@ -68,14 +68,22 @@ swift test
 swift run PixelMacApp
 ```
 
-Gereksinimler: macOS 14+, Swift 6.0+.
+Gereksinimler:
+- macOS 14+
+- Swift 6.0+
+- Aşağıdaki CLI'lardan **en az biri** yüklü ve login olmalı:
+  - [Claude Code CLI](https://github.com/anthropics/claude-code)
+  - [OpenAI Codex CLI](https://github.com/openai/codex)
+  - [Google Gemini CLI](https://github.com/google-gemini/gemini-cli)
+
+Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilinen yollarda (`/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`, `~/bin`) tarar. Bulunanlar arasında segmented picker ile anlık geçiş yapabilirsiniz. API key veya ortam değişkeni gerekmez — CLI'ların kendi OAuth/login state'ini kullanır.
 
 ## Modüller
 
 | Modül | Sorumluluk | Bağımlılık |
 |---|---|---|
 | `PixelCore` | `ChatBackend` protokolü, `Envelope` tipleri, TaskLocal scoping primitives | — |
-| `PixelBackends` | LLM provider implementasyonları (MVP: Anthropic) | `PixelCore` |
+| `PixelBackends` | LLM CLI wrapper'ları (`claude` / `codex` / `gemini` subprocess) + detection | `PixelCore` |
 | `PixelTools` | `ToolDispatcher`, `ToolArbiter`, 6 temel araç | `PixelCore` |
 | `PixelMemory` | JSONL append-only conversation + memory deposu | `PixelCore` |
 | `PixelMascot` | 48×48 pixel-art sprite render, state machine | — |

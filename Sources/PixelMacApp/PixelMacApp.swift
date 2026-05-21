@@ -7,46 +7,107 @@ struct PixelMacApp: App {
     var body: some Scene {
         WindowGroup("pixel-agent") {
             RootView()
-                .frame(minWidth: 480, minHeight: 360)
+                .frame(minWidth: 520, minHeight: 400)
         }
     }
 }
 
 struct RootView: View {
-    @State private var backend: AnthropicBackend?
-    @State private var initError: String?
+    @State private var backends: [CLIKind: CLIBackend]
 
     init() {
-        do {
-            let backend = try AnthropicBackend()
-            _backend = State(initialValue: backend)
-            _initError = State(initialValue: nil)
-        } catch {
-            _backend = State(initialValue: nil)
-            _initError = State(initialValue: Self.describe(error))
-        }
+        _backends = State(initialValue: Self.resolveBackends())
     }
 
     var body: some View {
-        if let backend {
-            ChatView(backend: backend)
+        if backends.isEmpty {
+            ErrorView(
+                message: BackendError.noBackendAvailable.errorDescription ?? "",
+                onRetry: rescan
+            )
         } else {
-            ErrorView(message: initError ?? "Bilinmeyen hata", onRetry: retry)
+            ChatHost(backends: backends)
         }
     }
 
-    private func retry() {
-        do {
-            backend = try AnthropicBackend()
-            initError = nil
-        } catch {
-            backend = nil
-            initError = Self.describe(error)
+    private func rescan() {
+        backends = Self.resolveBackends()
+    }
+
+    private static func resolveBackends() -> [CLIKind: CLIBackend] {
+        var resolved: [CLIKind: CLIBackend] = [:]
+        let detector = CLIDetector()
+        for (kind, path) in detector.available() {
+            resolved[kind] = CLIBackend(kind: kind, executablePath: path)
+        }
+        return resolved
+    }
+}
+
+struct ChatHost: View {
+    let backends: [CLIKind: CLIBackend]
+    @State private var selectedKind: CLIKind
+
+    init(backends: [CLIKind: CLIBackend]) {
+        self.backends = backends
+        let initial = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
+        _selectedKind = State(initialValue: initial)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Picker("Backend", selection: $selectedKind) {
+                    ForEach(CLIKind.allCases, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+
+                Spacer()
+
+                Text(modelText)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+
+            Divider()
+
+            if let backend = backends[selectedKind] {
+                ChatView(backend: backend)
+            } else {
+                MissingBackendView(kind: selectedKind)
+            }
         }
     }
 
-    private static func describe(_ error: any Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    private var modelText: String {
+        backends[selectedKind]?.modelID ?? "—"
+    }
+}
+
+struct MissingBackendView: View {
+    let kind: CLIKind
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 32))
+                .foregroundStyle(.orange)
+            Text("\(kind.displayName) CLI yüklü değil")
+                .font(.headline)
+            Text("\(kind.executableName) PATH'te veya bilinen yollarda bulunamadı.\nYükleyip uygulamayı yeniden başlatın.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -59,13 +120,13 @@ struct ErrorView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 40))
                 .foregroundStyle(.orange)
-            Text("Backend başlatılamadı")
+            Text("Başlatılamadı")
                 .font(.headline)
             Text(message)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
-            Button("Tekrar dene", action: onRetry)
+            Button("Tekrar tara", action: onRetry)
                 .keyboardShortcut(.return)
         }
         .padding(40)
