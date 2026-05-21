@@ -92,4 +92,17 @@ final class RemoteEnvelopeTests: XCTestCase {
         let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
         XCTAssertEqual(decoded.payload?.text, "Şükür çığ üşür İnşallah özgün")
     }
+
+    func testHelloFactoryCarriesPublicKey() throws {
+        let env = RemoteEnvelope.hello(publicKey: "AAAA-pubkey-base64")
+        XCTAssertEqual(env.type, .hello)
+        XCTAssertEqual(env.payload?.publicKey, "AAAA-pubkey-base64")
+        let data = try JSONEncoder().encode(env)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.payload?.publicKey, "AAAA-pubkey-base64")
+    }
+
+    func testProtocolVersionIsV2() {
+        XCTAssertEqual(PixelRemote.protocolVersion, 2)
+    }
 }

@@ -17,6 +17,8 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
     public var errorCode: String?
     public var errorMessage: String?
     public var metadata: [String: String]?
+    /// Hello envelope'unda gönderici tarafın ed25519 public key'i (base64).
+    public var publicKey: String?
 
     public init(
         text: String? = nil,
@@ -24,7 +26,8 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
         messageID: String? = nil,
         errorCode: String? = nil,
         errorMessage: String? = nil,
-        metadata: [String: String]? = nil
+        metadata: [String: String]? = nil,
+        publicKey: String? = nil
     ) {
         self.text = text
         self.role = role
@@ -32,6 +35,7 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
         self.errorCode = errorCode
         self.errorMessage = errorMessage
         self.metadata = metadata
+        self.publicKey = publicKey
     }
 }
 
@@ -77,6 +81,14 @@ extension RemoteEnvelope {
 
     public static func ping() -> RemoteEnvelope {
         RemoteEnvelope(type: .ping)
+    }
+
+    /// Handshake'in ilk envelope'u: gönderen tarafın public key'ini taşır.
+    public static func hello(publicKey: String) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .hello,
+            payload: EnvelopePayload(publicKey: publicKey)
+        )
     }
 
     public static func ack(referenceID: String) -> RemoteEnvelope {

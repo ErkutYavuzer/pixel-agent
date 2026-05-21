@@ -3,7 +3,7 @@ import XCTest
 
 final class PixelRemoteTests: XCTestCase {
     func testVersionPlaceholder() {
-        XCTAssertEqual(PixelRemote.version, "0.1.0")
-        XCTAssertEqual(PixelRemote.protocolVersion, 1)
+        XCTAssertEqual(PixelRemote.version, "0.2.0")
+        XCTAssertEqual(PixelRemote.protocolVersion, 2)
     }
 }
