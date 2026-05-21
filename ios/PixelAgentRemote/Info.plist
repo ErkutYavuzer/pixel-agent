@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>tr</string>
+    <key>CFBundleDisplayName</key>
+    <string>Pixel</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Mac'inizdeki pixel-agent ile eşleşmek için QR kodu kameraya gösterin.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Aynı ağdaki Mac'inizle doğrudan iletişim kurmak için (gelecekte LAN modu).</string>
+</dict>
+</plist>

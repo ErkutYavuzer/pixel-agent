@@ -1,6 +1,7 @@
 import PixelBackends
 import PixelCore
 import PixelMemory
+import PixelRemote
 import PixelTools
 import SwiftUI
 
@@ -79,6 +80,9 @@ struct ChatHost: View {
     let backends: [CLIKind: CLIBackend]
     let conversationStore: ConversationStore
     @State private var selectedKind: CLIKind
+    @State private var showPairing: Bool = false
+
+    static let defaultRelayURL: String = "ws://localhost:8787"
 
     init(backends: [CLIKind: CLIBackend], conversationStore: ConversationStore) {
         self.backends = backends
@@ -101,6 +105,12 @@ struct ChatHost: View {
 
                 Spacer()
 
+                Button { showPairing = true } label: {
+                    Image(systemName: "qrcode")
+                }
+                .buttonStyle(.borderless)
+                .help("Telefonla eşle (QR kod)")
+
                 Text(modelText)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -116,6 +126,9 @@ struct ChatHost: View {
             } else {
                 MissingBackendView(kind: selectedKind)
             }
+        }
+        .sheet(isPresented: $showPairing) {
+            PairingView(relayURL: Self.defaultRelayURL)
         }
     }
 

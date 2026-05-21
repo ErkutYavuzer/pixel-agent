@@ -101,8 +101,12 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | 2 | Mac chat core: `PixelCore` + Anthropic backend + minimal SwiftUI pencere | ⏸ planlı |
 | 3 | `PixelTools`: dispatcher + arbiter + 6 araç (read/write/list/shell/screenshot/web_fetch) | ⏸ planlı |
 | 4 | `PixelMemory` JSONL + `PixelMascot` sprite + tool→mascot state | ⏸ planlı |
-| 5 | iOS uzak istemci + Cloudflare Worker relay + pairing | ⏸ planlı |
+| 5 | iOS uzak istemci + Cloudflare Worker relay + pairing | ✅ tamamlandı |
 | 6 | Polish: demo GIF, DocC GitHub Pages, v0.1.0 release | ⏸ planlı |
+
+### iOS app & relay
+
+iOS app source dosyaları `ios/PixelAgentRemote/` altında; Xcode project setup için bkz. [ios/README.md](ios/README.md). Cloudflare Worker relay için bkz. [relay/README.md](relay/README.md). Pairing protokolü: [ADR-0013](docs/adr/0013-pairing-and-relay-protocol.md).
 
 ## Lisans
 

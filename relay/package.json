@@ -1,0 +1,16 @@
+{
+  "name": "pixel-agent-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "pixel-agent WebSocket relay (Cloudflare Worker + Durable Objects)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240605.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.60.3"
+  }
+}
