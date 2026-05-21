@@ -4,6 +4,7 @@ import SwiftUI
 struct ChatView: View {
     @EnvironmentObject var session: RemoteSession
     @State private var draft: String = ""
+    @State private var showAbout: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -45,6 +46,10 @@ struct ChatView: View {
             }
             .padding()
         }
+        .sheet(isPresented: $showAbout) {
+            AboutView()
+                .environmentObject(session)
+        }
     }
 
     private var header: some View {
@@ -57,10 +62,10 @@ struct ChatView: View {
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
             }
-            Button("Bağlantıyı kes") {
-                Task { await session.disconnect() }
+            Button { showAbout = true } label: {
+                Image(systemName: "info.circle")
             }
-            .font(.caption)
+            .font(.callout)
         }
         .padding(.horizontal)
         .padding(.top, 8)

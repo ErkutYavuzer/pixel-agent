@@ -95,8 +95,23 @@ final class RemoteSession: ObservableObject {
 
     private func autoReconnect(to pairing: PairingInfo) async {
         isAutoConnecting = true
-        await connect(pairing: pairing)
-        isAutoConnecting = false
+        defer { isAutoConnecting = false }
+
+        let connectTask = Task { await self.connect(pairing: pairing) }
+
+        // 5s timeout polling (LAN IP değişmiş olabilir → ölü pairing forget)
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if isConnected || connectTask.isCancelled { break }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        if !isConnected {
+            connectTask.cancel()
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            await disconnect(forget: true)
+            lastError = "Otomatik bağlanma başarısız (5s timeout). QR kodu yeniden tarayın."
+        }
     }
 
     private func handle(_ envelope: RemoteEnvelope) async {

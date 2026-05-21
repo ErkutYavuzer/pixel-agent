@@ -82,6 +82,7 @@ struct ChatHost: View {
     let conversationStore: ConversationStore
     @State private var selectedKind: CLIKind
     @State private var showPairing: Bool = false
+    @State private var showAbout: Bool = false
     @State private var incomingFromRemote: String?
     @StateObject private var remoteHost: RemoteHost
 
@@ -152,6 +153,12 @@ struct ChatHost: View {
                         .help("iOS bağlı")
                 }
 
+                Button { showAbout = true } label: {
+                    Image(systemName: "info.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Hakkında")
+
                 Button { showPairing = true } label: {
                     Image(systemName: "qrcode")
                 }
@@ -183,6 +190,9 @@ struct ChatHost: View {
         }
         .sheet(isPresented: $showPairing) {
             PairingView(remoteHost: remoteHost)
+        }
+        .sheet(isPresented: $showAbout) {
+            AboutView(relayURL: remoteHost.relayURL)
         }
         .task {
             for await text in remoteHost.inboundTexts {
