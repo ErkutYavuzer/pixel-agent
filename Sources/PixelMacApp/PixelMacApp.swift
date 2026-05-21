@@ -1,3 +1,4 @@
+import Darwin
 import PixelBackends
 import PixelCore
 import PixelMemory
@@ -84,7 +85,44 @@ struct ChatHost: View {
     @State private var incomingFromRemote: String?
     @StateObject private var remoteHost: RemoteHost
 
-    static let defaultRelayURL: String = "ws://localhost:8787"
+    /// `PIXEL_RELAY_URL` env var varsa onu kullan; yoksa LAN IP (en0/en1) ile WebSocket URL üret;
+    /// hiçbiri yoksa `ws://localhost:8787` (sadece Mac-local test için).
+    static var defaultRelayURL: String {
+        if let envURL = ProcessInfo.processInfo.environment["PIXEL_RELAY_URL"], !envURL.isEmpty {
+            return envURL
+        }
+        if let lanIP = detectLANIPv4() {
+            return "ws://\(lanIP):8787"
+        }
+        return "ws://localhost:8787"
+    }
+
+    private static func detectLANIPv4() -> String? {
+        var address: String?
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0 else { return nil }
+        defer { freeifaddrs(ifaddr) }
+        var ptr = ifaddr
+        while let current = ptr {
+            defer { ptr = current.pointee.ifa_next }
+            let interface = current.pointee
+            guard let addr = interface.ifa_addr else { continue }
+            let family = addr.pointee.sa_family
+            guard family == UInt8(AF_INET) else { continue }
+            let name = String(cString: interface.ifa_name)
+            guard name == "en0" || name == "en1" else { continue }
+            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            getnameinfo(addr, socklen_t(addr.pointee.sa_len),
+                        &hostname, socklen_t(hostname.count),
+                        nil, 0, NI_NUMERICHOST)
+            let ip = String(cString: hostname)
+            if !ip.isEmpty, ip != "127.0.0.1" {
+                address = ip
+                break
+            }
+        }
+        return address
+    }
 
     init(backends: [CLIKind: CLIBackend], conversationStore: ConversationStore) {
         self.backends = backends

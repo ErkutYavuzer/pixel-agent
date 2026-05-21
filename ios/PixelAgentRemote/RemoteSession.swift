@@ -6,17 +6,29 @@ import PixelRemote
 final class RemoteSession: ObservableObject {
     @Published var pairing: PairingInfo?
     @Published var isConnected: Bool = false
+    @Published var isAutoConnecting: Bool = false
     @Published var messages: [Message] = []
     @Published var lastError: String?
 
     private var client: RelayClient?
     private var receiveTask: Task<Void, Never>?
 
+    private static let pairingDefaultsKey = "pixel-agent.pairing.v1"
+
+    init() {
+        if let saved = Self.loadSavedPairing() {
+            self.pairing = saved
+            Task { await self.autoReconnect(to: saved) }
+        }
+    }
+
     func connect(pairing: PairingInfo) async {
         guard let relayURL = URL(string: pairing.relayURL) else {
             lastError = "Geçersiz relay URL"
             return
         }
+
+        await disconnect(forget: false)
 
         let client = RelayClient()
         self.client = client
@@ -30,6 +42,7 @@ final class RemoteSession: ObservableObject {
             )
             isConnected = true
             lastError = nil
+            Self.savePairing(pairing)
 
             receiveTask = Task { [weak self] in
                 guard let self else { return }
@@ -66,13 +79,24 @@ final class RemoteSession: ObservableObject {
         }
     }
 
-    func disconnect() async {
+    /// `forget: true` ile çağrılırsa kayıtlı pairing de silinir (kullanıcı "Bağlantıyı kes" butonu).
+    /// `forget: false` (default) sadece in-memory state'i temizler — bir sonraki açılışta auto-reconnect dener.
+    func disconnect(forget: Bool = true) async {
         await client?.disconnect()
         client = nil
         receiveTask?.cancel()
         receiveTask = nil
         isConnected = false
-        pairing = nil
+        if forget {
+            pairing = nil
+            Self.clearSavedPairing()
+        }
+    }
+
+    private func autoReconnect(to pairing: PairingInfo) async {
+        isAutoConnecting = true
+        await connect(pairing: pairing)
+        isAutoConnecting = false
     }
 
     private func handle(_ envelope: RemoteEnvelope) async {
@@ -90,11 +114,40 @@ final class RemoteSession: ObservableObject {
             break
         }
     }
+
+    // MARK: - Persistence
+
+    private static func savePairing(_ pairing: PairingInfo) {
+        let dict: [String: String] = [
+            "code": pairing.code,
+            "relay": pairing.relayURL,
+        ]
+        UserDefaults.standard.set(dict, forKey: pairingDefaultsKey)
+    }
+
+    private static func loadSavedPairing() -> PairingInfo? {
+        guard let dict = UserDefaults.standard.dictionary(forKey: pairingDefaultsKey) as? [String: String],
+              let code = dict["code"],
+              let relay = dict["relay"]
+        else {
+            return nil
+        }
+        return PairingInfo(code: code, relayURL: relay)
+    }
+
+    private static func clearSavedPairing() {
+        UserDefaults.standard.removeObject(forKey: pairingDefaultsKey)
+    }
 }
 
 struct PairingInfo: Equatable {
     let code: String
     let relayURL: String
+
+    init(code: String, relayURL: String) {
+        self.code = code
+        self.relayURL = relayURL
+    }
 
     init?(qrPayload: String) {
         guard let url = URL(string: qrPayload),

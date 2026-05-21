@@ -2,7 +2,14 @@ import Foundation
 import UserNotifications
 
 public enum SystemNotifications {
+    /// `UNUserNotificationCenter` yalnızca bundle'lı app context'inde çalışır.
+    /// `swift run` ile çalıştırıldığında Bundle.main.bundleIdentifier nil olur — skip.
+    private static var isBundledApp: Bool {
+        Bundle.main.bundleIdentifier != nil
+    }
+
     public static func requestAuthorization() async -> Bool {
+        guard isBundledApp else { return false }
         do {
             return try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound])
@@ -16,6 +23,7 @@ public enum SystemNotifications {
         body: String,
         identifier: String = UUID().uuidString
     ) async {
+        guard isBundledApp else { return }
         let content = buildContent(title: title, body: body)
         let request = UNNotificationRequest(
             identifier: identifier,

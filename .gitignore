@@ -55,3 +55,11 @@ relay/.wrangler/
 docs/PixelAgent.docc/.build/
 docs/_site/
 Sources/*/Documentation.docc/.build/
+
+# Xcode project — xcodegen ile ios/project.yml'den üretilir
+ios/PixelAgentRemote.xcodeproj/
+ios/build/
+ios/build-device/
+
+# Mac app bundle — scripts/build-app.sh çıktısı
+PixelAgent.app/
