@@ -18,7 +18,12 @@ final class ChatViewModel: ObservableObject {
     var onAssistantComplete: ((String) -> Void)?
 
     private var streamTask: Task<Void, Never>?
+    private var watchdogTask: Task<Void, Never>?
     private var didRestore: Bool = false
+
+    /// Backend stdout'a yanıt vermediği halde kaç saniye bekleyeceğimiz.
+    /// Süre dolarsa stream cancel + UI'da hata mesajı.
+    var streamTimeoutSeconds: TimeInterval = 60
 
     init(
         backend: any ChatBackend,
@@ -99,13 +104,36 @@ final class ChatViewModel: ObservableObject {
                 }
             }
         }
+
+        startTimeoutWatchdog()
     }
 
     func cancelStream() {
         streamTask?.cancel()
         streamTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
         isStreaming = false
         mascotState = .idle
+    }
+
+    private func startTimeoutWatchdog() {
+        watchdogTask?.cancel()
+        let seconds = streamTimeoutSeconds
+        watchdogTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard let self else { return }
+            await MainActor.run {
+                guard self.isStreaming else { return }
+                self.streamError = "Backend \(Int(seconds)) saniyede yanıt vermedi. CLI auth/quota kontrol et."
+                self.streamTask?.cancel()
+                self.streamTask = nil
+                self.isStreaming = false
+                self.mascotState = .error
+                SoundEffect.play(SoundEffect.errorOccurred)
+                DockBadge.set("!")
+            }
+        }
     }
 
     var statusText: String {
@@ -120,6 +148,8 @@ final class ChatViewModel: ObservableObject {
     private func finishStream(success: Bool, assistantID: UUID) {
         isStreaming = false
         mascotState = success ? .idle : .error
+        watchdogTask?.cancel()
+        watchdogTask = nil
 
         if success {
             if let assistant = messages.first(where: { $0.id == assistantID }), !assistant.text.isEmpty {
