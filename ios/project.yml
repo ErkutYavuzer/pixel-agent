@@ -24,11 +24,14 @@ targets:
       path: PixelAgentRemote/Info.plist
       properties:
         CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.2.0"
+        CFBundleVersion: "2"
         CFBundleDevelopmentRegion: tr
         CFBundleDisplayName: Pixel
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: LaunchIcon
+          UIImageRespectsSafeAreaInsets: true
         NSCameraUsageDescription: "Mac'inizdeki pixel-agent ile eşleşmek için QR kodu kameraya gösterin."
         NSLocalNetworkUsageDescription: "Aynı ağdaki Mac'inizle doğrudan iletişim kurmak için (gelecekte LAN modu)."
     dependencies:
@@ -46,3 +49,5 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: LH3Z8J92FX
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
