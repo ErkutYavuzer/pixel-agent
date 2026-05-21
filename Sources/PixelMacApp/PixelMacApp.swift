@@ -77,10 +77,24 @@ struct RootView: View {
     }
 }
 
+enum ChatMode: String, CaseIterable {
+    case single
+    case dual
+
+    var displayName: String {
+        switch self {
+        case .single: return "Tek"
+        case .dual: return "Çift"
+        }
+    }
+}
+
 struct ChatHost: View {
     let backends: [CLIKind: CLIBackend]
     let conversationStore: ConversationStore
     @State private var selectedKind: CLIKind
+    @State private var secondaryKind: CLIKind
+    @State private var mode: ChatMode = .single
     @State private var showPairing: Bool = false
     @State private var showAbout: Bool = false
     @State private var incomingFromRemote: String?
@@ -128,22 +142,44 @@ struct ChatHost: View {
     init(backends: [CLIKind: CLIBackend], conversationStore: ConversationStore) {
         self.backends = backends
         self.conversationStore = conversationStore
-        let initial = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
-        _selectedKind = State(initialValue: initial)
+        let primary = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
+        let secondary = CLIKind.allCases.first(where: { backends[$0] != nil && $0 != primary }) ?? primary
+        _selectedKind = State(initialValue: primary)
+        _secondaryKind = State(initialValue: secondary)
         _remoteHost = StateObject(wrappedValue: RemoteHost(relayURL: Self.defaultRelayURL))
     }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Picker("Backend", selection: $selectedKind) {
+                Picker("Mod", selection: $mode) {
+                    ForEach(ChatMode.allCases, id: \.self) { m in
+                        Text(m.displayName).tag(m)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 110)
+
+                Picker(mode == .single ? "Backend" : "Sol", selection: $selectedKind) {
                     ForEach(CLIKind.allCases, id: \.self) { kind in
                         Text(kind.displayName).tag(kind)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 320)
+                .frame(maxWidth: 240)
+
+                if mode == .dual {
+                    Picker("Sağ", selection: $secondaryKind) {
+                        ForEach(CLIKind.allCases, id: \.self) { kind in
+                            Text(kind.displayName).tag(kind)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 240)
+                }
 
                 Spacer()
 
@@ -164,10 +200,7 @@ struct ChatHost: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Telefonla eşle (QR kod)")
-
-                Text(modelText)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+                .disabled(mode == .dual)
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -175,17 +208,35 @@ struct ChatHost: View {
 
             Divider()
 
-            if let backend = backends[selectedKind] {
-                ChatView(
-                    backend: backend,
-                    conversationStore: conversationStore,
-                    incomingRemoteText: $incomingFromRemote,
-                    onAssistantComplete: { text in
-                        Task { await remoteHost.sendAssistantMessage(text) }
-                    }
-                )
-            } else {
-                MissingBackendView(kind: selectedKind)
+            switch mode {
+            case .single:
+                if let backend = backends[selectedKind] {
+                    ChatView(
+                        backend: backend,
+                        conversationStore: conversationStore,
+                        incomingRemoteText: $incomingFromRemote,
+                        onAssistantComplete: { text in
+                            Task { await remoteHost.sendAssistantMessage(text) }
+                        }
+                    )
+                } else {
+                    MissingBackendView(kind: selectedKind)
+                }
+
+            case .dual:
+                if let leftBackend = backends[selectedKind], let rightBackend = backends[secondaryKind] {
+                    DualChatHost(
+                        leftBackend: leftBackend,
+                        rightBackend: rightBackend,
+                        leftTitle: selectedKind.displayName,
+                        rightTitle: secondaryKind.displayName,
+                        leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",
+                        rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl"
+                    )
+                    .id("\(selectedKind.rawValue)-\(secondaryKind.rawValue)")
+                } else {
+                    MissingBackendView(kind: backends[selectedKind] == nil ? selectedKind : secondaryKind)
+                }
             }
         }
         .sheet(isPresented: $showPairing) {
@@ -199,10 +250,6 @@ struct ChatHost: View {
                 incomingFromRemote = text
             }
         }
-    }
-
-    private var modelText: String {
-        backends[selectedKind]?.modelID ?? "—"
     }
 }
 

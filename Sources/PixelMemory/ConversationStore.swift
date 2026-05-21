@@ -6,14 +6,14 @@ public actor ConversationStore {
     public let fileURL: URL
     public let archiveDirectory: URL
 
-    public init(directory: URL? = nil) throws {
+    public init(directory: URL? = nil, fileName: String = "conversation.jsonl") throws {
         let baseDir = directory ?? Self.defaultDirectory()
         try FileManager.default.createDirectory(at: baseDir, withIntermediateDirectories: true)
         let archive = baseDir.appendingPathComponent("archive", isDirectory: true)
         try FileManager.default.createDirectory(at: archive, withIntermediateDirectories: true)
 
         self.directory = baseDir
-        self.fileURL = baseDir.appendingPathComponent("conversation.jsonl")
+        self.fileURL = baseDir.appendingPathComponent(fileName)
         self.archiveDirectory = archive
 
         if !FileManager.default.fileExists(atPath: fileURL.path) {
@@ -63,7 +63,9 @@ public actor ConversationStore {
             formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTime]
             let stamp = formatter.string(from: Date())
                 .replacingOccurrences(of: ":", with: "-")
-            let archiveURL = archiveDirectory.appendingPathComponent("conversation-\(stamp).jsonl")
+            let baseName = fileURL.deletingPathExtension().lastPathComponent
+            let ext = fileURL.pathExtension
+            let archiveURL = archiveDirectory.appendingPathComponent("\(baseName)-\(stamp).\(ext)")
             try FileManager.default.moveItem(at: fileURL, to: archiveURL)
         } else {
             try FileManager.default.removeItem(at: fileURL)
