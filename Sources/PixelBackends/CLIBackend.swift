@@ -28,6 +28,7 @@ public struct CLIBackend: ChatBackend {
             executablePath: executablePath,
             arguments: Self.arguments(for: kind, prompt: prompt)
         )
+        let useStreamJSON = Self.usesStreamJSON(for: kind)
 
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -35,8 +36,18 @@ public struct CLIBackend: ChatBackend {
                     var emittedAny = false
                     for try await line in runner.runStreamingLines() {
                         if Task.isCancelled { break }
-                        continuation.yield(.textChunk(emittedAny ? "\n\(line)" : line))
-                        emittedAny = true
+
+                        if useStreamJSON {
+                            guard let delta = StreamJSONParser.parse(line) else { continue }
+                            continuation.yield(delta)
+                            if case .done = delta {
+                                continuation.finish()
+                                return
+                            }
+                        } else {
+                            continuation.yield(.textChunk(emittedAny ? "\n\(line)" : line))
+                            emittedAny = true
+                        }
                     }
                     continuation.yield(.done)
                     continuation.finish()
@@ -48,9 +59,23 @@ public struct CLIBackend: ChatBackend {
         }
     }
 
+    /// Bu CLI gerçek token-by-token streaming için yapılandırılmış mı?
+    /// Claude `--output-format stream-json` destekliyor; codex/gemini şu an text mode.
+    public static func usesStreamJSON(for kind: CLIKind) -> Bool {
+        kind == .claude
+    }
+
     private static func arguments(for kind: CLIKind, prompt: String) -> [String] {
         switch kind {
-        case .claude, .codex, .gemini:
+        case .claude:
+            return [
+                "-p",
+                "--output-format", "stream-json",
+                "--include-partial-messages",
+                "--verbose",
+                prompt,
+            ]
+        case .codex, .gemini:
             return ["-p", prompt]
         }
     }
