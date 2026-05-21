@@ -1,5 +1,6 @@
 import PixelBackends
 import PixelCore
+import PixelTools
 import SwiftUI
 
 @main
@@ -20,13 +21,18 @@ struct RootView: View {
     }
 
     var body: some View {
-        if backends.isEmpty {
-            ErrorView(
-                message: BackendError.noBackendAvailable.errorDescription ?? "",
-                onRetry: rescan
-            )
-        } else {
-            ChatHost(backends: backends)
+        Group {
+            if backends.isEmpty {
+                ErrorView(
+                    message: BackendError.noBackendAvailable.errorDescription ?? "",
+                    onRetry: rescan
+                )
+            } else {
+                ChatHost(backends: backends)
+            }
+        }
+        .task {
+            _ = await SystemNotifications.requestAuthorization()
         }
     }
 

@@ -3,6 +3,6 @@ import XCTest
 
 final class PixelMascotTests: XCTestCase {
     func testVersionPlaceholder() {
-        XCTAssertEqual(PixelMascot.version, "0.0.0")
+        XCTAssertEqual(PixelMascot.version, "0.1.0")
     }
 }

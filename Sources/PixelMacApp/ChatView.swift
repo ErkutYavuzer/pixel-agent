@@ -1,5 +1,8 @@
+import AppKit
 import Foundation
 import PixelCore
+import PixelMascot
+import PixelTools
 import SwiftUI
 
 struct ChatView: View {
@@ -10,9 +13,23 @@ struct ChatView: View {
     @State private var isStreaming: Bool = false
     @State private var streamError: String?
     @State private var streamTask: Task<Void, Never>?
+    @State private var mascotState: MascotState = .idle
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                MascotView(state: mascotState, size: 32)
+            }
+            .padding(.horizontal)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
+
+            Divider()
+
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
@@ -60,6 +77,15 @@ struct ChatView: View {
         }
     }
 
+    private var statusText: String {
+        switch mascotState {
+        case .idle: return "Hazır"
+        case .thinking: return "Düşünüyor..."
+        case .speaking: return "Yazıyor..."
+        case .error: return "Hata"
+        }
+    }
+
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
@@ -74,31 +100,60 @@ struct ChatView: View {
 
         isStreaming = true
         streamError = nil
+        mascotState = .thinking
+        DockBadge.clear()
 
         let snapshot = Array(messages.dropLast())
         let backend = self.backend
 
         streamTask = Task {
             do {
+                var firstChunkSeen = false
                 let stream = backend.send(messages: snapshot, system: nil)
                 for try await delta in stream {
                     if Task.isCancelled { break }
                     switch delta {
                     case .textChunk(let chunk):
                         await MainActor.run {
+                            if !firstChunkSeen {
+                                firstChunkSeen = true
+                                mascotState = .speaking
+                            }
                             updateAssistantText(id: assistantID, appending: chunk)
                         }
                     case .done:
                         break
                     }
                 }
-                await MainActor.run { isStreaming = false }
+                await MainActor.run { finishStream(success: true) }
             } catch {
                 await MainActor.run {
                     streamError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                    isStreaming = false
+                    finishStream(success: false)
                 }
             }
+        }
+    }
+
+    private func finishStream(success: Bool) {
+        isStreaming = false
+        mascotState = success ? .idle : .error
+
+        if success {
+            if NSApp.isActive {
+                SoundEffect.play(SoundEffect.messageReceived)
+            } else {
+                DockBadge.set("1")
+                Task {
+                    await SystemNotifications.post(
+                        title: "pixel",
+                        body: "Yeni yanıt hazır"
+                    )
+                }
+            }
+        } else {
+            SoundEffect.play(SoundEffect.errorOccurred)
+            DockBadge.set("!")
         }
     }
 
@@ -111,6 +166,7 @@ struct ChatView: View {
         streamTask?.cancel()
         streamTask = nil
         isStreaming = false
+        mascotState = .idle
     }
 }
 

@@ -84,9 +84,9 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 |---|---|---|
 | `PixelCore` | `ChatBackend` protokolü, `Envelope` tipleri, TaskLocal scoping primitives | — |
 | `PixelBackends` | LLM CLI wrapper'ları (`claude` / `codex` / `gemini` subprocess) + detection | `PixelCore` |
-| `PixelTools` | `ToolDispatcher`, `ToolArbiter`, 6 temel araç | `PixelCore` |
+| `PixelTools` | Native macOS toolkit (DockBadge, SystemNotifications, SoundEffect) | `PixelCore` |
 | `PixelMemory` | JSONL append-only conversation + memory deposu | `PixelCore` |
-| `PixelMascot` | 48×48 pixel-art sprite render, state machine | — |
+| `PixelMascot` | 48×48 pixel-art sprite (12×12 grid) + 4 state (idle/thinking/speaking/error) + SwiftUI Canvas render | — |
 | `PixelRemote` | WebSocket envelope (Mac + iOS paylaşır) | `PixelCore` |
 | `PixelMacApp` | SwiftUI App, composition root | hepsi |
 
