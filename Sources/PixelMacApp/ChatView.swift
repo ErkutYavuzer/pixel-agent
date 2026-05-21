@@ -2,11 +2,13 @@ import AppKit
 import Foundation
 import PixelCore
 import PixelMascot
+import PixelMemory
 import PixelTools
 import SwiftUI
 
 struct ChatView: View {
     let backend: any ChatBackend
+    let conversationStore: ConversationStore
 
     @State private var messages: [Message] = []
     @State private var draft: String = ""
@@ -14,6 +16,7 @@ struct ChatView: View {
     @State private var streamError: String?
     @State private var streamTask: Task<Void, Never>?
     @State private var mascotState: MascotState = .idle
+    @State private var didRestore: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +25,12 @@ struct ChatView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button(action: newConversation) {
+                    Image(systemName: "plus.bubble")
+                }
+                .buttonStyle(.borderless)
+                .help("Yeni sohbet (mevcut arşivlenir)")
+                .disabled(isStreaming)
                 MascotView(state: mascotState, size: 32)
             }
             .padding(.horizontal)
@@ -75,14 +84,39 @@ struct ChatView: View {
             }
             .padding()
         }
+        .task {
+            guard !didRestore else { return }
+            didRestore = true
+            await restoreMessages()
+        }
     }
 
     private var statusText: String {
         switch mascotState {
-        case .idle: return "Hazır"
+        case .idle: return messages.isEmpty ? "Hazır" : "Hazır • \(messages.count) mesaj"
         case .thinking: return "Düşünüyor..."
         case .speaking: return "Yazıyor..."
         case .error: return "Hata"
+        }
+    }
+
+    private func restoreMessages() async {
+        do {
+            let restored = try await conversationStore.loadAll(limit: 200)
+            messages = restored
+        } catch {
+            streamError = "Mesaj geçmişi yüklenemedi: \(error.localizedDescription)"
+        }
+    }
+
+    private func newConversation() {
+        let store = conversationStore
+        messages.removeAll()
+        streamError = nil
+        mascotState = .idle
+        DockBadge.clear()
+        Task {
+            try? await store.newConversation()
         }
     }
 
@@ -105,6 +139,9 @@ struct ChatView: View {
 
         let snapshot = Array(messages.dropLast())
         let backend = self.backend
+        let store = self.conversationStore
+
+        Task { try? await store.append(userMsg) }
 
         streamTask = Task {
             do {
@@ -125,30 +162,32 @@ struct ChatView: View {
                         break
                     }
                 }
-                await MainActor.run { finishStream(success: true) }
+                await MainActor.run { finishStream(success: true, assistantID: assistantID) }
             } catch {
                 await MainActor.run {
                     streamError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                    finishStream(success: false)
+                    finishStream(success: false, assistantID: assistantID)
                 }
             }
         }
     }
 
-    private func finishStream(success: Bool) {
+    private func finishStream(success: Bool, assistantID: UUID) {
         isStreaming = false
         mascotState = success ? .idle : .error
 
         if success {
+            if let assistant = messages.first(where: { $0.id == assistantID }), !assistant.text.isEmpty {
+                let store = conversationStore
+                Task { try? await store.append(assistant) }
+            }
+
             if NSApp.isActive {
                 SoundEffect.play(SoundEffect.messageReceived)
             } else {
                 DockBadge.set("1")
                 Task {
-                    await SystemNotifications.post(
-                        title: "pixel",
-                        body: "Yeni yanıt hazır"
-                    )
+                    await SystemNotifications.post(title: "pixel", body: "Yeni yanıt hazır")
                 }
             }
         } else {

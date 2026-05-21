@@ -3,6 +3,6 @@ import XCTest
 
 final class PixelMemoryTests: XCTestCase {
     func testVersionPlaceholder() {
-        XCTAssertEqual(PixelMemory.version, "0.0.0")
+        XCTAssertEqual(PixelMemory.version, "0.1.0")
     }
 }

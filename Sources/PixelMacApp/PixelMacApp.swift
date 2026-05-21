@@ -1,5 +1,6 @@
 import PixelBackends
 import PixelCore
+import PixelMemory
 import PixelTools
 import SwiftUI
 
@@ -15,20 +16,34 @@ struct PixelMacApp: App {
 
 struct RootView: View {
     @State private var backends: [CLIKind: CLIBackend]
+    @State private var conversationStore: ConversationStore?
+    @State private var initErrorMessage: String?
 
     init() {
         _backends = State(initialValue: Self.resolveBackends())
+        do {
+            let store = try ConversationStore()
+            _conversationStore = State(initialValue: store)
+            _initErrorMessage = State(initialValue: nil)
+        } catch {
+            _conversationStore = State(initialValue: nil)
+            _initErrorMessage = State(initialValue: "Mesaj deposu açılamadı: \(error.localizedDescription)")
+        }
     }
 
     var body: some View {
         Group {
-            if backends.isEmpty {
+            if let errorMessage = initErrorMessage {
+                ErrorView(message: errorMessage, onRetry: retryStore)
+            } else if backends.isEmpty {
                 ErrorView(
                     message: BackendError.noBackendAvailable.errorDescription ?? "",
                     onRetry: rescan
                 )
+            } else if let store = conversationStore {
+                ChatHost(backends: backends, conversationStore: store)
             } else {
-                ChatHost(backends: backends)
+                ErrorView(message: "Bilinmeyen başlatma hatası", onRetry: retryStore)
             }
         }
         .task {
@@ -38,6 +53,16 @@ struct RootView: View {
 
     private func rescan() {
         backends = Self.resolveBackends()
+    }
+
+    private func retryStore() {
+        do {
+            conversationStore = try ConversationStore()
+            initErrorMessage = nil
+        } catch {
+            conversationStore = nil
+            initErrorMessage = "Mesaj deposu açılamadı: \(error.localizedDescription)"
+        }
     }
 
     private static func resolveBackends() -> [CLIKind: CLIBackend] {
@@ -52,10 +77,12 @@ struct RootView: View {
 
 struct ChatHost: View {
     let backends: [CLIKind: CLIBackend]
+    let conversationStore: ConversationStore
     @State private var selectedKind: CLIKind
 
-    init(backends: [CLIKind: CLIBackend]) {
+    init(backends: [CLIKind: CLIBackend], conversationStore: ConversationStore) {
         self.backends = backends
+        self.conversationStore = conversationStore
         let initial = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
         _selectedKind = State(initialValue: initial)
     }
@@ -85,7 +112,7 @@ struct ChatHost: View {
             Divider()
 
             if let backend = backends[selectedKind] {
-                ChatView(backend: backend)
+                ChatView(backend: backend, conversationStore: conversationStore)
             } else {
                 MissingBackendView(kind: selectedKind)
             }
@@ -132,7 +159,7 @@ struct ErrorView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
-            Button("Tekrar tara", action: onRetry)
+            Button("Tekrar dene", action: onRetry)
                 .keyboardShortcut(.return)
         }
         .padding(40)
