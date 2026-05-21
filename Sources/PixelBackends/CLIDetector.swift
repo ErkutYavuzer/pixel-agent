@@ -46,7 +46,14 @@ public struct CLIDetector: Sendable {
             "\(home)/.local/bin",
             "\(home)/bin",
         ]
-        return directories.map { "\($0)/\(kind.executableName)" }
+        var paths = directories.map { "\($0)/\(kind.executableName)" }
+
+        // Codex Mac app bundle içinde de gelir (Codex.app/Contents/Resources/codex)
+        if kind == .codex {
+            paths.append("/Applications/Codex.app/Contents/Resources/codex")
+        }
+
+        return paths
     }
 
     private static func whichSearch(_ name: String) -> String? {

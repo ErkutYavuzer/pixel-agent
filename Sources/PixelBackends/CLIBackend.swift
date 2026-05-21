@@ -24,27 +24,39 @@ public struct CLIBackend: ChatBackend {
         system: String?
     ) -> AsyncThrowingStream<StreamDelta, any Error> {
         let prompt = Self.composedPrompt(messages: messages, system: system)
-        let runner = CLIProcessRunner(
-            executablePath: executablePath,
-            arguments: Self.arguments(for: kind, prompt: prompt)
-        )
-        let useStreamJSON = Self.usesStreamJSON(for: kind)
+        let kind = self.kind
+        let executablePath = self.executablePath
 
         return AsyncThrowingStream { continuation in
             let task = Task {
+                let stdin: String? = Self.usesStdinForPrompt(for: kind) ? prompt : nil
+                let runner = CLIProcessRunner(
+                    executablePath: executablePath,
+                    arguments: Self.arguments(for: kind, prompt: prompt)
+                )
+                let mode = Self.outputMode(for: kind)
+
                 do {
                     var emittedAny = false
-                    for try await line in runner.runStreamingLines() {
+                    for try await line in runner.runStreamingLines(stdin: stdin) {
                         if Task.isCancelled { break }
 
-                        if useStreamJSON {
+                        switch mode {
+                        case .streamJSON:
                             guard let delta = StreamJSONParser.parse(line) else { continue }
                             continuation.yield(delta)
                             if case .done = delta {
                                 continuation.finish()
                                 return
                             }
-                        } else {
+                        case .codexJSON:
+                            guard let delta = CodexJSONParser.parse(line) else { continue }
+                            continuation.yield(delta)
+                            if case .done = delta {
+                                continuation.finish()
+                                return
+                            }
+                        case .text:
                             continuation.yield(.textChunk(emittedAny ? "\n\(line)" : line))
                             emittedAny = true
                         }
@@ -59,10 +71,29 @@ public struct CLIBackend: ChatBackend {
         }
     }
 
+    public enum OutputMode {
+        case streamJSON
+        case codexJSON
+        case text
+    }
+
+    public static func outputMode(for kind: CLIKind) -> OutputMode {
+        switch kind {
+        case .claude: return .streamJSON
+        case .codex: return .codexJSON
+        case .gemini: return .text
+        }
+    }
+
     /// Bu CLI gerçek token-by-token streaming için yapılandırılmış mı?
-    /// Claude `--output-format stream-json` destekliyor; codex/gemini şu an text mode.
+    /// Claude `--output-format stream-json` partial token verir. Codex
+    /// `item.completed` ile tam yanıt verir (block). Gemini text mode (block).
     public static func usesStreamJSON(for kind: CLIKind) -> Bool {
         kind == .claude
+    }
+
+    public static func usesStdinForPrompt(for kind: CLIKind) -> Bool {
+        kind == .codex
     }
 
     private static func arguments(for kind: CLIKind, prompt: String) -> [String] {
@@ -75,7 +106,17 @@ public struct CLIBackend: ChatBackend {
                 "--verbose",
                 prompt,
             ]
-        case .codex, .gemini:
+        case .codex:
+            // Codex `exec` subcommand + stdin (dash); prompt arg değil
+            return [
+                "exec",
+                "--json",
+                "--ignore-user-config",
+                "--skip-git-repo-check",
+                "--dangerously-bypass-approvals-and-sandbox",
+                "-",
+            ]
+        case .gemini:
             return ["-p", prompt]
         }
     }
