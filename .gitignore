@@ -1,0 +1,56 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# iOS / Simulator
+*.app
+*.app.dSYM
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Coverage & artifacts
+*.profraw
+*.profdata
+coverage.lcov
+.coverage/
+
+# Secrets / local config
+.env
+.env.local
+*.local.json
+secrets/
+
+# Cloudflare Worker
+relay/node_modules/
+relay/dist/
+relay/.wrangler/
+
+# Generated docs
+docs/PixelAgent.docc/.build/
+docs/_site/

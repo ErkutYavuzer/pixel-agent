@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & Test
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test with coverage
+        run: swift test --parallel --enable-code-coverage
+
+      - name: Export coverage to lcov
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          XCTEST_PATH="$BIN_PATH/pixel-agentPackageTests.xctest/Contents/MacOS/pixel-agentPackageTests"
+          PROFDATA="$BIN_PATH/codecov/default.profdata"
+          if [ -f "$XCTEST_PATH" ] && [ -f "$PROFDATA" ]; then
+            xcrun llvm-cov export \
+              "$XCTEST_PATH" \
+              -instr-profile="$PROFDATA" \
+              -format=lcov \
+              -ignore-filename-regex='\.build|Tests|\.swiftpm' \
+              > coverage.lcov
+            echo "Coverage exported: $(wc -l < coverage.lcov) lines"
+          else
+            echo "Coverage artifacts not found, skipping"
+          fi
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: hashFiles('coverage.lcov') != ''
+        with:
+          files: ./coverage.lcov
+          fail_ci_if_error: false
+
+  lint:
+    name: SwiftLint
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        run: swiftlint lint --strict --reporter github-actions-logging
