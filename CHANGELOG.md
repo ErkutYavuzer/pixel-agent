@@ -7,7 +7,13 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
-### Added
+### Added — Hafta 2 (21 May 2026)
+- `PixelCore`: `Message`, `MessageRole`, `StreamDelta`, `ChatBackend` protokolü, `AgentID`, `AgentContext` (TaskLocal scoping). ADR-0003 ve ADR-0004 hayata geçti.
+- `PixelBackends`: `AnthropicBackend` (URLSession + SSE streaming, default model `claude-sonnet-4-6`, ANTHROPIC_API_KEY ENV var); pure `SSEParser`; `AnthropicError` (LocalizedError).
+- `PixelMacApp`: SwiftUI `ChatView` (mesaj listesi + canlı streaming composer + ESC ile iptal); `RootView` composition root; `ErrorView` (API key eksikse kullanıcı dostu mesaj + "Tekrar dene").
+- Test kapsamı: **29 yeşil test** (Hafta 1: 7 placeholder + Hafta 2: 22 yeni — `MessageTests`, `AgentContextTests` (TaskLocal scope + child Task propagation), `MockChatBackendTests`, `AnthropicBackendTests` (init validation + localized error), `SSEParserTests` (content_block_delta, message_stop, edge cases, Unicode)).
+
+### Added — Hafta 1 (21 May 2026)
 - Swift Package Manager monorepo iskeleti (6 library + 1 executable target).
 - `PixelCore`, `PixelBackends`, `PixelTools`, `PixelMemory`, `PixelMascot`, `PixelRemote`, `PixelMacApp` modülleri (stub).
 - 9 ADR (Architecture Decision Records) — `docs/adr/0001-0009`.
