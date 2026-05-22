@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.7-blue)
-![tests](https://img.shields.io/badge/tests-226%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.8-blue)
+![tests](https://img.shields.io/badge/tests-235%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -79,6 +79,7 @@ Her büyük tasarım kararı [docs/adr/](docs/adr/) altında belgeli.
 - [ADR-0020](docs/adr/0020-mcp-dispatch-subagent.md) Subagent Faz 2 — MCP tool `dispatch_subagent` (headless orchestration)
 - [ADR-0021](docs/adr/0021-lan-mode-bonjour.md) LAN-only mode Faz 1 (`PixelLAN` library: Bonjour + Network.framework, relay bypass altyapısı)
 - [ADR-0022](docs/adr/0022-remote-transport-adapter.md) LAN Faz 2 — `RemoteTransport` protocol + 4 adapter + `FallbackTransport`
+- [ADR-0023](docs/adr/0023-merge-transport-and-mac-wire-up.md) LAN Faz 3 — `MergeTransport` paralel composite + PixelMacApp wire-up
 
 Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md) — birinci sürümden çıkarılan 14 desen ve 3 anti-pattern.
 
@@ -120,7 +121,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.7` (22 May 2026) · **226 test** yeşil · **22 ADR** · 9 library + 2 executable target
+**Versiyon:** `v0.2.8` (22 May 2026) · **235 test** yeşil · **23 ADR** · 9 library + 2 executable target
 
 ### Sürüm geçmişi
 
@@ -134,6 +135,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.5` | 22 May | Subagent Runner Faz 1 + dokümantasyon konsolidasyonu | 192 |
 | `v0.2.6` | 22 May | Subagent Faz 2 — MCP tool `dispatch_subagent` | 195 |
 | `v0.2.7` | 22 May | LAN-only mode Faz 1+2 — `PixelLAN` + `RemoteTransport` + 4 adapter + `FallbackTransport` | 226 |
+| `v0.2.8` | 22 May | LAN Faz 3 — `MergeTransport` + PixelMacApp wire-up (Mac side LAN+Relay paralel) | 235 |
 
 ### v0.2 yol haritası
 
@@ -145,7 +147,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 - ✅ MCP server expose — Faz 1+2 (ADR-0016 + ADR-0018, 8 tool)
 - ✅ Plan Mode (ADR-0017)
 - ◐ Subagent dispatching — Faz 1 (ADR-0019, `PixelSubagent` library) + Faz 2 (ADR-0020, MCP `dispatch_subagent` tool) landed; Faz 3+ UI panel + multi-turn workflow + streaming defer
-- ◐ LAN-only mode — Faz 1 (ADR-0021, `PixelLAN` library) + Faz 2 (ADR-0022, `RemoteTransport` protocol + 4 adapter + `FallbackTransport`) landed; Faz 3 UI defaults (Mac side-by-side advertise, iOS LAN-first default, TXT record, indicator) defer
+- ◐ LAN-only mode — Faz 1 (ADR-0021) + Faz 2 (ADR-0022) + Faz 3 (ADR-0023, `MergeTransport` + Mac LAN+Relay paralel) landed; Faz 4 iOS LAN-first default + TXT record + indicator defer
 - ☐ App Store signing + submission
 
 ## iOS app & relay

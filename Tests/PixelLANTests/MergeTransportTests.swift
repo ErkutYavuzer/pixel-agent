@@ -58,7 +58,8 @@ final class MergeTransportTests: XCTestCase {
         let b = StubTransport()
         let merge = MergeTransport(transports: [a, b])
 
-        _ = try await merge.connect()
+        let _stream = try await merge.connect()
+        _ = _stream  // stream'i tut, deallocation onTermination tetiklemesin
         let live = await merge.liveTransportCount
         XCTAssertEqual(live, 2)
 
@@ -73,7 +74,8 @@ final class MergeTransportTests: XCTestCase {
         let bad = StubTransport(behavior: .failConnect)
         let merge = MergeTransport(transports: [bad, good])
 
-        _ = try await merge.connect()
+        let _stream = try await merge.connect()
+        _ = _stream  // stream'i tut, deallocation onTermination tetiklemesin
         let live = await merge.liveTransportCount
         XCTAssertEqual(live, 1)  // bad atlandı, good aktif
     }
@@ -84,7 +86,8 @@ final class MergeTransportTests: XCTestCase {
         let merge = MergeTransport(transports: [bad1, bad2])
 
         do {
-            _ = try await merge.connect()
+            let _stream = try await merge.connect()
+        _ = _stream  // stream'i tut, deallocation onTermination tetiklemesin
             XCTFail("Should throw allTransportsFailed")
         } catch let error as MergeTransport.MergeError {
             XCTAssertEqual(error, .allTransportsFailed)
@@ -98,7 +101,8 @@ final class MergeTransportTests: XCTestCase {
         let b = StubTransport()
         let merge = MergeTransport(transports: [a, b])
 
-        _ = try await merge.connect()
+        let _stream = try await merge.connect()
+        _ = _stream  // stream'i tut, deallocation onTermination tetiklemesin
         try await merge.send(RemoteEnvelope.ping())
 
         let aCounts = await a.counts()
@@ -112,7 +116,8 @@ final class MergeTransportTests: XCTestCase {
         let bad = StubTransport(behavior: .failSend)
         let merge = MergeTransport(transports: [good, bad])
 
-        _ = try await merge.connect()
+        let _stream = try await merge.connect()
+        _ = _stream  // stream'i tut, deallocation onTermination tetiklemesin
         // En az biri başarılıysa send throw'lamaz.
         try await merge.send(RemoteEnvelope.ping())
 
@@ -127,7 +132,8 @@ final class MergeTransportTests: XCTestCase {
         let bad2 = StubTransport(behavior: .failSend)
         let merge = MergeTransport(transports: [bad1, bad2])
 
-        _ = try await merge.connect()
+        let _stream = try await merge.connect()
+        _ = _stream  // stream'i tut, deallocation onTermination tetiklemesin
         do {
             try await merge.send(RemoteEnvelope.ping())
             XCTFail("Should throw when all sends fail")
@@ -155,7 +161,8 @@ final class MergeTransportTests: XCTestCase {
         let b = StubTransport()
         let merge = MergeTransport(transports: [a, b])
 
-        _ = try await merge.connect()
+        let _stream = try await merge.connect()
+        _ = _stream  // stream'i tut, deallocation onTermination tetiklemesin
         await merge.disconnect()
 
         let aCounts = await a.counts()

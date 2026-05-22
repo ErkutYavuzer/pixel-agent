@@ -7,6 +7,13 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Notes
+- v0.2 kalan: Subagent Faz 3+ (UI panel + multi-turn workflow + streaming), LAN Faz 4 (iOS LAN-first default + TXT record + PairingView indicator), App Store signing.
+
+## [0.2.8] — 2026-05-22
+
+**LAN Faz 3: Mac side wire-up.** `MergeTransport` paralel composite + PixelMacApp artık `[LANServerTransport, RelayTransport]` ile başlıyor — iPhone hangi yoldan gelirse alır. **235 test yeşil** (+9). Breaking change yok. iOS değişmedi (Faz 4'e ertelendi).
+
 ### Added — LAN Faz 3: MergeTransport + Mac wire-up (22 May 2026)
 - **`MergeTransport`** (PixelLAN, actor) — birden çok transport'u paralel çalıştıran composite. `FallbackTransport` sequential (primary fail → fallback); `MergeTransport` simultane (her ikisi de active, inbound merge + outbound broadcast). `disconnect()` idempotent. `MergeError.allTransportsFailed` / `.noActiveTransports`.
 - **`RemoteHost.TransportBuilder`** — yeni init overload (`init(relayURL:keyStore:...transportBuilder:)`); closure builder pattern circular dep (transport ↔ RemoteHost) çözümü. RemoteHost generate ettiği `pairingCode` + `publicKeyBase64`'ü closure'a enjekte eder.
@@ -249,7 +256,8 @@ Mac + iOS arasında **end-to-end ed25519 imzalı kanal**, **MCP server expose Fa
 - Platform: macOS 14+, iOS 17+ (uzak istemci).
 - Lisans: MIT.
 
-[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.8...HEAD
+[0.2.8]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.8
 [0.2.7]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.7
 [0.2.6]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.5
