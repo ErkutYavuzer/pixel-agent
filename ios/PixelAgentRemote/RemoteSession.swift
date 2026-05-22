@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import PixelCore
 import PixelRemote
@@ -13,13 +14,31 @@ final class RemoteSession: ObservableObject {
     private var client: RelayClient?
     private var receiveTask: Task<Void, Never>?
 
-    private static let pairingDefaultsKey = "pixel-agent.pairing.v1"
+    private let signingKey: Curve25519.Signing.PrivateKey
+    private var macPublicKey: Curve25519.Signing.PublicKey?
 
-    init() {
+    private static let pairingDefaultsKey = "pixel-agent.pairing.v2"
+    private static let keychainService = "dev.erkutyavuzer.pixel-agent"
+    private static let keychainAccount = "remote-ios-signing-key"
+
+    init(keyStore: KeyStoring = KeychainKeyStore()) {
+        if let loaded = try? keyStore.loadOrCreate(
+            service: Self.keychainService,
+            account: Self.keychainAccount
+        ) {
+            self.signingKey = loaded
+        } else {
+            self.signingKey = Curve25519.Signing.PrivateKey()
+        }
+
         if let saved = Self.loadSavedPairing() {
             self.pairing = saved
             Task { await self.autoReconnect(to: saved) }
         }
+    }
+
+    var publicKeyBase64: String {
+        signingKey.publicKey.rawRepresentation.base64EncodedString()
     }
 
     func connect(pairing: PairingInfo) async {
@@ -29,6 +48,14 @@ final class RemoteSession: ObservableObject {
         }
 
         await disconnect(forget: false)
+
+        guard let macKeyData = Data(base64Encoded: pairing.macPublicKey),
+              let macKey = try? Curve25519.Signing.PublicKey(rawRepresentation: macKeyData)
+        else {
+            lastError = "Eşleşme bilgisinde Mac public key geçersiz. QR'ı yeniden tarayın."
+            return
+        }
+        self.macPublicKey = macKey
 
         let client = RelayClient()
         self.client = client
@@ -43,6 +70,9 @@ final class RemoteSession: ObservableObject {
             isConnected = true
             lastError = nil
             Self.savePairing(pairing)
+
+            // Handshake: hello envelope (unsigned — chicken-and-egg). Kendi public key'imizi taşır.
+            try await client.send(RemoteEnvelope.hello(publicKey: publicKeyBase64))
 
             receiveTask = Task { [weak self] in
                 guard let self else { return }
@@ -73,7 +103,8 @@ final class RemoteSession: ObservableObject {
 
         let envelope = RemoteEnvelope.userMessage(text: text, messageID: userMsg.id.uuidString)
         do {
-            try await client.send(envelope)
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await client.send(signed)
         } catch {
             lastError = error.localizedDescription
         }
@@ -87,6 +118,7 @@ final class RemoteSession: ObservableObject {
         receiveTask?.cancel()
         receiveTask = nil
         isConnected = false
+        macPublicKey = nil
         if forget {
             pairing = nil
             Self.clearSavedPairing()
@@ -115,6 +147,14 @@ final class RemoteSession: ObservableObject {
     }
 
     private func handle(_ envelope: RemoteEnvelope) async {
+        // Mac'ten gelen tüm envelope'lar imzalı olmalı. (Mac hello göndermez — iOS pk'yi QR'dan biliyor.)
+        guard let macKey = macPublicKey,
+              EnvelopeSigner.verify(envelope, with: macKey)
+        else {
+            // Geçersiz imza → drop.
+            return
+        }
+
         switch envelope.type {
         case .assistantMessage:
             if let text = envelope.payload?.text {
@@ -136,6 +176,7 @@ final class RemoteSession: ObservableObject {
         let dict: [String: String] = [
             "code": pairing.code,
             "relay": pairing.relayURL,
+            "pk": pairing.macPublicKey,
         ]
         UserDefaults.standard.set(dict, forKey: pairingDefaultsKey)
     }
@@ -143,11 +184,12 @@ final class RemoteSession: ObservableObject {
     private static func loadSavedPairing() -> PairingInfo? {
         guard let dict = UserDefaults.standard.dictionary(forKey: pairingDefaultsKey) as? [String: String],
               let code = dict["code"],
-              let relay = dict["relay"]
+              let relay = dict["relay"],
+              let pk = dict["pk"]
         else {
             return nil
         }
-        return PairingInfo(code: code, relayURL: relay)
+        return PairingInfo(code: code, relayURL: relay, macPublicKey: pk)
     }
 
     private static func clearSavedPairing() {
@@ -158,10 +200,12 @@ final class RemoteSession: ObservableObject {
 struct PairingInfo: Equatable {
     let code: String
     let relayURL: String
+    let macPublicKey: String  // base64 ed25519 pubkey
 
-    init(code: String, relayURL: String) {
+    init(code: String, relayURL: String, macPublicKey: String) {
         self.code = code
         self.relayURL = relayURL
+        self.macPublicKey = macPublicKey
     }
 
     init?(qrPayload: String) {
@@ -175,22 +219,29 @@ struct PairingInfo: Equatable {
 
         var pairingCode: String?
         var relayURLString: String?
+        var macPK: String?
         for item in queryItems {
             switch item.name {
             case "code": pairingCode = item.value
             case "relay": relayURLString = item.value
+            case "pk": macPK = item.value
             default: break
             }
         }
 
         guard let code = pairingCode, !code.isEmpty,
               let relay = relayURLString, !relay.isEmpty,
-              PairingCode.isValid(code)
+              let pk = macPK, !pk.isEmpty,
+              PairingCode.isValid(code),
+              let pkData = Data(base64Encoded: pk),
+              pkData.count == 32,
+              (try? Curve25519.Signing.PublicKey(rawRepresentation: pkData)) != nil
         else {
             return nil
         }
 
         self.code = code
         self.relayURL = relay
+        self.macPublicKey = pk
     }
 }

@@ -1,7 +1,7 @@
 # ADR-0015: ed25519 Envelope Signing (Faz 2 Auth)
 
-**Status:** Accepted (Faz 1: foundation landed)
-**Date:** 2026-05-21
+**Status:** Accepted (Faz 1: foundation landed; Faz 2: handshake wire-up landed)
+**Date:** 2026-05-21 (Faz 1) → 2026-05-22 (Faz 2)
 **Tags:** security, protocol, cross-platform
 
 ## Context
@@ -52,12 +52,26 @@ Hem imzalama hem doğrulama, envelope'un **`sig` alanı boşaltılmış** (`nil`
 - `PixelRemote.protocolVersion = 2`.
 - 14 yeni test (8 EnvelopeSigner + 6 KeyStore).
 
-## Faz 2 — wire up (gelecek commit)
+## Faz 2 — wire-up (landed)
 
-- Mac `RemoteHost`: init'te `KeychainKeyStore.loadOrCreate(...)` ile signing key; QR payload'ına `pk=<mac-pubkey-b64>` eklenir; outbound her envelope imzalanır; inbound envelope sig doğrulanmazsa reddedilir.
-- iOS `RemoteSession`: init'te aynı şekilde key; connect olunca hello envelope'u kendi public key'i ile gönderir; QR'dan Mac pubkey'i alır, peer pubkey'i UserDefaults'a kalıcı yapar.
-- Relay (Cloudflare Worker) değişmez — relay görmüyor, sadece forward.
-- Handshake: ilk hello envelope'u unsigned kabul (chicken-and-egg). Sonraki tüm envelope'lar imzalı zorunlu.
+- **Mac `RemoteHost`**:
+  - `init(keyStore: KeyStoring, keyService:, keyAccount:)` DI ile signing key yüklenir.
+  - `publicKeyBase64` property QR payload için expose.
+  - `isPaired` state — iOS hello aldığımızda `true`.
+  - `connect()` sonrası ilk envelope **hello + publicKey** olmak zorunda; aksi sessizce drop edilir.
+  - Hello'dan iOS pubkey çıkarılır, `peerPublicKey` set edilir.
+  - Sonraki tüm envelope'lar `EnvelopeSigner.verify(_:with: peerPublicKey)` ile doğrulanır; geçmezse drop.
+  - `sendAssistantMessage` outbound'u önce imzalar.
+- **`PairingView`** (PixelMacApp): QR payload `URLComponents` ile `pk=<mac-pubkey-b64>` query param eklenir; %-encoding güvenli.
+- **iOS `RemoteSession`**:
+  - `init(keyStore:)` DI.
+  - `publicKeyBase64` property hello için.
+  - `connect(pairing:)` başarılı WS connect sonrası **ilk iş** `RemoteEnvelope.hello(publicKey:)` gönderir (unsigned — chicken-and-egg).
+  - Outbound mesaj `EnvelopeSigner.sign` ile imzalanır; inbound mesaj `peerPublicKey = pairing.macPublicKey` ile verify edilir, geçmezse drop.
+  - `macPublicKey` `pairing` içinden gelir; UserDefaults `pixel-agent.pairing.v2` key'inde `pk` ile birlikte persist.
+- **`PairingInfo`** (iOS): `macPublicKey: String` zorunlu alan; QR parser `pk` query item'ı + base64 + 32-byte + Curve25519 validation yapar; yoksa nil döner (eski QR'lar geçersiz).
+- **Relay (Cloudflare Worker)** değişmez — relay görmüyor, sadece forward.
+- **Handshake özeti**: iOS QR'dan Mac pubkey'i alır → bağlanır → hello (unsigned, kendi pubkey'i ile) → Mac peer pubkey'i öğrenir → bundan sonra iki taraf da her envelope'u imzalar/doğrular.
 
 ## Consequences
 

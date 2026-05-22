@@ -7,7 +7,15 @@ struct PairingView: View {
     @Environment(\.dismiss) private var dismiss
 
     private var qrPayload: String {
-        "pixel-agent-pair://?code=\(remoteHost.pairingCode)&relay=\(remoteHost.relayURL)"
+        var components = URLComponents()
+        components.scheme = "pixel-agent-pair"
+        components.host = ""
+        components.queryItems = [
+            URLQueryItem(name: "code", value: remoteHost.pairingCode),
+            URLQueryItem(name: "relay", value: remoteHost.relayURL),
+            URLQueryItem(name: "pk", value: remoteHost.publicKeyBase64),
+        ]
+        return components.url?.absoluteString ?? ""
     }
 
     var body: some View {
