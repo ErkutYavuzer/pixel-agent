@@ -22,6 +22,11 @@ public final class RemoteHost: ObservableObject {
     /// API kullanılıyor demektir, connect() içinde RelayTransport oluşturulur.
     private let providedTransport: (any RemoteTransport)?
 
+    /// Builder pattern — closure pairingCode + publicKey'i alır ve transport döner.
+    /// Hem `transport` hem `transportBuilder` set'lenmişse `transport` öncelikli.
+    public typealias TransportBuilder = @MainActor (_ pairingCode: String, _ publicKeyBase64: String) -> any RemoteTransport
+    private let transportBuilder: TransportBuilder?
+
     private var activeTransport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
     private let inboundContinuation: AsyncStream<String>.Continuation
@@ -36,6 +41,7 @@ public final class RemoteHost: ObservableObject {
     ) {
         self.relayURL = relayURL
         self.providedTransport = nil
+        self.transportBuilder = nil
         self.pairingCode = PairingCode.generate()
 
         let key: Curve25519.Signing.PrivateKey
@@ -54,17 +60,49 @@ public final class RemoteHost: ObservableObject {
         self.inboundContinuation = captured
     }
 
-    /// Transport DI init — `LANServerTransport`, `FallbackTransport`, vs.
-    /// `relayURL` artık QR payload için anlam taşımayabilir; UI gösterimi için
-    /// boş string olarak set edilir (caller isterse manuel set eder).
+    /// Transport DI init — sabit bir transport. `LANServerTransport`, `FallbackTransport`, vs.
+    /// `relayURL` QR payload için isteğe bağlı (transport ne kullanırsa kullansın).
     public init(
         transport: any RemoteTransport,
+        relayURL: String = "",
         keyStore: KeyStoring = KeychainKeyStore(),
         keyService: String = "dev.erkutyavuzer.pixel-agent",
         keyAccount: String = "remote-mac-signing-key"
     ) {
-        self.relayURL = ""
+        self.relayURL = relayURL
         self.providedTransport = transport
+        self.transportBuilder = nil
+        self.pairingCode = PairingCode.generate()
+
+        let key: Curve25519.Signing.PrivateKey
+        if let loaded = try? keyStore.loadOrCreate(service: keyService, account: keyAccount) {
+            key = loaded
+        } else {
+            key = Curve25519.Signing.PrivateKey()
+        }
+        self.signingKey = key
+        self.publicKeyBase64 = key.publicKey.rawRepresentation.base64EncodedString()
+
+        var captured: AsyncStream<String>.Continuation!
+        self.inboundTexts = AsyncStream<String> { continuation in
+            captured = continuation
+        }
+        self.inboundContinuation = captured
+    }
+
+    /// Builder init — `connect()` zamanında closure çağrılır; pairingCode ve
+    /// publicKey'i alır. Mac side MergeTransport(LAN, Relay) için circular dep
+    /// (transport pairingCode'a, RemoteHost transport'a ihtiyaç duyar) çözümü.
+    public init(
+        relayURL: String,
+        keyStore: KeyStoring = KeychainKeyStore(),
+        keyService: String = "dev.erkutyavuzer.pixel-agent",
+        keyAccount: String = "remote-mac-signing-key",
+        transportBuilder: @escaping TransportBuilder
+    ) {
+        self.relayURL = relayURL
+        self.providedTransport = nil
+        self.transportBuilder = transportBuilder
         self.pairingCode = PairingCode.generate()
 
         let key: Curve25519.Signing.PrivateKey
@@ -93,6 +131,8 @@ public final class RemoteHost: ObservableObject {
         let transport: any RemoteTransport
         if let provided = providedTransport {
             transport = provided
+        } else if let builder = transportBuilder {
+            transport = builder(pairingCode, publicKeyBase64)
         } else {
             guard let url = URL(string: relayURL) else {
                 lastError = "Geçersiz relay URL: \(relayURL)"

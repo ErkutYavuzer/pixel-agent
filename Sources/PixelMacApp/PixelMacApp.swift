@@ -1,6 +1,7 @@
 import Darwin
 import PixelBackends
 import PixelCore
+import PixelLAN
 import PixelMemory
 import PixelRemote
 import PixelTools
@@ -166,7 +167,23 @@ struct ChatHost: View {
         let secondary = CLIKind.allCases.first(where: { backends[$0] != nil && $0 != primary }) ?? primary
         _selectedKind = State(initialValue: primary)
         _secondaryKind = State(initialValue: secondary)
-        _remoteHost = StateObject(wrappedValue: RemoteHost(relayURL: Self.defaultRelayURL))
+        // Mac LAN advertise + relay paralel — iOS hangisinden gelirse alırız.
+        // Builder closure pairingCode/publicKey'i RemoteHost'tan alır (ADR-0023).
+        let relayURL = Self.defaultRelayURL
+        _remoteHost = StateObject(
+            wrappedValue: RemoteHost(
+                relayURL: relayURL,
+                transportBuilder: { code, _ in
+                    let lan = LANServerTransport(configuration: .init(serviceName: nil))
+                    if let url = URL(string: relayURL) {
+                        let relay = RelayTransport(relayURL: url, pairingCode: code, role: .mac)
+                        return MergeTransport(transports: [lan, relay])
+                    } else {
+                        return MergeTransport(transports: [lan])
+                    }
+                }
+            )
+        )
     }
 
     var body: some View {

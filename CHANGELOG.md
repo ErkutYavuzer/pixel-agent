@@ -7,8 +7,17 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Added — LAN Faz 3: MergeTransport + Mac wire-up (22 May 2026)
+- **`MergeTransport`** (PixelLAN, actor) — birden çok transport'u paralel çalıştıran composite. `FallbackTransport` sequential (primary fail → fallback); `MergeTransport` simultane (her ikisi de active, inbound merge + outbound broadcast). `disconnect()` idempotent. `MergeError.allTransportsFailed` / `.noActiveTransports`.
+- **`RemoteHost.TransportBuilder`** — yeni init overload (`init(relayURL:keyStore:...transportBuilder:)`); closure builder pattern circular dep (transport ↔ RemoteHost) çözümü. RemoteHost generate ettiği `pairingCode` + `publicKeyBase64`'ü closure'a enjekte eder.
+- **PixelMacApp** artık `MergeTransport([LANServerTransport, RelayTransport])` ile RemoteHost başlatıyor — iPhone hangi yoldan gelirse alır (LAN ya da relay). PixelLAN PixelMacApp dep'lerine eklendi.
+- iOS tarafında **değişiklik yok** (default relay). Faz 4 iOS LAN-first default + TXT record + PairingView indicator.
+- 9 yeni `MergeTransportTests` (test-only `StubTransport` actor mock): start-all-children, partial-fail-tolerated, all-fail-throws, broadcast send, partial-send-tolerated, total-send-fail propagation, send-before-connect, disconnect cascade + idempotency, inbound merge (actor-isolated Collector).
+- Toplam test: **226 → 235** yeşil.
+- [ADR-0023](docs/adr/0023-merge-transport-and-mac-wire-up.md): MergeTransport semantik + transportBuilder pattern + Mac side wire-up + Faz 4 iOS plan.
+
 ### Notes
-- v0.2 kalan: Subagent Faz 3+ (UI panel + multi-turn workflow + streaming), LAN Faz 3 (Mac side-by-side + iOS LAN-first default + TXT record + indicator), App Store signing.
+- v0.2 kalan: Subagent Faz 3+ (UI panel + multi-turn workflow + streaming), **LAN Faz 4** (iOS LAN-first default + TXT record + PairingView indicator), App Store signing.
 
 ## [0.2.7] — 2026-05-22
 
