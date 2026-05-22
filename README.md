@@ -4,7 +4,7 @@
 
 <!-- BADGES -->
 ![version](https://img.shields.io/badge/version-0.1.0-blue)
-![tests](https://img.shields.io/badge/tests-91%20passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-162%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -87,7 +87,9 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `PixelTools` | Native macOS toolkit (DockBadge, SystemNotifications, SoundEffect) | `PixelCore` |
 | `PixelMemory` | JSONL append-only `ConversationStore` actor (append + restore + arşiv) | `PixelCore` |
 | `PixelMascot` | 48×48 pixel-art sprite (12×12 grid) + 4 state (idle/thinking/speaking/error) + SwiftUI Canvas render | — |
-| `PixelRemote` | WebSocket envelope tipleri (RemoteEnvelope + EnvelopeType + EnvelopePayload); Mac + iOS Xcode project paylaşacak | `PixelCore` |
+| `PixelRemote` | WebSocket envelope + ed25519 imza (`EnvelopeSigner` + `KeyStore`) + relay client + pairing protokolü | `PixelCore` |
+| `PixelMCPServer` | MCP (Model Context Protocol) server library — JSON-RPC 2.0, tool registry, 5 saf-data tool (clipboard, time, active app, lan ip) | — |
+| `pixel-mcp-server` | MCP server executable target — stdio transport, claude-cli ile uyumlu | `PixelMCPServer` |
 | `PixelMacApp` | SwiftUI App, composition root | hepsi |
 
 ## Durum
@@ -112,12 +114,43 @@ iOS uzak istemci source dosyaları `ios/PixelAgentRemote/` altında; Xcode proje
 
 ### v0.2 yol haritası
 
-- `--output-format stream-json` parser (gerçek token-by-token streaming)
-- Multi-backend simultane (dual-agent paralel sohbet)
-- Plan Mode (read-only tool allowlist)
-- Subagent dispatching (ephemeral runtime + budget)
-- MCP server expose (CLI'ların pixel-agent tool'larını çağırması)
-- Ed25519 envelope signing (Faz 2 auth)
+- ✅ `--output-format stream-json` parser (gerçek token-by-token streaming) — v0.2.2
+- ✅ Multi-backend simultane (dual-agent paralel sohbet) — v0.2.1
+- ✅ Ed25519 envelope signing (handshake + Faz 2 wire-up) — ADR-0015
+- ✅ MCP server expose (Faz 1: stdio transport + 5 saf-data tool) — ADR-0016
+- ☐ Plan Mode (read-only tool allowlist)
+- ☐ Subagent dispatching (ephemeral runtime + budget)
+- ☐ MCP server expose Faz 2 (bundle-bağımlı tool'lar — DockBadge, notify, sound)
+
+## MCP server (claude-cli entegrasyonu)
+
+pixel-agent kendi tool'larını [Model Context Protocol](https://modelcontextprotocol.io) standardı üzerinden expose eder. claude-cli ile entegrasyon için (`~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "pixel-agent": {
+      "command": "/path/to/pixel-agent/.build/release/pixel-mcp-server",
+      "args": []
+    }
+  }
+}
+```
+
+Release build:
+
+```bash
+swift build -c release
+ls .build/release/pixel-mcp-server   # ↑ command path bu
+```
+
+Stdio sanity check (claude-cli olmadan):
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | swift run pixel-mcp-server
+```
+
+Detay: [ADR-0016](docs/adr/0016-mcp-server-expose.md).
 
 ## Lisans
 
