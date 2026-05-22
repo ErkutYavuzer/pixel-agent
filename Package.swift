@@ -41,6 +41,7 @@ let package = Package(
                 "PixelMemory",
                 "PixelMascot",
                 "PixelRemote",
+                "PixelSubagent",
                 "PixelMCPServer",
             ]
         ),

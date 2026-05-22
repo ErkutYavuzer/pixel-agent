@@ -1,6 +1,9 @@
 import Darwin
 import Foundation
+import PixelBackends
+import PixelCore
 import PixelMCPServer
+import PixelSubagent
 import PixelTools
 
 /// `pixel-mcp-server`'ın bundle-bağımlı tool isteklerini dinleyen Unix
@@ -154,8 +157,79 @@ public actor ControlSocketServer {
             await MainActor.run { SoundEffect.play(name) }
             return .success(.string("Ses çalındı: \(name)"))
 
+        case "dispatch_subagent":
+            return await dispatchSubagent(request.arguments)
+
         default:
             return .failure("Bilinmeyen bridge tool: \(request.tool)")
+        }
+    }
+
+    /// MCP üzerinden gelen `dispatch_subagent` çağrısı: backend resolve + SubagentRunner.run +
+    /// sonuç. Bağlantı subagent süresi boyunca açık tutulur (single-shot bridge bloklanır).
+    /// MCP client (claude-cli vs.) kendi timeout'u ile sınırlı; budget bu pencereye sığmalı.
+    private static func dispatchSubagent(_ args: JSONValue) async -> BridgeResponse {
+        guard let prompt = args["prompt"]?.stringValue, !prompt.isEmpty else {
+            return .failure("`prompt` parametresi zorunlu.")
+        }
+        guard let backendName = args["backend"]?.stringValue,
+              let kind = CLIKind(rawValue: backendName) else {
+            return .failure("`backend` claude/codex/gemini olmalı.")
+        }
+
+        // Her request'te fresh detect — kullanıcı CLI'larını ekleyebilir/güncelleyebilir.
+        let detector = CLIDetector()
+        guard let executablePath = detector.locate(kind) else {
+            return .failure("Backend bulunamadı: \(kind.executableName) (PATH veya bilinen lokasyonlarda yok).")
+        }
+
+        // Budget parametreleri (opsiyonel).
+        let duration: TimeInterval = {
+            switch args["max_duration_seconds"] {
+            case .int(let n): return TimeInterval(n)
+            case .double(let d): return d
+            default: return Budget.default.maxDuration
+            }
+        }()
+        let outputBytes: Int? = {
+            if case .int(let n) = args["max_output_bytes"], n > 0 { return n }
+            return nil
+        }()
+        let budget = Budget(maxDuration: max(1, duration), maxOutputBytes: outputBytes)
+
+        let backend = CLIBackend(kind: kind, executablePath: executablePath)
+        let runner = SubagentRunner(backend: backend, budget: budget)
+        let result = await runner.run(prompt: prompt)
+
+        let payload: JSONValue = .object([
+            "status": .string(Self.statusName(of: result)),
+            "output": .string(result.output),
+            "duration_seconds": .double(result.durationSeconds),
+            "backend": .string(kind.rawValue),
+        ])
+
+        switch result {
+        case .completed:
+            return .success(payload)
+        case .budgetExceeded(let reason, _, _):
+            return BridgeResponse(
+                ok: false,
+                result: payload,
+                error: "Budget aşıldı (\(reason.rawValue))"
+            )
+        case .cancelled:
+            return BridgeResponse(ok: false, result: payload, error: "Subagent iptal edildi")
+        case .failed(let error, _, _):
+            return BridgeResponse(ok: false, result: payload, error: error)
+        }
+    }
+
+    private static func statusName(of result: SubagentResult) -> String {
+        switch result {
+        case .completed: return "completed"
+        case .budgetExceeded: return "budget_exceeded"
+        case .cancelled: return "cancelled"
+        case .failed: return "failed"
         }
     }
 

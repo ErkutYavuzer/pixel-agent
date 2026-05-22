@@ -80,4 +80,62 @@ final class ControlSocketServerTests: XCTestCase {
         await server.stop()
         await server.stop()  // ikinci çağrı no-op
     }
+
+    // MARK: - dispatch_subagent edge cases (real backend e2e atlandı)
+
+    func testDispatchSubagentRejectsMissingPrompt() async throws {
+        let server = ControlSocketServer(socketPath: socketPath)
+        try await server.start()
+        defer { Task { await server.stop() } }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let response = try await BridgeClient.call(
+            tool: "dispatch_subagent",
+            arguments: .object(["backend": .string("claude")]),
+            socketPath: socketPath
+        )
+
+        XCTAssertFalse(response.ok)
+        XCTAssertTrue(response.error?.contains("prompt") ?? false)
+    }
+
+    func testDispatchSubagentRejectsInvalidBackend() async throws {
+        let server = ControlSocketServer(socketPath: socketPath)
+        try await server.start()
+        defer { Task { await server.stop() } }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let response = try await BridgeClient.call(
+            tool: "dispatch_subagent",
+            arguments: .object([
+                "prompt": .string("test"),
+                "backend": .string("gpt-4"),
+            ]),
+            socketPath: socketPath
+        )
+
+        XCTAssertFalse(response.ok)
+        XCTAssertTrue(response.error?.contains("claude/codex/gemini") ?? false)
+    }
+
+    func testDispatchSubagentRejectsEmptyPrompt() async throws {
+        let server = ControlSocketServer(socketPath: socketPath)
+        try await server.start()
+        defer { Task { await server.stop() } }
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let response = try await BridgeClient.call(
+            tool: "dispatch_subagent",
+            arguments: .object([
+                "prompt": .string(""),
+                "backend": .string("claude"),
+            ]),
+            socketPath: socketPath
+        )
+
+        XCTAssertFalse(response.ok)
+    }
 }

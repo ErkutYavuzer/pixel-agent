@@ -95,6 +95,7 @@ public enum BuiltInTools {
         registry.register(dockBadgeSet)
         registry.register(notify)
         registry.register(playSound)
+        registry.register(dispatchSubagent)
         return registry
     }
 
@@ -263,18 +264,90 @@ public enum BuiltInTools {
         }
     )
 
+    static let dispatchSubagent = ToolDefinition(
+        name: "dispatch_subagent",
+        description: """
+            Bir LLM CLI'sını (claude/codex/gemini) budget'lı tek-turlu subagent olarak \
+            çalıştırır. Sonuç JSON'unda status (completed/budget_exceeded/cancelled/failed) \
+            + output + duration_seconds + backend döner. PixelAgent.app çalışıyor olmalı. \
+            Bridge bağlantısı subagent süresince açık kalır — `max_duration_seconds`'ı \
+            MCP client timeout'unuzun altında tutun.
+            """,
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "prompt": .object([
+                    "type": .string("string"),
+                    "description": .string("Subagent'a gönderilecek prompt"),
+                ]),
+                "backend": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("claude"), .string("codex"), .string("gemini")]),
+                    "description": .string("Hangi CLI çalışsın"),
+                ]),
+                "max_duration_seconds": .object([
+                    "type": .string("number"),
+                    "description": .string("Wallclock budget (varsayılan 60). Aşılırsa stream cancel + status=budget_exceeded."),
+                ]),
+                "max_output_bytes": .object([
+                    "type": .string("integer"),
+                    "description": .string("Toplam çıktı için UTF-8 byte cap (opsiyonel, varsayılan sınırsız)."),
+                ]),
+            ]),
+            "required": .array([.string("prompt"), .string("backend")]),
+        ]),
+        handler: { params in
+            guard let prompt = params?["prompt"]?.stringValue, !prompt.isEmpty else {
+                return ToolResultBuilder.error("`prompt` zorunlu.")
+            }
+            guard let backend = params?["backend"]?.stringValue else {
+                return ToolResultBuilder.error("`backend` zorunlu (claude/codex/gemini).")
+            }
+            var args: [String: JSONValue] = [
+                "prompt": .string(prompt),
+                "backend": .string(backend),
+            ]
+            if let dur = params?["max_duration_seconds"] {
+                args["max_duration_seconds"] = dur
+            }
+            if let bytes = params?["max_output_bytes"] {
+                args["max_output_bytes"] = bytes
+            }
+            return await callBridge(tool: "dispatch_subagent", arguments: .object(args))
+        }
+    )
+
     /// BridgeClient.call() sarmalayıcı — başarı/başarısızlık MCP `content` shape'ine
-    /// dönüştürür. PixelAgent.app çalışmıyorsa connect EACCES/ENOENT döner.
+    /// dönüştürür. PixelAgent.app çalışmıyorsa connect EACCES/ENOENT → error.
+    ///
+    /// Response.result string ise text content. Object ise JSON serialize edilip
+    /// text içine konur (claude-cli istemcisinin parse etmesi için).
     private static func callBridge(tool: String, arguments: JSONValue) async -> JSONValue {
         do {
             let response = try await BridgeClient.call(tool: tool, arguments: arguments)
+            let text = formatBridgeResult(response.result)
             if response.ok {
-                let text = response.result?.stringValue ?? "OK"
                 return ToolResultBuilder.text(text)
             }
-            return ToolResultBuilder.error(response.error ?? "Bilinmeyen bridge hatası.")
+            // Hata durumunda: structured result varsa onu da göster, error mesajıyla birlikte.
+            let errorPrefix = response.error ?? "Bilinmeyen bridge hatası"
+            let body = text.isEmpty ? errorPrefix : "\(errorPrefix)\n\(text)"
+            return ToolResultBuilder.error(body)
         } catch {
             return ToolResultBuilder.error((error as? LocalizedError)?.errorDescription ?? "\(error)")
         }
+    }
+
+    private static func formatBridgeResult(_ value: JSONValue?) -> String {
+        guard let value else { return "" }
+        if let s = value.stringValue { return s }
+        // Object/array — pretty-print JSON
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let data = try? encoder.encode(value),
+           let str = String(data: data, encoding: .utf8) {
+            return str
+        }
+        return ""
     }
 }

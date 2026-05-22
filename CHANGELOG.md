@@ -7,8 +7,17 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Added — Subagent Faz 2: MCP `dispatch_subagent` (22 May 2026)
+- **MCP tool `dispatch_subagent`** (`BuiltInTools` registry, 8 → 9 tool): `prompt` + `backend` (`claude|codex|gemini`) + opsiyonel `max_duration_seconds` / `max_output_bytes`. claude-cli ve uyumlu istemcilerden subagent orchestration için bridge tool. PixelAgent.app çalışıyor olmalı.
+- **`ControlSocketServer.dispatchSubagent`** handler: her request'te fresh `CLIDetector` (kullanıcı CLI değişikliklerine cevap), `CLIBackend(kind:, executablePath:)` resolve, `SubagentRunner(budget:).run(prompt:)`. Sonuç structured JSON payload (`status`/`output`/`duration_seconds`/`backend`); `BridgeResponse.result` üzerinde döner.
+- **`ToolRegistry.callBridge` helper** structured result desteği: response.result string ise text content, object/array ise pretty-printed JSON serialize ediyor (sortedKeys); claude-cli parse edebilir.
+- `PixelMacApp` target → `PixelSubagent` dep eklendi.
+- 3 yeni `ControlSocketServerTests` edge case: missing prompt, invalid backend ("gpt-4"), empty prompt. Toplam 192 → **195 test yeşil**.
+- Bridge bağlantısı subagent süresince açık kalır (long-running RPC) — MCP client timeout'u kullanıcı sorumluluğu.
+- [ADR-0020](docs/adr/0020-mcp-dispatch-subagent.md): tasarım + long-running RPC limitation + Faz 3+ defer (UI integration, multi-turn workflow, streaming progress).
+
 ### Notes
-- v0.2 kalan yol haritası: Subagent Faz 2+ (MCP tool `dispatch_subagent` + UI background list + multi-turn `Workflow`), LAN-only mode (Bonjour), App Store signing.
+- v0.2 kalan yol haritası: Subagent Faz 3+ (UI background panel, multi-turn `Workflow`, streaming progress), LAN-only mode (Bonjour), App Store signing.
 
 ## [0.2.5] — 2026-05-22
 
