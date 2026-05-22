@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.9-blue)
-![tests](https://img.shields.io/badge/tests-235%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.10-blue)
+![tests](https://img.shields.io/badge/tests-244%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (9 tool) · LAN-only transport (Bonjour) · 235 test yeşil · 23 ADR</em>
+  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (9 tool) · Subagent UI paneli (paralel cap=3) · LAN-only transport (Bonjour) · 244 test yeşil · 24 ADR</em>
 </p>
 
 <details>
@@ -99,6 +99,7 @@ Her büyük tasarım kararı [docs/adr/](docs/adr/) altında belgeli.
 - [ADR-0021](docs/adr/0021-lan-mode-bonjour.md) LAN-only mode Faz 1 (`PixelLAN` library: Bonjour + Network.framework, relay bypass altyapısı)
 - [ADR-0022](docs/adr/0022-remote-transport-adapter.md) LAN Faz 2 — `RemoteTransport` protocol + 4 adapter + `FallbackTransport`
 - [ADR-0023](docs/adr/0023-merge-transport-and-mac-wire-up.md) LAN Faz 3 — `MergeTransport` paralel composite + PixelMacApp wire-up
+- [ADR-0024](docs/adr/0024-subagent-ui-panel.md) Subagent Faz 3 — UI panel + paralel cap=3 + MCP/UI birleşik bridge
 
 Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md) — birinci sürümden çıkarılan 14 desen ve 3 anti-pattern.
 
@@ -108,7 +109,7 @@ Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-fr
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
 cd pixel-agent
 swift build -c release
-swift test                              # 235 yeşil
+swift test                              # 244 yeşil
 ./scripts/build-app.sh release && open PixelAgent.app
 ```
 
@@ -140,7 +141,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.9` (22 May 2026) · **235 test** yeşil · **23 ADR** · 9 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
+**Versiyon:** `v0.2.10` (22 May 2026) · **244 test** yeşil · **24 ADR** · 9 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
 
 ### Sürüm geçmişi
 
@@ -156,6 +157,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.7` | 22 May | LAN-only mode Faz 1+2 — `PixelLAN` + `RemoteTransport` + 4 adapter + `FallbackTransport` | 226 |
 | `v0.2.8` | 22 May | LAN Faz 3 — `MergeTransport` + PixelMacApp wire-up (Mac side LAN+Relay paralel) | 235 |
 | `v0.2.9` | 22 May | Hotfix: Info.plist `NSLocalNetworkUsageDescription` + `NSBonjourServices` + repo public | 235 |
+| `v0.2.10` | 22 May | Subagent Faz 3 — UI panel + paralel cap=3 + MCP/UI birleşik bridge + cancel bug fix | 244 |
 
 ### v0.2 yol haritası
 
@@ -166,7 +168,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 - ✅ ed25519 envelope signing — Faz 1+2 (ADR-0015)
 - ✅ MCP server expose — Faz 1+2 (ADR-0016 + ADR-0018, 8 tool)
 - ✅ Plan Mode (ADR-0017)
-- ◐ Subagent dispatching — Faz 1 (ADR-0019, `PixelSubagent` library) + Faz 2 (ADR-0020, MCP `dispatch_subagent` tool) landed; Faz 3+ UI panel + multi-turn workflow + streaming defer
+- ◐ Subagent dispatching — Faz 1 (ADR-0019) + Faz 2 (ADR-0020) + Faz 3 (ADR-0024: UI panel + paralel cap=3 + bridge birleşimi) landed; Faz 4+ streaming partial output + multi-turn workflow defer
 - ◐ LAN-only mode — Faz 1 (ADR-0021) + Faz 2 (ADR-0022) + Faz 3 (ADR-0023, `MergeTransport` + Mac LAN+Relay paralel) landed; Faz 4 iOS LAN-first default + TXT record + indicator defer
 - ☐ App Store signing + submission
 

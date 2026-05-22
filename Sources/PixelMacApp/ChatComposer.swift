@@ -7,6 +7,13 @@ struct ChatComposer: View {
     let onSend: () -> Void
     let onCancel: () -> Void
 
+    /// Opsiyonel: arka plan subagent dispatch'i için callback. `nil` ise buton render
+    /// edilmez (geriye uyumluluk).
+    var onDispatchSubagent: (() -> Void)? = nil
+
+    /// `true` ise subagent butonu disabled — havuz dolu olduğunda kullanılır.
+    var subagentDisabled: Bool = false
+
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -34,6 +41,17 @@ struct ChatComposer: View {
                 Button("Durdur", action: onCancel)
                     .keyboardShortcut(.escape, modifiers: [])
             } else {
+                if let dispatch = onDispatchSubagent {
+                    Button(action: dispatch) {
+                        Image(systemName: "person.2.wave.2")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!canSend || subagentDisabled)
+                    .keyboardShortcut(.return, modifiers: [.command, .shift])
+                    .help(subagentDisabled
+                          ? "Subagent havuzu dolu (3/3 aktif)"
+                          : "Arka plan subagent başlat (⌘⇧Return)")
+                }
                 Button("Gönder", action: onSend)
                     .keyboardShortcut(.return)
                     .disabled(!canSend)

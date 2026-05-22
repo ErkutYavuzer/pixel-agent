@@ -1,36 +1,46 @@
 import PixelBackends
 import PixelCore
 import PixelMemory
+import PixelSubagent
 import SwiftUI
 
 /// İki backend'i yan yana, ortak composer ile. Her sütun kendi ConversationStore
 /// dosyasına yazar (conversation-<kind>.jsonl). iOS forward burada YOK — sadece
 /// Mac içinde paralel sohbet.
+///
+/// Subagent panel ve dispatch butonu sol backend'i (`leftKind`) kullanır — kullanıcı
+/// kararı: dual mode'da Subagent için tek default backend yeterli.
 struct DualChatHost: View {
     let leftBackend: any ChatBackend
     let rightBackend: any ChatBackend
+    let leftKind: CLIKind
     let leftTitle: String
     let rightTitle: String
     let planMode: Bool
 
     @StateObject private var leftVM: ChatViewModel
     @StateObject private var rightVM: ChatViewModel
+    @ObservedObject var subagentManager: SubagentManager
     @State private var draft: String = ""
 
     init(
         leftBackend: any ChatBackend,
         rightBackend: any ChatBackend,
+        leftKind: CLIKind,
         leftTitle: String,
         rightTitle: String,
         leftStoreFileName: String,
         rightStoreFileName: String,
+        subagentManager: SubagentManager,
         planMode: Bool = false
     ) {
         self.leftBackend = leftBackend
         self.rightBackend = rightBackend
+        self.leftKind = leftKind
         self.leftTitle = leftTitle
         self.rightTitle = rightTitle
         self.planMode = planMode
+        self.subagentManager = subagentManager
 
         let leftStore = Self.makeStore(fileName: leftStoreFileName)
         let rightStore = Self.makeStore(fileName: rightStoreFileName)
@@ -57,6 +67,11 @@ struct DualChatHost: View {
                 ChatColumn(viewModel: rightVM, title: rightTitle)
             }
 
+            if !subagentManager.sessions.isEmpty {
+                Divider()
+                SubagentPanelView(manager: subagentManager)
+            }
+
             Divider()
 
             ChatComposer(
@@ -64,7 +79,9 @@ struct DualChatHost: View {
                 isStreaming: leftVM.isStreaming || rightVM.isStreaming,
                 planMode: planMode,
                 onSend: sendBoth,
-                onCancel: cancelBoth
+                onCancel: cancelBoth,
+                onDispatchSubagent: dispatchSubagent,
+                subagentDisabled: subagentManager.isCapReached
             )
         }
         .onAppear {
@@ -87,6 +104,15 @@ struct DualChatHost: View {
     private func cancelBoth() {
         leftVM.cancelStream()
         rightVM.cancelStream()
+    }
+
+    private func dispatchSubagent() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let result = subagentManager.dispatch(prompt: text, backend: leftKind, budget: .default)
+        if case .success = result {
+            draft = ""
+        }
     }
 
     private static func makeStore(fileName: String) -> ConversationStore {

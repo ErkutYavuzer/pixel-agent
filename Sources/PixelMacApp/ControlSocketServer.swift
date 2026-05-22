@@ -23,8 +23,18 @@ public actor ControlSocketServer {
         qos: .utility
     )
 
+    /// Birleşik subagent havuzu — UI ve MCP bridge buraya yönlendirilir. `nil` ise
+    /// `dispatch_subagent` eski stateless yola düşer (her request fresh
+    /// `CLIDetector` + `SubagentRunner`). Test target için backwards compat.
+    private var manager: SubagentManager?
+
     public init(socketPath: String = BridgePaths.defaultSocketPath()) {
         self.socketPath = socketPath
+    }
+
+    /// `RootView` Manager hazır olduğunda çağırır. Idempotent — son `attach` kazanır.
+    func attach(_ manager: SubagentManager) {
+        self.manager = manager
     }
 
     public func start() throws {
@@ -66,15 +76,18 @@ public actor ControlSocketServer {
         running = true
 
         // Accept loop — background queue (blocking accept syscall)
-        let path = socketPath
-        acceptQueue.async {
+        acceptQueue.async { [weak self] in
             while true {
                 let clientFD = accept(fd, nil, nil)
                 if clientFD < 0 {
                     // listenFD kapandığında accept EBADF döner — döngüden çık
                     return
                 }
-                Task { await Self.handleClient(fd: clientFD, socketPath: path) }
+                guard let self else {
+                    close(clientFD)
+                    return
+                }
+                Task { await self.handleClient(fd: clientFD) }
             }
         }
     }
@@ -91,10 +104,10 @@ public actor ControlSocketServer {
 
     // MARK: - Connection handling
 
-    private static func handleClient(fd: Int32, socketPath: String) async {
+    private func handleClient(fd: Int32) async {
         defer { close(fd) }
 
-        guard let requestBytes = readLine(fd: fd) else { return }
+        guard let requestBytes = Self.readLine(fd: fd) else { return }
         let response: BridgeResponse
         do {
             let req = try JSONDecoder().decode(BridgeRequest.self, from: Data(requestBytes))
@@ -102,7 +115,7 @@ public actor ControlSocketServer {
         } catch {
             response = .failure("İstek parse edilemedi: \(error.localizedDescription)")
         }
-        _ = writeLine(fd: fd, response: response)
+        _ = Self.writeLine(fd: fd, response: response)
     }
 
     private static func readLine(fd: Int32) -> [UInt8]? {
@@ -135,7 +148,7 @@ public actor ControlSocketServer {
 
     // MARK: - Tool dispatch
 
-    private static func execute(request: BridgeRequest) async -> BridgeResponse {
+    private func execute(request: BridgeRequest) async -> BridgeResponse {
         switch request.tool {
         case "dock_badge_set":
             let label = request.arguments["label"]?.stringValue
@@ -165,22 +178,21 @@ public actor ControlSocketServer {
         }
     }
 
-    /// MCP üzerinden gelen `dispatch_subagent` çağrısı: backend resolve + SubagentRunner.run +
-    /// sonuç. Bağlantı subagent süresi boyunca açık tutulur (single-shot bridge bloklanır).
-    /// MCP client (claude-cli vs.) kendi timeout'u ile sınırlı; budget bu pencereye sığmalı.
-    private static func dispatchSubagent(_ args: JSONValue) async -> BridgeResponse {
+    /// MCP üzerinden gelen `dispatch_subagent` çağrısı.
+    ///
+    /// - Manager attach edilmişse: havuza ekler (UI'da görünür) ve sonucu bekler.
+    ///   Cap dolu / backend yok → `BridgeResponse.failure(...)`.
+    /// - Manager nil ise (test edge case): eski stateless yol — her request fresh
+    ///   `CLIDetector` + `SubagentRunner`. UI'a yansımaz.
+    ///
+    /// Bağlantı subagent süresince açık kalır (single-shot bridge bloklanır).
+    private func dispatchSubagent(_ args: JSONValue) async -> BridgeResponse {
         guard let prompt = args["prompt"]?.stringValue, !prompt.isEmpty else {
             return .failure("`prompt` parametresi zorunlu.")
         }
         guard let backendName = args["backend"]?.stringValue,
               let kind = CLIKind(rawValue: backendName) else {
             return .failure("`backend` claude/codex/gemini olmalı.")
-        }
-
-        // Her request'te fresh detect — kullanıcı CLI'larını ekleyebilir/güncelleyebilir.
-        let detector = CLIDetector()
-        guard let executablePath = detector.locate(kind) else {
-            return .failure("Backend bulunamadı: \(kind.executableName) (PATH veya bilinen lokasyonlarda yok).")
         }
 
         // Budget parametreleri (opsiyonel).
@@ -197,12 +209,37 @@ public actor ControlSocketServer {
         }()
         let budget = Budget(maxDuration: max(1, duration), maxOutputBytes: outputBytes)
 
+        // Manager attach edilmişse birleşik havuza yönlendir.
+        if let manager = self.manager {
+            let outcome = await manager.dispatchAndWait(prompt: prompt, backend: kind, budget: budget)
+            switch outcome {
+            case .success(let subResult):
+                return Self.bridgeResponse(from: subResult, backendKind: kind)
+            case .failure(let error):
+                return .failure(error.errorDescription ?? "\(error)")
+            }
+        }
+
+        // Stateless fallback — test target ve Manager-attached-değil durumlar için.
+        let detector = CLIDetector()
+        guard let executablePath = detector.locate(kind) else {
+            return .failure("Backend bulunamadı: \(kind.executableName) (PATH veya bilinen lokasyonlarda yok).")
+        }
         let backend = CLIBackend(kind: kind, executablePath: executablePath)
         let runner = SubagentRunner(backend: backend, budget: budget)
         let result = await runner.run(prompt: prompt)
+        return Self.bridgeResponse(from: result, backendKind: kind)
+    }
 
+    /// `SubagentResult` → `BridgeResponse` çevirimi. Hem manager yolu hem stateless yol
+    /// aynı format döndürür: `status`/`output`/`duration_seconds`/`backend` payload'ı +
+    /// duruma uygun ok/error.
+    private static func bridgeResponse(
+        from result: SubagentResult,
+        backendKind kind: CLIKind
+    ) -> BridgeResponse {
         let payload: JSONValue = .object([
-            "status": .string(Self.statusName(of: result)),
+            "status": .string(statusName(of: result)),
             "output": .string(result.output),
             "duration_seconds": .double(result.durationSeconds),
             "backend": .string(kind.rawValue),

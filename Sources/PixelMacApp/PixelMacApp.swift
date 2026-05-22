@@ -4,6 +4,7 @@ import PixelCore
 import PixelLAN
 import PixelMemory
 import PixelRemote
+import PixelSubagent
 import PixelTools
 import SwiftUI
 
@@ -45,6 +46,10 @@ struct RootView: View {
                 )
             } else if let store = conversationStore {
                 ChatHost(backends: backends, conversationStore: store)
+                    // Backends seti değişirse (rescan) ChatHost re-init → SubagentManager
+                    // backendResolver closure'u yeni snapshot ile yakalanır. Trade-off:
+                    // aktif subagent kartları kaybolur (rescan nadir bir event).
+                    .id(Self.backendsKey(backends))
             } else {
                 ErrorView(message: "Bilinmeyen başlatma hatası", onRetry: retryStore)
             }
@@ -95,6 +100,12 @@ struct RootView: View {
         }
         return resolved
     }
+
+    /// `.id(...)` modifier'ı için stabil key — backends key seti aynıysa string aynı,
+    /// yeni/silinen CLI varsa string değişir → ChatHost re-init.
+    private static func backendsKey(_ backends: [CLIKind: CLIBackend]) -> String {
+        backends.keys.map(\.rawValue).sorted().joined(separator: ",")
+    }
 }
 
 enum ChatMode: String, CaseIterable {
@@ -120,6 +131,7 @@ struct ChatHost: View {
     @State private var incomingFromRemote: String?
     @State private var planMode: Bool = false
     @StateObject private var remoteHost: RemoteHost
+    @StateObject private var subagentManager: SubagentManager
 
     /// `PIXEL_RELAY_URL` env var varsa onu kullan; yoksa LAN IP (en0/en1) ile WebSocket URL üret;
     /// hiçbiri yoksa `ws://localhost:8787` (sadece Mac-local test için).
@@ -182,6 +194,15 @@ struct ChatHost: View {
                         return MergeTransport(transports: [lan])
                     }
                 }
+            )
+        )
+
+        // Subagent havuzu — backendResolver closure backends snapshot'ını yakalar.
+        // Rescan'da ChatHost re-init olunca (`.id(backendsKey)`) yeni snapshot ile yenilenir.
+        _subagentManager = StateObject(
+            wrappedValue: SubagentManager(
+                maxConcurrent: 3,
+                backendResolver: { [backends] kind in backends[kind] }
             )
         )
     }
@@ -261,7 +282,9 @@ struct ChatHost: View {
                 if let backend = backends[selectedKind] {
                     ChatView(
                         backend: backend,
+                        backendKind: selectedKind,
                         conversationStore: conversationStore,
+                        subagentManager: subagentManager,
                         incomingRemoteText: $incomingFromRemote,
                         planMode: planMode,
                         onAssistantComplete: { text in
@@ -281,10 +304,12 @@ struct ChatHost: View {
                     DualChatHost(
                         leftBackend: leftBackend,
                         rightBackend: rightBackend,
+                        leftKind: selectedKind,
                         leftTitle: selectedKind.displayName,
                         rightTitle: secondaryKind.displayName,
                         leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",
                         rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl",
+                        subagentManager: subagentManager,
                         planMode: planMode
                     )
                     .id("\(selectedKind.rawValue)-\(secondaryKind.rawValue)")
@@ -298,6 +323,12 @@ struct ChatHost: View {
         }
         .sheet(isPresented: $showAbout) {
             AboutView(relayURL: remoteHost.relayURL)
+        }
+        .task {
+            // MCP bridge'in dispatch_subagent çağrılarını UI havuzuna yönlendir.
+            // Rescan'da ChatHost re-init olunca yeni Manager attach edilir (son
+            // attach kazanır — actor field idempotent).
+            await RootView.controlServer.attach(subagentManager)
         }
         .task {
             for await text in remoteHost.inboundTexts {

@@ -131,8 +131,16 @@ public actor SubagentRunner {
                     )
                 }
             }
-            // Stream `.done` vermeden bitti (CLI subprocess exit) — yine completed sayılır
+            // Stream `.done` vermeden bitti. İki olası neden:
+            //  - Outer Task cancel olduğu için AsyncSequence iteration sonlandı → `.cancelled`
+            //  - CLI subprocess `.done` yield etmeden graceful exit etti → `.completed`
             let snap = await buffer.snapshot()
+            if Task.isCancelled {
+                return .cancelled(
+                    partialOutput: snap.text,
+                    durationSeconds: Date().timeIntervalSince(start)
+                )
+            }
             return .completed(
                 output: snap.text,
                 durationSeconds: Date().timeIntervalSince(start)

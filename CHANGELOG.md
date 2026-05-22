@@ -8,7 +8,36 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: Subagent Faz 3+ (UI panel + multi-turn workflow + streaming), LAN Faz 4 (iOS LAN-first default + TXT record + PairingView indicator), App Store signing.
+- v0.2 kalan: Subagent Faz 4+ (streaming partial output + multi-turn workflow + settings UI), LAN Faz 4 (iOS LAN-first default + TXT record + PairingView indicator), App Store signing.
+
+## [0.2.10] — 2026-05-22
+
+**Subagent Faz 3: UI panel + paralel cap + bridge birleşimi.** Composer'ın hemen üstünde yatay subagent kart şeridi; UI'dan ⌘⇧Return ile dispatch; MCP'den gelen subagent'lar **aynı panelde** görünür (birleşik). Paralel cap = 3. **244 test yeşil** (+9). Breaking change yok.
+
+### Added — Subagent Faz 3 (22 May 2026)
+- **`SubagentManager`** (`Sources/PixelMacApp/Subagent/`, `@MainActor ObservableObject`) — birleşik subagent havuzu: `dispatch()` (UI), `dispatchAndWait()` (MCP bridge), `cancel()`, `dismiss()`. `maxConcurrent = 3` cap atomic (MainActor reentrancy yokluğu garanti). `backendResolver: (CLIKind) -> (any ChatBackend)?` DI.
+- **`SubagentSession`** value-type Identifiable: `id: SubagentID` (Runner ile aynı → TaskLocal binding), `prompt`, `backendKind`, `budget`, `status`, `startedAt`, `finishedAt`, `result`.
+- **`SubagentStatus`** state machine: `pending → running → (completed | budgetExceeded | cancelled | failed)`.
+- **`DispatchError`**: `capReached(maxConcurrent:)` / `backendUnavailable(CLIKind)` + `LocalizedError` (UI ve MCP yanıtlarında kullanılır).
+- **`SubagentPanelView` + `SubagentCardView` + `SubagentDetailSheet`** — boş listede `EmptyView` (panel + divider'lar render edilmez); dolu state'te yatay scrollable kart şeridi, sol uçta `N/3` cap badge; running'de `ProgressView` + `TimelineView(.periodic)` saniye-saniye elapsed; tap → detail sheet (full prompt + output mono scroll + "Çıktıyı kopyala" + "Kartı sil").
+- **`ChatComposer`** "Subagent" butonu (`person.2.wave.2`) — opsiyonel callback + `subagentDisabled` parametresi. Kısayol `⌘⇧Return` (Send `.return` ile çakışmaz). Disabled tooltip: "Subagent havuzu dolu (3/3 aktif)".
+- **`ChatView` + `DualChatHost`** panel entegrasyonu — `subagentManager` parametresi alır, body'de `VStack { ChatColumn, [Divider+Panel], Divider, Composer }`. Dual mode'da Subagent butonu sol backend (`selectedKind`) ile dispatch eder.
+- **`PixelMacApp.RootView`** `ChatHost`'a `.id(backendsKey)` modifier'ı — rescan'da Manager fresh backends snapshot ile yenilenir (trade-off: aktif sessions kayıp).
+- **`PixelMacApp.ChatHost`** `@StateObject subagentManager` + `.task { await RootView.controlServer.attach(subagentManager) }`.
+
+### Changed
+- **`ControlSocketServer`** artık actor field `manager: SubagentManager?` tutar + `attach(_:)` method. `dispatch_subagent` Manager varsa `dispatchAndWait()` üzerinden gider (UI'da kart belirir, cap dolu → "havuzu dolu" hata); nil ise eski stateless yol (test backwards compat).
+- `handleClient`/`execute`/`dispatchSubagent` statik fonksiyonlardan instance method'lara çevrildi (Manager erişimi için).
+- `bridgeResponse(from:backendKind:)` ortak helper — iki yolun çıktısını aynı format'a normalize eder.
+
+### Fixed
+- **`SubagentRunner` cancel detection bug**: ADR-0019'da "stream `.done` vermeden bitti → `.completed`" kasıtlıydı (CLI graceful exit) ama `Task.cancel()` sonrası `AsyncSequence` sessiz sonlanışı da bunu tetikliyor, status `.cancelled` yerine `.completed("")` dönüyordu. Fix: for loop'tan çıktıktan sonra `Task.isCancelled` check eklendi. Mevcut graceful behavior korundu.
+
+### Added — Tests
+- **`SubagentManagerTests`** 8 yeni test: dispatch creates session, dispatchAndWait happy path, cancel transitions to .cancelled, cap reached rejects 4th, cap frees after completion, dispatchAndWait waits, backend resolver nil, dismiss only removes terminal.
+- **`ControlSocketServerTests.testDispatchSubagentReturnsCapReachedWhenManagerFull`** — Manager attach + havuzu doldur + MCP bridge çağrısı "havuzu dolu" mesajı döndürmeli.
+- Toplam test: **235 → 244** yeşil.
+- [ADR-0024](docs/adr/0024-subagent-ui-panel.md): SubagentManager tasarımı + bridge birleşimi + UI tasarımı + cancel bug fix.
 
 ## [0.2.9] — 2026-05-22
 
