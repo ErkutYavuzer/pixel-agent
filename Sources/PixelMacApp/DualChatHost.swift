@@ -11,6 +11,7 @@ struct DualChatHost: View {
     let rightBackend: any ChatBackend
     let leftTitle: String
     let rightTitle: String
+    let planMode: Bool
 
     @StateObject private var leftVM: ChatViewModel
     @StateObject private var rightVM: ChatViewModel
@@ -22,12 +23,14 @@ struct DualChatHost: View {
         leftTitle: String,
         rightTitle: String,
         leftStoreFileName: String,
-        rightStoreFileName: String
+        rightStoreFileName: String,
+        planMode: Bool = false
     ) {
         self.leftBackend = leftBackend
         self.rightBackend = rightBackend
         self.leftTitle = leftTitle
         self.rightTitle = rightTitle
+        self.planMode = planMode
 
         let leftStore = Self.makeStore(fileName: leftStoreFileName)
         let rightStore = Self.makeStore(fileName: rightStoreFileName)
@@ -59,9 +62,18 @@ struct DualChatHost: View {
             ChatComposer(
                 draft: $draft,
                 isStreaming: leftVM.isStreaming || rightVM.isStreaming,
+                planMode: planMode,
                 onSend: sendBoth,
                 onCancel: cancelBoth
             )
+        }
+        .onAppear {
+            leftVM.planMode = planMode
+            rightVM.planMode = planMode
+        }
+        .onChange(of: planMode) { _, newValue in
+            leftVM.planMode = newValue
+            rightVM.planMode = newValue
         }
     }
 

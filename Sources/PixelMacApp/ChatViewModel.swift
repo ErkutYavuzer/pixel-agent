@@ -12,6 +12,10 @@ final class ChatViewModel: ObservableObject {
     @Published var isStreaming: Bool = false
     @Published var streamError: String?
     @Published var mascotState: MascotState = .idle
+    /// Plan Mode: backend'e `ChatOptions(planMode: true)` ile gönderilir.
+    /// Claude için `--permission-mode plan` flag'ine dönüşür (read-only tool allowlist).
+    /// Codex/Gemini'de no-op (CLI'lar native desteklemiyor).
+    @Published var planMode: Bool = false
 
     let backend: any ChatBackend
     let conversationStore: ConversationStore
@@ -74,13 +78,14 @@ final class ChatViewModel: ObservableObject {
         let snapshot = Array(messages.dropLast())
         let backend = self.backend
         let store = self.conversationStore
+        let options = ChatOptions(planMode: planMode)
 
         Task { try? await store.append(userMsg) }
 
         streamTask = Task {
             do {
                 var firstChunkSeen = false
-                let stream = backend.send(messages: snapshot, system: nil)
+                let stream = backend.send(messages: snapshot, system: nil, options: options)
                 for try await delta in stream {
                     if Task.isCancelled { break }
                     switch delta {

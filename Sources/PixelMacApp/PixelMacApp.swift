@@ -98,6 +98,7 @@ struct ChatHost: View {
     @State private var showPairing: Bool = false
     @State private var showAbout: Bool = false
     @State private var incomingFromRemote: String?
+    @State private var planMode: Bool = false
     @StateObject private var remoteHost: RemoteHost
 
     /// `PIXEL_RELAY_URL` env var varsa onu kullan; yoksa LAN IP (en0/en1) ile WebSocket URL üret;
@@ -183,6 +184,17 @@ struct ChatHost: View {
 
                 Spacer()
 
+                Toggle(isOn: $planMode) {
+                    Label("Plan", systemImage: "list.bullet.clipboard")
+                        .labelStyle(.titleAndIcon)
+                }
+                .toggleStyle(.button)
+                .help(
+                    selectedKind == .claude
+                        ? "Plan modu — sadece okuma/araştırma tool'ları (Claude --permission-mode plan)"
+                        : "Plan modu yalnızca Claude için aktif; \(selectedKind.displayName) bu bayrağı yoksayar"
+                )
+
                 if remoteHost.isConnected {
                     Image(systemName: "iphone.gen3.radiowaves.left.and.right")
                         .foregroundStyle(.green)
@@ -215,6 +227,7 @@ struct ChatHost: View {
                         backend: backend,
                         conversationStore: conversationStore,
                         incomingRemoteText: $incomingFromRemote,
+                        planMode: planMode,
                         onAssistantComplete: { text in
                             Task { await remoteHost.sendAssistantMessage(text) }
                         }
@@ -235,7 +248,8 @@ struct ChatHost: View {
                         leftTitle: selectedKind.displayName,
                         rightTitle: secondaryKind.displayName,
                         leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",
-                        rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl"
+                        rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl",
+                        planMode: planMode
                     )
                     .id("\(selectedKind.rawValue)-\(secondaryKind.rawValue)")
                 } else {

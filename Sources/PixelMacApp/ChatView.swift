@@ -8,11 +8,13 @@ import SwiftUI
 struct ChatView: View {
     @StateObject private var viewModel: ChatViewModel
     @Binding var incomingRemoteText: String?
+    let planMode: Bool
 
     init(
         backend: any ChatBackend,
         conversationStore: ConversationStore,
         incomingRemoteText: Binding<String?>,
+        planMode: Bool = false,
         onAssistantComplete: ((String) -> Void)? = nil
     ) {
         _viewModel = StateObject(
@@ -23,6 +25,7 @@ struct ChatView: View {
             )
         )
         _incomingRemoteText = incomingRemoteText
+        self.planMode = planMode
     }
 
     var body: some View {
@@ -34,6 +37,7 @@ struct ChatView: View {
             ChatComposer(
                 draft: $viewModel.draft,
                 isStreaming: viewModel.isStreaming,
+                planMode: viewModel.planMode,
                 onSend: {
                     let text = viewModel.draft
                     viewModel.draft = ""
@@ -41,6 +45,10 @@ struct ChatView: View {
                 },
                 onCancel: viewModel.cancelStream
             )
+        }
+        .onAppear { viewModel.planMode = planMode }
+        .onChange(of: planMode) { _, newValue in
+            viewModel.planMode = newValue
         }
         .onChange(of: incomingRemoteText) { _, newValue in
             guard let text = newValue, !text.isEmpty, !viewModel.isStreaming else { return }

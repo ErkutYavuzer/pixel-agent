@@ -15,7 +15,8 @@ struct MockChatBackend: ChatBackend {
 
     func send(
         messages: [Message],
-        system: String?
+        system: String?,
+        options: ChatOptions
     ) -> AsyncThrowingStream<StreamDelta, any Error> {
         let chunks = self.chunks
         let delay = self.delayNanoseconds

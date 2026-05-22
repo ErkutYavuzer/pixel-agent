@@ -38,4 +38,45 @@ final class CLIBackendTests: XCTestCase {
         XCTAssertTrue(collected.contains(.done))
         XCTAssertGreaterThan(collected.count, 1)  // en az 1 textChunk + done
     }
+
+    // MARK: - Plan Mode argument tests (ADR-0017)
+
+    func testClaudeArgsWithoutPlanMode() {
+        let args = CLIBackend.arguments(for: .claude, prompt: "merhaba", options: ChatOptions())
+        XCTAssertFalse(args.contains("--permission-mode"))
+        XCTAssertFalse(args.contains("plan"))
+        XCTAssertTrue(args.contains("--output-format"))
+        XCTAssertTrue(args.contains("stream-json"))
+        XCTAssertEqual(args.last, "merhaba")  // prompt en sonda
+    }
+
+    func testClaudeArgsWithPlanMode() {
+        let args = CLIBackend.arguments(
+            for: .claude,
+            prompt: "merhaba",
+            options: ChatOptions(planMode: true)
+        )
+        XCTAssertTrue(args.contains("--permission-mode"))
+        XCTAssertTrue(args.contains("plan"))
+        // `--permission-mode plan` bitişik olmalı
+        guard let idx = args.firstIndex(of: "--permission-mode") else {
+            return XCTFail("--permission-mode bulunamadı")
+        }
+        XCTAssertEqual(args[idx + 1], "plan")
+        XCTAssertEqual(args.last, "merhaba")  // prompt yine en sonda
+    }
+
+    func testCodexArgsIgnorePlanMode() {
+        let off = CLIBackend.arguments(for: .codex, prompt: "x", options: ChatOptions())
+        let on = CLIBackend.arguments(for: .codex, prompt: "x", options: ChatOptions(planMode: true))
+        XCTAssertEqual(off, on)  // Codex'te planMode yansımaz
+        XCTAssertFalse(on.contains("--permission-mode"))
+    }
+
+    func testGeminiArgsIgnorePlanMode() {
+        let off = CLIBackend.arguments(for: .gemini, prompt: "x", options: ChatOptions())
+        let on = CLIBackend.arguments(for: .gemini, prompt: "x", options: ChatOptions(planMode: true))
+        XCTAssertEqual(off, on)
+        XCTAssertFalse(on.contains("--permission-mode"))
+    }
 }

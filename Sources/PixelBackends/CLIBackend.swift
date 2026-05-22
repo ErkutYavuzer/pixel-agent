@@ -21,7 +21,8 @@ public struct CLIBackend: ChatBackend {
 
     public func send(
         messages: [Message],
-        system: String?
+        system: String?,
+        options: ChatOptions
     ) -> AsyncThrowingStream<StreamDelta, any Error> {
         let prompt = Self.composedPrompt(messages: messages, system: system)
         let kind = self.kind
@@ -32,7 +33,7 @@ public struct CLIBackend: ChatBackend {
                 let stdin: String? = Self.usesStdinForPrompt(for: kind) ? prompt : nil
                 let runner = CLIProcessRunner(
                     executablePath: executablePath,
-                    arguments: Self.arguments(for: kind, prompt: prompt)
+                    arguments: Self.arguments(for: kind, prompt: prompt, options: options)
                 )
                 let mode = Self.outputMode(for: kind)
 
@@ -96,18 +97,26 @@ public struct CLIBackend: ChatBackend {
         kind == .codex
     }
 
-    private static func arguments(for kind: CLIKind, prompt: String) -> [String] {
+    /// CLI binary'sine geçilecek argümanlar. `internal` yapıldı ki testler doğrulayabilsin.
+    static func arguments(for kind: CLIKind, prompt: String, options: ChatOptions) -> [String] {
         switch kind {
         case .claude:
-            return [
+            var args = [
                 "-p",
                 "--output-format", "stream-json",
                 "--include-partial-messages",
                 "--verbose",
-                prompt,
             ]
+            if options.planMode {
+                // Claude CLI Plan Mode: read-only tool allowlist (Read/Glob/Grep aktif,
+                // Edit/Write/Bash devre dışı). Spec: docs.anthropic.com/claude/cli
+                args.append(contentsOf: ["--permission-mode", "plan"])
+            }
+            args.append(prompt)
+            return args
         case .codex:
-            // Codex `exec` subcommand + stdin (dash); prompt arg değil
+            // Codex `exec` subcommand + stdin (dash); prompt arg değil.
+            // Plan Mode native değil — bayrak yok, normal akışa devam.
             return [
                 "exec",
                 "--json",
@@ -117,6 +126,7 @@ public struct CLIBackend: ChatBackend {
                 "-",
             ]
         case .gemini:
+            // Gemini CLI Plan Mode'a native destek vermiyor — bayrak yok.
             return ["-p", prompt]
         }
     }
