@@ -19,8 +19,8 @@ APP_NAME="PixelAgent"
 APP_BUNDLE="${APP_NAME}.app"
 EXECUTABLE_NAME="${APP_NAME}"
 BUNDLE_ID="dev.erkutyavuzer.pixel-agent"
-VERSION="0.1.0"
-BUILD="1"
+VERSION="0.2.8"
+BUILD="8"
 
 echo "→ swift build -c ${CONFIG}"
 swift build -c "${CONFIG}"
@@ -62,6 +62,12 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
     <string>14.0</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>iPhone'unuzla doğrudan LAN üzerinden (Bonjour) eşleşmek için.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_pixel-agent._tcp</string>
+    </array>
 </dict>
 </plist>
 EOF
