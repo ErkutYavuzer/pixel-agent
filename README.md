@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.4-blue)
-![tests](https://img.shields.io/badge/tests-177%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.5-blue)
+![tests](https://img.shields.io/badge/tests-192%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -75,6 +75,7 @@ Her büyük tasarım kararı [docs/adr/](docs/adr/) altında belgeli.
 - [ADR-0016](docs/adr/0016-mcp-server-expose.md) MCP server expose Faz 1 (5 saf-data tool)
 - [ADR-0017](docs/adr/0017-plan-mode.md) Plan Mode (`--permission-mode plan` + UI toggle)
 - [ADR-0018](docs/adr/0018-mcp-bridge-unix-socket.md) MCP Faz 2 — Unix socket bridge (3 bundle-bağımlı tool)
+- [ADR-0019](docs/adr/0019-subagent-runner.md) Subagent Runner Faz 1 (`PixelSubagent` library, budget'lı tek-turlu çalıştırıcı)
 
 Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md) — birinci sürümden çıkarılan 14 desen ve 3 anti-pattern.
 
@@ -108,13 +109,14 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `PixelMemory` | `ConversationStore` actor (JSONL append-only + archive) | `PixelCore` |
 | `PixelMascot` | 48×48 pixel-art sprite (12×12 ASCII grid), 4 state, SwiftUI `Canvas` render | — |
 | `PixelRemote` | `RemoteEnvelope` (Codable + sig), `EnvelopeSigner` (ed25519), `KeyStore` (Keychain/InMemory), `RelayClient`, `RemoteHost`, `PairingCode` | `PixelCore` |
+| `PixelSubagent` | Tek-turlu subagent çalıştırıcı: `Budget` (wallclock + byte cap), `SubagentResult` enum, `SubagentRunner` actor (worker + watchdog yarışı) | `PixelCore` |
 | `PixelMCPServer` | MCP server library: `JSONValue`, `JSONRPCMessage`, `MCPServer` actor, `ToolRegistry`, `BridgeProtocol`, `BridgeClient` | — |
 | `PixelMacApp` (exe) | SwiftUI App composition root, `ChatView`, `PairingView`, `ControlSocketServer` | hepsi |
 | `pixel-mcp-server` (exe) | MCP stdio executable — `main.swift` 3 satır, `MCPServer.runStdio()` | `PixelMCPServer` |
 
 ## Durum
 
-**Versiyon:** `v0.2.4` (22 May 2026) · **177 test** yeşil · **18 ADR** · ~3.660 satır Swift + TS
+**Versiyon:** `v0.2.5` (22 May 2026) · **192 test** yeşil · **19 ADR** · 8 library + 2 executable target
 
 ### Sürüm geçmişi
 
@@ -125,6 +127,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.2` | 21 May | Claude `--output-format stream-json` parser | — |
 | `v0.2.3` | 22 May | iOS App Store hazırlık + ed25519 Faz 1+2 + MCP Faz 1 ⚠️ proto v1→v2 | 162 |
 | `v0.2.4` | 22 May | Plan Mode + MCP Faz 2 (Unix socket bridge) | 177 |
+| `v0.2.5` | 22 May | Subagent Runner Faz 1 + dokümantasyon konsolidasyonu | 192 |
 
 ### v0.2 yol haritası
 
@@ -135,7 +138,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 - ✅ ed25519 envelope signing — Faz 1+2 (ADR-0015)
 - ✅ MCP server expose — Faz 1+2 (ADR-0016 + ADR-0018, 8 tool)
 - ✅ Plan Mode (ADR-0017)
-- ☐ Subagent dispatching (ephemeral runtime + budget)
+- ◐ Subagent dispatching — Faz 1 landed (ADR-0019, `PixelSubagent` library + Budget'lı runner); Faz 2+ MCP tool + UI + multi-turn defer
 - ☐ LAN-only mode (Bonjour discovery, relay bypass)
 - ☐ App Store signing + submission
 

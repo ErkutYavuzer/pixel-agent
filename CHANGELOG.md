@@ -7,6 +7,13 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Notes
+- v0.2 kalan yol haritası: Subagent Faz 2+ (MCP tool `dispatch_subagent` + UI background list + multi-turn `Workflow`), LAN-only mode (Bonjour), App Store signing.
+
+## [0.2.5] — 2026-05-22
+
+**Subagent Runner Faz 1** (yeni `PixelSubagent` library, Budget'lı tek-turlu çalıştırıcı) + dokümantasyon konsolidasyonu (README + architecture.md v0.2.4 senkron). **192 test yeşil** (+15). Breaking change yok.
+
 ### Added — Subagent Runner Faz 1 (22 May 2026)
 - **`PixelSubagent`** yeni SPM library: `Budget` struct (wallclock + opsiyonel UTF-8 byte cap; preset'ler `.default` 60s, `.exploratory` 10s+8KB), `SubagentResult` enum (4 vaka: `completed` / `budgetExceeded(.duration|.outputBytes)` / `cancelled` / `failed`), `SubagentRunner` actor (tek-turlu prompt → result).
 - **Concurrency tasarımı**: `withTaskGroup` ile worker + watchdog yarışır; shared `OutputBuffer` actor partial çıktı için. `group.next()` ilk biteni döner; cancel propagation `AsyncThrowingStream.onTermination` üzerinden CLI subprocess'lerine ulaşır.
@@ -183,7 +190,8 @@ Mac + iOS arasında **end-to-end ed25519 imzalı kanal**, **MCP server expose Fa
 - Platform: macOS 14+, iOS 17+ (uzak istemci).
 - Lisans: MIT.
 
-[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.3
 [0.1.0]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.1.0
