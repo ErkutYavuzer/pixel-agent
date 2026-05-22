@@ -108,7 +108,7 @@ Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-fr
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
 cd pixel-agent
 swift build -c release
-swift test                              # 177 yeşil
+swift test                              # 235 yeşil
 ./scripts/build-app.sh release && open PixelAgent.app
 ```
 
@@ -196,7 +196,7 @@ swift build -c release
 ls .build/release/pixel-mcp-server     # ↑ command path bu
 ```
 
-**Tool'lar (8 toplam):**
+**Tool'lar (9 toplam):**
 
 | Tool | Tür | PixelAgent.app gerektirir mi? |
 |---|---|---|

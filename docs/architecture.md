@@ -1,6 +1,6 @@
 # pixel-agent Architecture
 
-> Son güncelleme: v0.2.4 (22 May 2026). 7 library + 2 executable target, 177 test, 18 ADR.
+> Son güncelleme: v0.2.9 (22 May 2026). 9 library + 2 executable target, 235 test, 23 ADR.
 
 ## Modül grafiği
 
