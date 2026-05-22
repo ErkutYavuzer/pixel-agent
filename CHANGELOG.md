@@ -7,8 +7,21 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Added — LAN-only mode Faz 1 (Bonjour + Network.framework, 22 May 2026)
+- **`PixelLAN`** yeni SPM library — `PixelRemote`'a depend. Hedef: Mac ↔ iOS arası LAN'da relay bypass.
+- `LANServiceType` — Bonjour service constants: `_pixel-agent._tcp` (RFC 6335 short-name compliant), `local.` domain.
+- `LANFraming` — newline-delimited JSON envelope encode/decode (bridge + relay + MCP ile aynı pattern).
+- `LANService` (actor, Mac) — `NWListener` + Bonjour advertise + accept loop, gelen bağlantıları `AsyncThrowingStream<LANServerConnection>` üzerinden yayar.
+- `LANServerConnection` — accept edilen client; `incoming: AsyncThrowingStream<RemoteEnvelope>` + `send(_:)` API.
+- `LANClient` (actor, iOS+Mac) — `NWBrowser` ile discovery (`DiscoveredHost` listesi), `NWConnection` ile bağlantı + envelope send/receive. Swift 6 strict concurrency için `ResumedFlag` helper (lock-protected first-wins).
+- TXT record (pk + version) **Faz 2'de eklenecek** — Apple SDK `NWListener.Service(...)` initializer'ı macOS/iOS sürümleri arasında imzasal değişkenlik gösteriyor.
+- 16 yeni test: 8 `LANFramingTests` (roundtrip, multi-line, partial leftover, empty, invalid JSON, blank lines, Turkish UTF-8), 4 `LANServiceTypeTests` (RFC 6335 compliance), 4 `LANInstantiationTests`.
+- Toplam test: **195 → 211** yeşil.
+- Wire-up (`RemoteHost`/`RemoteSession` transport adapter) Faz 2'de — fallback mantığı: önce LAN dene, başarısızsa relay.
+- [ADR-0021](docs/adr/0021-lan-mode-bonjour.md): tasarım + alternatif analizi + Faz 2/Faz 3 yol haritası.
+
 ### Notes
-- v0.2 kalan yol haritası: Subagent Faz 3+ (UI background panel, multi-turn `Workflow`, streaming progress), LAN-only mode (Bonjour), App Store signing.
+- v0.2 kalan yol haritası: Subagent Faz 3+ (UI background panel, multi-turn `Workflow`, streaming progress), **LAN Faz 2** (TXT record + RemoteTransport protocol + RemoteHost/Session integrasyonu + fallback), App Store signing.
 
 ## [0.2.6] — 2026-05-22
 
