@@ -7,6 +7,20 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Added — LAN Faz 2: transport adapter + fallback (22 May 2026)
+- **`RemoteTransport`** protocol (PixelRemote) — `connect/send/disconnect` üçlü API; `RemoteHost` ve iOS `RemoteSession` artık transport-agnostic.
+- **`RelayTransport`** (PixelRemote) — `RelayClient`'ı wraplar; behavior birebir aynı.
+- **`LANServerTransport`** (PixelLAN, Mac) — `LANService`'i wrapper; multi-client broadcast send.
+- **`LANClientTransport`** (PixelLAN, iOS+Mac) — `NWBrowser` + ilk bulunan host'a bağlanma + `discoveryTimeout` (varsayılan 2s).
+- **`FallbackTransport`** (PixelLAN) — `(primary, fallback)` composite; primary throws ise fallback'e geçer; `currentSelection: .none | .primary | .fallback`.
+- **`RemoteHost`** transport DI: yeni `init(transport: any RemoteTransport, ...)` overload + eski `init(relayURL:...)` (runtime'da RelayTransport oluşturur, backward-compat).
+- **iOS `RemoteSession`** `RemoteTransportFactory: @Sendable (PairingInfo) -> any RemoteTransport` injection; default `defaultRelayTransportFactory` free fonksiyon. UI LAN-first istemek için `{ FallbackTransport(LAN, Relay) }` pass eder.
+- **`PairingInfo`** (iOS) artık `Sendable` (factory closure cross-isolation gerekiyor).
+- UI defaults değişmedi — Mac `RemoteHost(relayURL:)` ile relay, iOS `RemoteSession()` default = relay. Faz 3'te switch (PixelMacApp Bonjour advertise + iOS LAN-first default).
+- 15 yeni test: 5 `RelayTransportTests` (init varyant, invalid pairing code, disconnect idempotency), 6 `FallbackTransportTests` (primary/fallback selection, both-fail propagation, send routing, disconnect reset; test-only `StubTransport` actor mock), 4 `LANTransportInstantiationTests`.
+- Toplam test: **211 → 226** yeşil.
+- [ADR-0022](docs/adr/0022-remote-transport-adapter.md): protocol + adapter layer + backward compat + Faz 3 UI defaults planı.
+
 ### Added — LAN-only mode Faz 1 (Bonjour + Network.framework, 22 May 2026)
 - **`PixelLAN`** yeni SPM library — `PixelRemote`'a depend. Hedef: Mac ↔ iOS arası LAN'da relay bypass.
 - `LANServiceType` — Bonjour service constants: `_pixel-agent._tcp` (RFC 6335 short-name compliant), `local.` domain.
@@ -21,7 +35,7 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - [ADR-0021](docs/adr/0021-lan-mode-bonjour.md): tasarım + alternatif analizi + Faz 2/Faz 3 yol haritası.
 
 ### Notes
-- v0.2 kalan yol haritası: Subagent Faz 3+ (UI background panel, multi-turn `Workflow`, streaming progress), **LAN Faz 2** (TXT record + RemoteTransport protocol + RemoteHost/Session integrasyonu + fallback), App Store signing.
+- v0.2 kalan yol haritası: Subagent Faz 3+ (UI background panel, multi-turn `Workflow`, streaming progress), **LAN Faz 3** (Mac side-by-side advertise + iOS LAN-first default + TXT record + PairingView indicator), App Store signing.
 
 ## [0.2.6] — 2026-05-22
 

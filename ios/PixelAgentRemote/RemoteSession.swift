@@ -3,6 +3,24 @@ import Foundation
 import PixelCore
 import PixelRemote
 
+/// Bir `PairingInfo`'dan iOS-rolünde transport üretir. Varsayılan
+/// `RelayTransport` üretir; UI `FallbackTransport(LAN, Relay)` ile swap edebilir.
+typealias RemoteTransportFactory = @Sendable (PairingInfo) -> any RemoteTransport
+
+/// Default factory — free fonksiyon olarak free-standing, böylece `init`'in
+/// default parameter ifadesi `Self.` referansı taşımak zorunda kalmaz.
+@Sendable
+func defaultRelayTransportFactory(for pairing: PairingInfo) -> any RemoteTransport {
+    guard let url = URL(string: pairing.relayURL) else {
+        return RelayTransport(
+            relayURL: URL(string: "ws://localhost:0")!,
+            pairingCode: pairing.code,
+            role: .ios
+        )
+    }
+    return RelayTransport(relayURL: url, pairingCode: pairing.code, role: .ios)
+}
+
 @MainActor
 final class RemoteSession: ObservableObject {
     @Published var pairing: PairingInfo?
@@ -11,17 +29,22 @@ final class RemoteSession: ObservableObject {
     @Published var messages: [Message] = []
     @Published var lastError: String?
 
-    private var client: RelayClient?
+    private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
 
     private let signingKey: Curve25519.Signing.PrivateKey
     private var macPublicKey: Curve25519.Signing.PublicKey?
 
+    private let transportFactory: RemoteTransportFactory
+
     private static let pairingDefaultsKey = "pixel-agent.pairing.v2"
     private static let keychainService = "dev.erkutyavuzer.pixel-agent"
     private static let keychainAccount = "remote-ios-signing-key"
 
-    init(keyStore: KeyStoring = KeychainKeyStore()) {
+    init(
+        keyStore: KeyStoring = KeychainKeyStore(),
+        transportFactory: @escaping RemoteTransportFactory = defaultRelayTransportFactory
+    ) {
         if let loaded = try? keyStore.loadOrCreate(
             service: Self.keychainService,
             account: Self.keychainAccount
@@ -30,6 +53,7 @@ final class RemoteSession: ObservableObject {
         } else {
             self.signingKey = Curve25519.Signing.PrivateKey()
         }
+        self.transportFactory = transportFactory
 
         if let saved = Self.loadSavedPairing() {
             self.pairing = saved
@@ -42,11 +66,6 @@ final class RemoteSession: ObservableObject {
     }
 
     func connect(pairing: PairingInfo) async {
-        guard let relayURL = URL(string: pairing.relayURL) else {
-            lastError = "Geçersiz relay URL"
-            return
-        }
-
         await disconnect(forget: false)
 
         guard let macKeyData = Data(base64Encoded: pairing.macPublicKey),
@@ -57,22 +76,18 @@ final class RemoteSession: ObservableObject {
         }
         self.macPublicKey = macKey
 
-        let client = RelayClient()
-        self.client = client
+        let transport = transportFactory(pairing)
+        self.transport = transport
         self.pairing = pairing
 
         do {
-            let stream = try await client.connect(
-                relayURL: relayURL,
-                pairingCode: pairing.code,
-                role: .ios
-            )
+            let stream = try await transport.connect()
             isConnected = true
             lastError = nil
             Self.savePairing(pairing)
 
-            // Handshake: hello envelope (unsigned — chicken-and-egg). Kendi public key'imizi taşır.
-            try await client.send(RemoteEnvelope.hello(publicKey: publicKeyBase64))
+            // Handshake: hello envelope (unsigned — chicken-and-egg).
+            try await transport.send(RemoteEnvelope.hello(publicKey: publicKeyBase64))
 
             receiveTask = Task { [weak self] in
                 guard let self else { return }
@@ -94,7 +109,7 @@ final class RemoteSession: ObservableObject {
     }
 
     func send(text: String) async {
-        guard let client else {
+        guard let transport else {
             lastError = "Bağlı değil"
             return
         }
@@ -104,17 +119,15 @@ final class RemoteSession: ObservableObject {
         let envelope = RemoteEnvelope.userMessage(text: text, messageID: userMsg.id.uuidString)
         do {
             let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
-            try await client.send(signed)
+            try await transport.send(signed)
         } catch {
             lastError = error.localizedDescription
         }
     }
 
-    /// `forget: true` ile çağrılırsa kayıtlı pairing de silinir (kullanıcı "Bağlantıyı kes" butonu).
-    /// `forget: false` (default) sadece in-memory state'i temizler — bir sonraki açılışta auto-reconnect dener.
     func disconnect(forget: Bool = true) async {
-        await client?.disconnect()
-        client = nil
+        await transport?.disconnect()
+        transport = nil
         receiveTask?.cancel()
         receiveTask = nil
         isConnected = false
@@ -131,7 +144,6 @@ final class RemoteSession: ObservableObject {
 
         let connectTask = Task { await self.connect(pairing: pairing) }
 
-        // 5s timeout polling (LAN IP değişmiş olabilir → ölü pairing forget)
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
             if isConnected || connectTask.isCancelled { break }
@@ -147,11 +159,9 @@ final class RemoteSession: ObservableObject {
     }
 
     private func handle(_ envelope: RemoteEnvelope) async {
-        // Mac'ten gelen tüm envelope'lar imzalı olmalı. (Mac hello göndermez — iOS pk'yi QR'dan biliyor.)
         guard let macKey = macPublicKey,
               EnvelopeSigner.verify(envelope, with: macKey)
         else {
-            // Geçersiz imza → drop.
             return
         }
 
@@ -197,10 +207,10 @@ final class RemoteSession: ObservableObject {
     }
 }
 
-struct PairingInfo: Equatable {
+struct PairingInfo: Equatable, Sendable {
     let code: String
     let relayURL: String
-    let macPublicKey: String  // base64 ed25519 pubkey
+    let macPublicKey: String
 
     init(code: String, relayURL: String, macPublicKey: String) {
         self.code = code
