@@ -1,8 +1,7 @@
 # pixel-agent
 
-> Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, dosyalarla çalışır, ekrana bakar, bilgisayarı kullanır.
+> Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-<!-- BADGES -->
 ![version](https://img.shields.io/badge/version-0.2.4-blue)
 ![tests](https://img.shields.io/badge/tests-177%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
@@ -10,62 +9,83 @@
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-<!-- DEMO (placeholder) -->
-<!-- ![demo](docs/assets/demo.gif) -->
-
 ## Neden var?
 
 İki amaç:
 
-1. **Kişisel kullanım** — günlük macOS workflow'una entegre bir AI ajanı. Dosya okur, shell çalıştırır, ekran görüntüsü alır, kısa sohbete çekilir. Mascot olarak masaüstünde durur, sıkıldığında onunla konuşulur.
-2. **Portfolio** — modüler Swift mimarisi, Swift Concurrency (TaskLocal scoping, actor isolation), test edilebilir tasarım örneği.
+1. **Kişisel kullanım** — günlük macOS workflow'una entegre bir AI ajanı. claude/codex/gemini CLI'larını tek arayüzden çağırır, iPhone'la pairing yapar, mascot olarak masaüstünde durur.
+2. **Portfolio** — modüler Swift mimarisi, Swift 6 strict concurrency (TaskLocal scoping + actor isolation), ed25519 imzalı transport, MCP server expose; her büyük tasarım kararı bir ADR ile belgeli.
 
-İlk versiyon (`pixel-agent2`, ~64k satır) hobi projesi olarak büyüdü. Bu, oradan öğrenilenlerle baştan yazılan ikinci sürüm.
+İlk sürüm `pixel-agent2` (~64k satır) hobi olarak büyüdü; tüm mantığı tek SPM target altında 246 dosya, 1463 satırlık AppDelegate god class içeriyordu. v3 bu birikim yerine [v2'nin mimari derslerinden](docs/architecture-decisions-from-v2.md) çıkarılan 14 desen + 3 anti-pattern ile sıfırdan yazıldı.
 
 ## Mimari
 
 ```mermaid
 graph TD
-    App[PixelMacApp] --> Core[PixelCore]
-    App --> Backends[PixelBackends]
-    App --> Tools[PixelTools]
-    App --> Memory[PixelMemory]
-    App --> Mascot[PixelMascot]
-    App --> Remote[PixelRemote]
+    App[PixelMacApp]
+    MCP[pixel-mcp-server]
+    Core[PixelCore]
+    Backends[PixelBackends]
+    Tools[PixelTools]
+    Memory[PixelMemory]
+    Mascot[PixelMascot]
+    Remote[PixelRemote]
+    MCPLib[PixelMCPServer]
+
+    App --> Core
+    App --> Backends
+    App --> Tools
+    App --> Memory
+    App --> Mascot
+    App --> Remote
+    App --> MCPLib
+    MCP --> MCPLib
     Backends --> Core
     Tools --> Core
     Memory --> Core
     Remote --> Core
 ```
 
-Her modül kendi `XCTest` target'ıyla; bağımlılıklar `PixelCore`'a doğru, döngü yok.
+7 library + 2 executable target, her birinin kendi `XCTest` target'ı. Bağımlılıklar tek yönlü — `PixelCore`'a doğru. Modüller arası döngü SPM tarafından compile-time bloklanır.
 
-Tam diyagram ve katman açıklaması: [docs/architecture.md](docs/architecture.md) *(hazırlanıyor)*
+Tam diyagram + sequence akışları: [docs/architecture.md](docs/architecture.md).
 
-## Mimari kararlar
+## Mimari kararlar (ADR)
 
-Her büyük tasarım kararı bir ADR (Architecture Decision Record) olarak belgelenir. Çekirdek set:
+Her büyük tasarım kararı [docs/adr/](docs/adr/) altında belgeli.
 
-- ADR 0001 — Modüler SPM monorepo *(hazırlanıyor)*
-- ADR 0002 — SwiftUI App lifecycle (`NSApplicationDelegate` yok) *(hazırlanıyor)*
-- ADR 0003 — TaskLocal context propagation *(hazırlanıyor)*
-- ADR 0004 — `ChatBackend` protokol soyutlaması *(hazırlanıyor)*
-- ADR 0005 — `ToolArbiter` resource mutex *(hazırlanıyor)*
-- ADR 0006 — JSONL append-only depolama *(hazırlanıyor)*
-- ADR 0007 — Test izolasyonu (Mock backend + TaskLocal scoping) *(hazırlanıyor)*
-- ADR 0008 — Remote envelope paylaşılan modül *(hazırlanıyor)*
-- ADR 0009 — Dependency injection over singletons *(hazırlanıyor)*
+**Foundation (v0.1.0, Hafta 1-6):**
+- [ADR-0001](docs/adr/0001-modular-spm-monorepo.md) Modüler SPM monorepo
+- [ADR-0002](docs/adr/0002-swiftui-app-lifecycle.md) SwiftUI App lifecycle (`NSApplicationDelegate` yok)
+- [ADR-0003](docs/adr/0003-tasklocal-context-propagation.md) TaskLocal context propagation
+- [ADR-0004](docs/adr/0004-chatbackend-protocol-abstraction.md) `ChatBackend` protokol soyutlaması
+- [ADR-0005](docs/adr/0005-toolarbiter-resource-mutex.md) `ToolArbiter` resource mutex
+- [ADR-0006](docs/adr/0006-jsonl-append-only-storage.md) JSONL append-only depolama
+- [ADR-0007](docs/adr/0007-test-isolation-mock-tasklocal.md) Test izolasyonu (MockBackend + TaskLocal)
+- [ADR-0008](docs/adr/0008-remote-envelope-shared-module.md) Remote envelope paylaşılan modül
+- [ADR-0009](docs/adr/0009-dependency-injection-over-singletons.md) DI over singletons
+- [ADR-0010](docs/adr/0010-cli-subprocess-backend.md) CLI subprocess backend (HTTP API'yi sildi)
+- [ADR-0011](docs/adr/0011-native-macos-toolkit.md) Native macOS toolkit (`PixelTools`)
+- [ADR-0012](docs/adr/0012-remote-envelope-schema.md) Remote envelope şeması
+- [ADR-0013](docs/adr/0013-pairing-and-relay-protocol.md) Pairing + relay protokolü
 
-Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md) — birinci sürümden çıkarılan 14 karar deseni ve 3 anti-pattern.
+**v0.2.x:**
+- [ADR-0014](docs/adr/0014-ios-app-store-assets.md) iOS App Store asset + privacy manifest
+- [ADR-0015](docs/adr/0015-ed25519-envelope-signing.md) ed25519 envelope signing (Faz 1 + 2)
+- [ADR-0016](docs/adr/0016-mcp-server-expose.md) MCP server expose Faz 1 (5 saf-data tool)
+- [ADR-0017](docs/adr/0017-plan-mode.md) Plan Mode (`--permission-mode plan` + UI toggle)
+- [ADR-0018](docs/adr/0018-mcp-bridge-unix-socket.md) MCP Faz 2 — Unix socket bridge (3 bundle-bağımlı tool)
+
+Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md) — birinci sürümden çıkarılan 14 desen ve 3 anti-pattern.
 
 ## Kurulum
 
 ```bash
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
 cd pixel-agent
-swift build
-swift test
-swift run PixelMacApp
+swift build -c release
+swift test                              # 177 yeşil
+./scripts/build-app.sh release && open PixelAgent.app
 ```
 
 Gereksinimler:
@@ -76,55 +96,56 @@ Gereksinimler:
   - [OpenAI Codex CLI](https://github.com/openai/codex)
   - [Google Gemini CLI](https://github.com/google-gemini/gemini-cli)
 
-Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilinen yollarda (`/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`, `~/bin`) tarar. Bulunanlar arasında segmented picker ile anlık geçiş yapabilirsiniz. API key veya ortam değişkeni gerekmez — CLI'ların kendi OAuth/login state'ini kullanır.
+Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilinen yollarda (`/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`, `~/bin`) tarar. Bulunanlar arasında **Tek/Çift** mod picker ile anlık geçiş. API key veya env var gerekmez — CLI'ların kendi OAuth/login state'ini kullanır.
 
 ## Modüller
 
 | Modül | Sorumluluk | Bağımlılık |
 |---|---|---|
-| `PixelCore` | `ChatBackend` protokolü, `Envelope` tipleri, TaskLocal scoping primitives | — |
-| `PixelBackends` | LLM CLI wrapper'ları (`claude` / `codex` / `gemini` subprocess) + detection | `PixelCore` |
-| `PixelTools` | Native macOS toolkit (DockBadge, SystemNotifications, SoundEffect) | `PixelCore` |
-| `PixelMemory` | JSONL append-only `ConversationStore` actor (append + restore + arşiv) | `PixelCore` |
-| `PixelMascot` | 48×48 pixel-art sprite (12×12 grid) + 4 state (idle/thinking/speaking/error) + SwiftUI Canvas render | — |
-| `PixelRemote` | WebSocket envelope + ed25519 imza (`EnvelopeSigner` + `KeyStore`) + relay client + pairing protokolü | `PixelCore` |
-| `PixelMCPServer` | MCP (Model Context Protocol) server library — JSON-RPC 2.0, tool registry, 5 saf-data tool (clipboard, time, active app, lan ip) | — |
-| `pixel-mcp-server` | MCP server executable target — stdio transport, claude-cli ile uyumlu | `PixelMCPServer` |
-| `PixelMacApp` | SwiftUI App, composition root | hepsi |
+| `PixelCore` | `ChatBackend` protokolü, `ChatOptions`, `Message`/`StreamDelta`, `AgentContext` TaskLocal | — |
+| `PixelBackends` | CLI wrapper (`claude` / `codex` / `gemini` subprocess), `CLIDetector`, `StreamJSONParser`, `CodexJSONParser` | `PixelCore` |
+| `PixelTools` | Native macOS toolkit: `DockBadge`, `SystemNotifications`, `SoundEffect` | `PixelCore` |
+| `PixelMemory` | `ConversationStore` actor (JSONL append-only + archive) | `PixelCore` |
+| `PixelMascot` | 48×48 pixel-art sprite (12×12 ASCII grid), 4 state, SwiftUI `Canvas` render | — |
+| `PixelRemote` | `RemoteEnvelope` (Codable + sig), `EnvelopeSigner` (ed25519), `KeyStore` (Keychain/InMemory), `RelayClient`, `RemoteHost`, `PairingCode` | `PixelCore` |
+| `PixelMCPServer` | MCP server library: `JSONValue`, `JSONRPCMessage`, `MCPServer` actor, `ToolRegistry`, `BridgeProtocol`, `BridgeClient` | — |
+| `PixelMacApp` (exe) | SwiftUI App composition root, `ChatView`, `PairingView`, `ControlSocketServer` | hepsi |
+| `pixel-mcp-server` (exe) | MCP stdio executable — `main.swift` 3 satır, `MCPServer.runStdio()` | `PixelMCPServer` |
 
 ## Durum
 
-**Versiyon:** `0.1.0` — ilk public release (21 May 2026)
-**Test:** 91 yeşil
-**ADR:** 13 belge
+**Versiyon:** `v0.2.4` (22 May 2026) · **177 test** yeşil · **18 ADR** · ~3.660 satır Swift + TS
 
-| Sprint | Hedef | Durum |
-|---|---|---|
-| Hafta 1 | Foundation: SPM monorepo, CI, lint, 9 ADR | ✅ |
-| Hafta 2 | PixelCore tipleri + ChatBackend protokol + SwiftUI chat | ✅ |
-| Hafta 2.5 | Anthropic API → CLI subprocess (claude/codex/gemini) | ✅ |
-| Hafta 3 | PixelMascot 48×48 sprite + PixelTools native toolkit | ✅ |
-| Hafta 4 | PixelMemory JSONL conversation store + Remote envelope | ✅ |
-| Hafta 5 | Cloudflare Worker relay + RelayClient + PairingView + iOS source | ✅ |
-| Hafta 6 | MIT lisansı + DocC GitHub Pages + iOS↔Mac bidirectional + v0.1.0 release | ✅ |
+### Sürüm geçmişi
 
-### iOS app & relay
-
-iOS uzak istemci source dosyaları `ios/PixelAgentRemote/` altında; Xcode project setup için bkz. [ios/README.md](ios/README.md). Cloudflare Worker relay için bkz. [relay/README.md](relay/README.md). Pairing protokolü: [ADR-0013](docs/adr/0013-pairing-and-relay-protocol.md).
+| Sürüm | Tarih | Öne çıkan | Test |
+|---|---|---|---|
+| `v0.1.0` | 21 May | İlk release: 6 sprint, iOS pairing iskeleti, MIT, DocC | 91 |
+| `v0.2.1` | 21 May | Dual-agent paralel sohbet | — |
+| `v0.2.2` | 21 May | Claude `--output-format stream-json` parser | — |
+| `v0.2.3` | 22 May | iOS App Store hazırlık + ed25519 Faz 1+2 + MCP Faz 1 ⚠️ proto v1→v2 | 162 |
+| `v0.2.4` | 22 May | Plan Mode + MCP Faz 2 (Unix socket bridge) | 177 |
 
 ### v0.2 yol haritası
 
-- ✅ `--output-format stream-json` parser (gerçek token-by-token streaming) — v0.2.2
-- ✅ Multi-backend simultane (dual-agent paralel sohbet) — v0.2.1
-- ✅ Ed25519 envelope signing (handshake + Faz 2 wire-up) — ADR-0015
-- ✅ MCP server expose (Faz 1: stdio transport + 5 saf-data tool) — ADR-0016
-- ☐ Plan Mode (read-only tool allowlist)
+- ✅ stream-json parser (v0.2.2)
+- ✅ Dual-agent paralel sohbet (v0.2.1)
+- ✅ Codex CLI desteği
+- ✅ iOS App Store asset + privacy manifest (ADR-0014)
+- ✅ ed25519 envelope signing — Faz 1+2 (ADR-0015)
+- ✅ MCP server expose — Faz 1+2 (ADR-0016 + ADR-0018, 8 tool)
+- ✅ Plan Mode (ADR-0017)
 - ☐ Subagent dispatching (ephemeral runtime + budget)
-- ☐ MCP server expose Faz 2 (bundle-bağımlı tool'lar — DockBadge, notify, sound)
+- ☐ LAN-only mode (Bonjour discovery, relay bypass)
+- ☐ App Store signing + submission
+
+## iOS app & relay
+
+iOS uzak istemci source dosyaları `ios/PixelAgentRemote/` altında; xcodegen flow için bkz. [ios/README.md](ios/README.md). Cloudflare Worker relay için bkz. [relay/README.md](relay/README.md). Pairing protokolü: [ADR-0013](docs/adr/0013-pairing-and-relay-protocol.md). ed25519 imzalı handshake: [ADR-0015](docs/adr/0015-ed25519-envelope-signing.md).
 
 ## MCP server (claude-cli entegrasyonu)
 
-pixel-agent kendi tool'larını [Model Context Protocol](https://modelcontextprotocol.io) standardı üzerinden expose eder. claude-cli ile entegrasyon için (`~/.claude.json`):
+pixel-agent kendi tool'larını [Model Context Protocol](https://modelcontextprotocol.io) standardı üzerinden expose eder — claude-cli ve uyumlu istemciler kullanabilir. claude-cli config'i (`~/.claude.json`):
 
 ```json
 {
@@ -141,8 +162,20 @@ Release build:
 
 ```bash
 swift build -c release
-ls .build/release/pixel-mcp-server   # ↑ command path bu
+ls .build/release/pixel-mcp-server     # ↑ command path bu
 ```
+
+**Tool'lar (8 toplam):**
+
+| Tool | Tür | PixelAgent.app gerektirir mi? |
+|---|---|---|
+| `get_clipboard`, `set_clipboard` | saf-data | hayır |
+| `get_current_time` | saf-data | hayır |
+| `get_active_app` | saf-data | hayır |
+| `get_lan_ip` | saf-data | hayır |
+| `dock_badge_set` | bridge | **evet** (Unix socket) |
+| `notify` | bridge | **evet** |
+| `play_sound` | bridge | **evet** |
 
 Stdio sanity check (claude-cli olmadan):
 
@@ -150,7 +183,7 @@ Stdio sanity check (claude-cli olmadan):
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | swift run pixel-mcp-server
 ```
 
-Detay: [ADR-0016](docs/adr/0016-mcp-server-expose.md).
+Detay: [ADR-0016](docs/adr/0016-mcp-server-expose.md) + [ADR-0018](docs/adr/0018-mcp-bridge-unix-socket.md).
 
 ## Lisans
 
@@ -158,4 +191,4 @@ MIT — bkz. [LICENSE](LICENSE).
 
 ## Teşekkür
 
-İlk sürüm `pixel-agent2`'den öğrenilenler bu projenin kalbinde — özellikle `ToolArbiter` resource mutex'i, TaskLocal scoping ve ephemeral subagent isolation desenleri.
+İlk sürüm `pixel-agent2`'den öğrenilenler bu projenin kalbinde — özellikle `ToolArbiter` resource mutex'i, TaskLocal scoping ve ephemeral subagent isolation desenleri. v2'den çıkarılan ders setinin tamamı: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md).
