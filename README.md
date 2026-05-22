@@ -2,7 +2,7 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.8-blue)
+![version](https://img.shields.io/badge/version-0.2.9-blue)
 ![tests](https://img.shields.io/badge/tests-235%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
@@ -121,7 +121,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.8` (22 May 2026) · **235 test** yeşil · **23 ADR** · 9 library + 2 executable target
+**Versiyon:** `v0.2.9` (22 May 2026) · **235 test** yeşil · **23 ADR** · 9 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
 
 ### Sürüm geçmişi
 
@@ -136,6 +136,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.6` | 22 May | Subagent Faz 2 — MCP tool `dispatch_subagent` | 195 |
 | `v0.2.7` | 22 May | LAN-only mode Faz 1+2 — `PixelLAN` + `RemoteTransport` + 4 adapter + `FallbackTransport` | 226 |
 | `v0.2.8` | 22 May | LAN Faz 3 — `MergeTransport` + PixelMacApp wire-up (Mac side LAN+Relay paralel) | 235 |
+| `v0.2.9` | 22 May | Hotfix: Info.plist `NSLocalNetworkUsageDescription` + `NSBonjourServices` + repo public | 235 |
 
 ### v0.2 yol haritası
 

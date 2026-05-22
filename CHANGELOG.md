@@ -10,6 +10,22 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: Subagent Faz 3+ (UI panel + multi-turn workflow + streaming), LAN Faz 4 (iOS LAN-first default + TXT record + PairingView indicator), App Store signing.
 
+## [0.2.9] — 2026-05-22
+
+Hotfix release + **end-to-end iPhone test'i** başarıyla doğrulandı + **repo public oldu** (portfolio + sınırsız GitHub Actions).
+
+### Fixed
+- **`scripts/build-app.sh`** Info.plist'ine `NSLocalNetworkUsageDescription` + `NSBonjourServices` eklendi. Olmadığı için macOS 14+ Bonjour advertise'ı sessizce blokluyordu — PixelAgent.app TCP'de dinliyor ama `dns-sd -B _pixel-agent._tcp local.` hiç servis görmüyordu (commit `1c9a1a5`).
+- `build-app.sh` `VERSION="0.1.0"` (stale) → `"0.2.9"`, build numarası `1 → 9`.
+
+### Changed
+- Repo `ErkutYavuzer/pixel-agent` **public** oldu (portfolio amaçlı; sınırsız GitHub Actions; CLI subprocess stratejisi nedeniyle gizli bilgi yok — ADR-0010).
+
+### Verified (manuel e2e iPhone test, 22 May 2026)
+- iPhone 15'te yeni build install + launch (`xcrun devicectl device install/launch`).
+- iOS QR scan → relay `/listen/<code>` WS open → handshake `hello(publicKey:)` → Mac `/connect/<code>` → ed25519 verify → Mac chat flow → Claude CLI subprocess (stream-json) → assistantMessage → relay → iPhone UI'da response. **Tüm pipeline çalışır durumda.**
+- `dns-sd -B _pixel-agent._tcp local.` → `Erkut MacBook Pro` görünüyor.
+
 ## [0.2.8] — 2026-05-22
 
 **LAN Faz 3: Mac side wire-up.** `MergeTransport` paralel composite + PixelMacApp artık `[LANServerTransport, RelayTransport]` ile başlıyor — iPhone hangi yoldan gelirse alır. **235 test yeşil** (+9). Breaking change yok. iOS değişmedi (Faz 4'e ertelendi).
@@ -256,7 +272,8 @@ Mac + iOS arasında **end-to-end ed25519 imzalı kanal**, **MCP server expose Fa
 - Platform: macOS 14+, iOS 17+ (uzak istemci).
 - Lisans: MIT.
 
-[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.8...HEAD
+[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.9...HEAD
+[0.2.9]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.9
 [0.2.8]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.8
 [0.2.7]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.7
 [0.2.6]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.6
