@@ -9,6 +9,25 @@
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
+<p align="center">
+  <img src="docs/assets/hero-mac-chat.png" alt="pixel-agent Mac uygulaması — chat görünümü, mor mascot köşede, Claude CLI üzerinden cevap" width="700" />
+</p>
+
+<p align="center">
+  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (9 tool) · LAN-only transport (Bonjour) · 235 test yeşil · 23 ADR</em>
+</p>
+
+<details>
+<summary>📸 Daha fazla görsel</summary>
+
+| Mac (yeni başlangıç) | iPhone Home (icon) |
+|---|---|
+| <img src="docs/assets/mac-app.png" width="400" /> | <img src="docs/assets/ios-home-icon.png" width="100" /> |
+
+> Demo GIF script'i: `scripts/record-demo.sh` (macOS Screen Recording → ffmpeg/gifski → optimized GIF). `docs/assets/demo.gif` slot'a koymak için kullanılır.
+
+</details>
+
 ## Neden var?
 
 İki amaç:
