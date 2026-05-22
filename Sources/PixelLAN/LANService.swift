@@ -71,12 +71,12 @@ public actor LANService {
             let port = configuration.port == 0 ? NWEndpoint.Port.any : NWEndpoint.Port(rawValue: configuration.port) ?? .any
             let newListener = try NWListener(using: params, on: port)
             // Bonjour advertise — name yoksa cihaz adı kullanılır.
-            // Faz 1'de TXT record (pk + protokol versiyonu) yok; Faz 2'de eklenecek
-            // (NWTXTRecord init macOS sürümü ile değişkenlik gösteriyor; basit tutuyoruz).
+            // TXT record: pk (ed25519 public key) + v (protokol versiyonu); LAN Faz 4.
             newListener.service = NWListener.Service(
                 name: configuration.serviceName,
                 type: LANServiceType.bonjour,
-                domain: LANServiceType.domain
+                domain: LANServiceType.domain,
+                txtRecord: Self.makeTXTRecord(from: configuration)
             )
 
             let stream = AsyncThrowingStream<LANServerConnection, Error> { continuation in
@@ -130,8 +130,18 @@ public actor LANService {
         listener = nil
     }
 
-    // TXT record şu an pasif — Faz 2'de NWTXTRecord init'i platform/Swift sürümü
-    // değişkenliğini doğru handle ederek tekrar açılacak.
+    /// Configuration'dan TXT record encode eder; `nil` entry'ler atlanır.
+    /// Boş döner ise Bonjour TXT record yine valid (sıfır entry).
+    private static func makeTXTRecord(from configuration: Configuration) -> Data {
+        var entries: [String: String] = [:]
+        if let pk = configuration.publicKeyBase64, !pk.isEmpty {
+            entries[LANServiceType.TXTKey.publicKey] = pk
+        }
+        if let ver = configuration.protocolVersionTXT, !ver.isEmpty {
+            entries[LANServiceType.TXTKey.protocolVersion] = ver
+        }
+        return LANTXTRecord.encode(entries)
+    }
 }
 
 /// Server tarafında accept edilen bir client bağlantısı.

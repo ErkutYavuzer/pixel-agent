@@ -88,13 +88,23 @@ struct PairingView: View {
     }
 
     private var statusRow: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(remoteHost.isConnected ? .green : .secondary.opacity(0.6))
-                .frame(width: 8, height: 8)
-            Text(remoteHost.isConnected ? "Bağlı (relay'i dinliyor)" : "Bağlı değil")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(spacing: 4) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(remoteHost.isConnected ? .green : .secondary.opacity(0.6))
+                    .frame(width: 8, height: 8)
+                Text(remoteHost.isConnected ? "iPhone bağlı" : "Bağlı değil")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 4) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.caption2)
+                Text("Mac yayını: LAN (Bonjour) + Relay paralel")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .help("Mac aynı anda hem yerel ağda Bonjour ile yayın yapıyor hem Cloudflare relay'e bağlanıyor; iPhone hangi yoldan gelirse alır.")
         }
     }
 

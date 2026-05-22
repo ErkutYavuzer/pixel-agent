@@ -8,7 +8,27 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: Subagent Faz 4+ (streaming partial output + multi-turn workflow + settings UI), LAN Faz 4 (iOS LAN-first default + TXT record + PairingView indicator), App Store signing.
+- v0.2 kalan: Subagent Faz 4+ (streaming partial output + multi-turn workflow + settings UI), App Store signing.
+
+## [0.2.11] — 2026-05-22
+
+**LAN Faz 4: iOS LAN-first default + TXT record + transport indicator.** Aynı ağdaki Mac↔iPhone trafiği artık doğrudan Bonjour üzerinden (LAN); farklı ağdayken otomatik relay'e düşer. Kullanıcı bağlantı tipini ChatView header'da görür ("LAN" yeşil / "Relay" mavi). **250 test yeşil** (+6). Breaking change yok.
+
+### Added — LAN Faz 4 (22 May 2026)
+- **`LANTXTRecord`** (`Sources/PixelLAN/LANTXTRecord.swift`) — DNS-SD wire format encoder/decoder (RFC 6763 §6); deterministic alfabetik sıralı encoding; >255 byte ve 0 byte entry skip.
+- **`LANService.start()`** artık `Configuration.publicKeyBase64` + `protocolVersionTXT`'i TXT record'a yazıp `NWListener.Service(txtRecord:)`'a iletir; `LANClient` (browse tarafı) zaten okuyordu (`DiscoveredHost.publicKeyBase64`).
+- **`defaultLANFirstTransportFactory`** (iOS, `ios/PixelAgentRemote/RemoteSession.swift`) — `FallbackTransport(primary: LANClientTransport(discoveryTimeout: 2), fallback: RelayTransport)`. `RemoteSession.init(transportFactory:)` default'u **LAN-first** (eski `defaultRelayTransportFactory` korundu).
+- **`RemoteSession.transportLabel`** `@Published var String?` — `connect()` sonrası FallbackTransport.currentSelection'dan "LAN" / "Relay" / "Bağlı" türetir; disconnect'te nil.
+- **iOS `ChatView` transport badge** — header'da pairing code yanında renkli capsule (LAN → yeşil, Relay → mavi); accessibility label dahil.
+- **Mac `PairingView` yayın bilgisi** — status row'a "Mac yayını: LAN (Bonjour) + Relay paralel" sabit metni + ikonu (`antenna.radiowaves.left.and.right`).
+- **iOS Info.plist** — `NSBonjourServices: [_pixel-agent._tcp]` (iOS 14+ Bonjour whitelist); `NSLocalNetworkUsageDescription` "gelecekte LAN" → aktif LAN modu metni; `CFBundleShortVersionString` → 0.2.11, build → 3.
+- **`ios/project.yml`** PixelLAN dependency + NSBonjourServices + version bump.
+
+### Added — Tests
+- **`LANTXTRecordTests`** 6 yeni test: empty roundtrip, single-entry wire format byte-level, multi-entry alphabetical sorting, encode/decode roundtrip, oversized entry skip, malformed buffer graceful parse.
+- Toplam test: **244 → 250** yeşil. 0 regression.
+- iOS xcodebuild verification: `xcodebuild -project ... -destination 'generic/platform=iOS Simulator' build` BUILD SUCCEEDED.
+- [ADR-0025](docs/adr/0025-lan-first-ios-default.md): TXT record + LAN-first factory + indicator tasarımı.
 
 ## [0.2.10] — 2026-05-22
 

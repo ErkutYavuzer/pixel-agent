@@ -24,8 +24,8 @@ targets:
       path: PixelAgentRemote/Info.plist
       properties:
         CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
-        CFBundleShortVersionString: "0.2.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.2.11"
+        CFBundleVersion: "3"
         CFBundleDevelopmentRegion: tr
         CFBundleDisplayName: Pixel
         UILaunchScreen:
@@ -33,12 +33,16 @@ targets:
           UIImageName: LaunchIcon
           UIImageRespectsSafeAreaInsets: true
         NSCameraUsageDescription: "Mac'inizdeki pixel-agent ile eşleşmek için QR kodu kameraya gösterin."
-        NSLocalNetworkUsageDescription: "Aynı ağdaki Mac'inizle doğrudan iletişim kurmak için (gelecekte LAN modu)."
+        NSLocalNetworkUsageDescription: "Aynı ağdaki Mac'inizle doğrudan iletişim kurmak için (LAN modu, Bonjour discovery)."
+        NSBonjourServices:
+          - "_pixel-agent._tcp"
     dependencies:
       - package: PixelAgent
         product: PixelCore
       - package: PixelAgent
         product: PixelRemote
+      - package: PixelAgent
+        product: PixelLAN
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.erkutyavuzer.PixelAgentRemote

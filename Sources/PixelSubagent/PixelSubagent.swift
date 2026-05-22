@@ -1,3 +1,3 @@
 public enum PixelSubagent {
-    public static let version = "0.2.10"
+    public static let version = "0.2.11"
 }

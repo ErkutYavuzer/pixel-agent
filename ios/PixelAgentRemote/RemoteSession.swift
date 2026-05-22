@@ -1,16 +1,32 @@
 import CryptoKit
 import Foundation
 import PixelCore
+import PixelLAN
 import PixelRemote
 
-/// Bir `PairingInfo`'dan iOS-rolünde transport üretir. Varsayılan
-/// `RelayTransport` üretir; UI `FallbackTransport(LAN, Relay)` ile swap edebilir.
+/// Bir `PairingInfo`'dan iOS-rolünde transport üretir. v0.2.11'den itibaren
+/// varsayılan `defaultLANFirstTransportFactory` — `FallbackTransport(primary: LAN,
+/// fallback: Relay)`. App entry her seferinde geçersiz kılabilir.
 typealias RemoteTransportFactory = @Sendable (PairingInfo) -> any RemoteTransport
 
-/// Default factory — free fonksiyon olarak free-standing, böylece `init`'in
-/// default parameter ifadesi `Self.` referansı taşımak zorunda kalmaz.
+/// Relay-only factory — eski davranış. Bonjour erişimi yoksa veya LAN discovery
+/// nedensiz gecikmek istemiyorsanız kullanın.
 @Sendable
 func defaultRelayTransportFactory(for pairing: PairingInfo) -> any RemoteTransport {
+    relayTransport(for: pairing)
+}
+
+/// LAN-first factory: önce Bonjour ile Mac'i bulmaya çalış (2s timeout), olmazsa
+/// relay'e düş. Aynı ağdayken latency çok düşük; farklı ağdayken otomatik fallback.
+@Sendable
+func defaultLANFirstTransportFactory(for pairing: PairingInfo) -> any RemoteTransport {
+    let lan = LANClientTransport(discoveryTimeout: 2.0)
+    let relay = relayTransport(for: pairing)
+    return FallbackTransport(primary: lan, fallback: relay)
+}
+
+@Sendable
+private func relayTransport(for pairing: PairingInfo) -> any RemoteTransport {
     guard let url = URL(string: pairing.relayURL) else {
         return RelayTransport(
             relayURL: URL(string: "ws://localhost:0")!,
@@ -28,6 +44,10 @@ final class RemoteSession: ObservableObject {
     @Published var isAutoConnecting: Bool = false
     @Published var messages: [Message] = []
     @Published var lastError: String?
+    /// Aktif transport tipi etiketi — "LAN" / "Relay" / nil (bağlı değil).
+    /// `FallbackTransport` kullanılıyorsa `connect` sonrası `currentSelection`'dan
+    /// türetilir; aksi halde generic "Bağlı".
+    @Published var transportLabel: String?
 
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
@@ -43,7 +63,7 @@ final class RemoteSession: ObservableObject {
 
     init(
         keyStore: KeyStoring = KeychainKeyStore(),
-        transportFactory: @escaping RemoteTransportFactory = defaultRelayTransportFactory
+        transportFactory: @escaping RemoteTransportFactory = defaultLANFirstTransportFactory
     ) {
         if let loaded = try? keyStore.loadOrCreate(
             service: Self.keychainService,
@@ -84,6 +104,7 @@ final class RemoteSession: ObservableObject {
             let stream = try await transport.connect()
             isConnected = true
             lastError = nil
+            transportLabel = await Self.label(for: transport)
             Self.savePairing(pairing)
 
             // Handshake: hello envelope (unsigned — chicken-and-egg).
@@ -131,11 +152,31 @@ final class RemoteSession: ObservableObject {
         receiveTask?.cancel()
         receiveTask = nil
         isConnected = false
+        transportLabel = nil
         macPublicKey = nil
         if forget {
             pairing = nil
             Self.clearSavedPairing()
         }
+    }
+
+    /// Aktif transport tipi etiketini türetir — `FallbackTransport`'sa
+    /// `currentSelection`'a göre "LAN" / "Relay"; aksi halde "Bağlı".
+    private static func label(for transport: any RemoteTransport) async -> String {
+        if let fallback = transport as? FallbackTransport {
+            switch await fallback.currentSelection {
+            case .primary: return "LAN"
+            case .fallback: return "Relay"
+            case .none: return "Bağlı"
+            }
+        }
+        if transport is LANClientTransport {
+            return "LAN"
+        }
+        if transport is RelayTransport {
+            return "Relay"
+        }
+        return "Bağlı"
     }
 
     private func autoReconnect(to pairing: PairingInfo) async {

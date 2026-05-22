@@ -17,13 +17,17 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.2.11</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Mac'inizdeki pixel-agent ile eşleşmek için QR kodu kameraya gösterin.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Aynı ağdaki Mac'inizle doğrudan iletişim kurmak için (gelecekte LAN modu).</string>
+	<string>Aynı ağdaki Mac'inizle doğrudan iletişim kurmak için (LAN modu, Bonjour discovery).</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_pixel-agent._tcp</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

@@ -53,9 +53,12 @@ struct ChatView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Text("pixel-agent")
                 .font(.headline)
+            if let label = session.transportLabel {
+                transportBadge(label)
+            }
             Spacer()
             if let code = session.pairing?.code {
                 Text(code)
@@ -70,6 +73,19 @@ struct ChatView: View {
         .padding(.horizontal)
         .padding(.top, 8)
         .padding(.bottom, 6)
+    }
+
+    /// "LAN" yeşil (yerel ağ, düşük gecikme); "Relay" mavi (internet üzeri Cloudflare Worker).
+    @ViewBuilder
+    private func transportBadge(_ label: String) -> some View {
+        let color: Color = label == "LAN" ? .green : (label == "Relay" ? .blue : .gray)
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color, in: .capsule)
+            .accessibilityLabel("Bağlantı tipi: \(label)")
     }
 
     private func sendDraft() {
