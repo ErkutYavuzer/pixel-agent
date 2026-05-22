@@ -19,7 +19,7 @@ final class ToolRegistryTests: XCTestCase {
         let registry = BuiltInTools.makeRegistry()
         let result = registry.listResult()
         let tools = result["tools"]?.arrayValue ?? []
-        XCTAssertEqual(tools.count, 5)
+        XCTAssertEqual(tools.count, 8)  // 5 saf-data + 3 bridge
         // alfabetik sıra
         let names = tools.compactMap { $0["name"]?.stringValue }
         XCTAssertEqual(names, names.sorted())
@@ -33,6 +33,9 @@ final class ToolRegistryTests: XCTestCase {
             "get_current_time",
             "get_active_app",
             "get_lan_ip",
+            "dock_badge_set",
+            "notify",
+            "play_sound",
         ])
         let actual = Set(registry.all().map { $0.name })
         XCTAssertEqual(actual, expected)

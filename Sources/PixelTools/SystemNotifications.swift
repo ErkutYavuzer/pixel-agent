@@ -2,10 +2,16 @@ import Foundation
 import UserNotifications
 
 public enum SystemNotifications {
-    /// `UNUserNotificationCenter` yalnızca bundle'lı app context'inde çalışır.
-    /// `swift run` ile çalıştırıldığında Bundle.main.bundleIdentifier nil olur — skip.
+    /// `UNUserNotificationCenter` yalnızca `.app` paketi (CFBundlePackageType=APPL)
+    /// kontekstinde çalışır. `swift run` ve xctest'te `bundleProxyForCurrentProcess`
+    /// hatası fırlatır — skip.
+    ///
+    /// `bundleIdentifier != nil` kontrolü yetersiz: xctest binary'sinin de
+    /// bundleIdentifier'ı vardır (`com.apple.dt.xctest.tool`) ama .app paketi
+    /// değildir. Uzantı kontrolü ile gerçek app context'i ayırırız.
     private static var isBundledApp: Bool {
-        Bundle.main.bundleIdentifier != nil
+        guard Bundle.main.bundleIdentifier != nil else { return false }
+        return Bundle.main.bundleURL.pathExtension == "app"
     }
 
     public static func requestAuthorization() async -> Bool {

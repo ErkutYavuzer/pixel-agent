@@ -39,6 +39,7 @@ let package = Package(
                 "PixelMemory",
                 "PixelMascot",
                 "PixelRemote",
+                "PixelMCPServer",
             ]
         ),
         .testTarget(name: "PixelCoreTests", dependencies: ["PixelCore"]),
@@ -48,7 +49,7 @@ let package = Package(
         .testTarget(name: "PixelMascotTests", dependencies: ["PixelMascot"]),
         .testTarget(name: "PixelRemoteTests", dependencies: ["PixelRemote"]),
         .testTarget(name: "PixelMCPServerTests", dependencies: ["PixelMCPServer"]),
-        .testTarget(name: "PixelMacAppTests", dependencies: ["PixelMacApp"]),
+        .testTarget(name: "PixelMacAppTests", dependencies: ["PixelMacApp", "PixelMCPServer"]),
     ],
     swiftLanguageModes: [.v6]
 )

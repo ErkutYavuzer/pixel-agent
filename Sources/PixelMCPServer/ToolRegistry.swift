@@ -81,6 +81,9 @@ public enum ToolResultBuilder {
 
 public enum BuiltInTools {
     /// Tüm built-in tool'ları içeren registry üretir.
+    /// Saf-data tool'lar (clipboard, time, active app, lan ip) standalone çalışır;
+    /// bridge tool'ları (dock_badge_set, notify, play_sound) PixelMacApp Unix
+    /// socket'i (`BridgePaths.defaultSocketPath()`) üzerinden execute olur.
     public static func makeRegistry() -> ToolRegistry {
         let registry = ToolRegistry()
         registry.register(getClipboard)
@@ -88,6 +91,10 @@ public enum BuiltInTools {
         registry.register(getCurrentTime)
         registry.register(getActiveApp)
         registry.register(getLANIP)
+        // Bridge tool'lar — PixelMacApp çalışmıyorsa "bağlanamadı" error döner.
+        registry.register(dockBadgeSet)
+        registry.register(notify)
+        registry.register(playSound)
         return registry
     }
 
@@ -183,4 +190,91 @@ public enum BuiltInTools {
             return ToolResultBuilder.error("LAN IP tespit edilemedi (en0/en1 inactive).")
         }
     )
+
+    // MARK: - Bridge tools (PixelMacApp gerektirir)
+
+    static let dockBadgeSet = ToolDefinition(
+        name: "dock_badge_set",
+        description: "PixelAgent.app Dock ikonunun badge etiketini ayarlar (boş string veya null = temizle). PixelAgent.app çalışıyor olmalı.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "label": .object([
+                    "type": .array([.string("string"), .string("null")]),
+                    "description": .string("Badge metni veya null (temizle)"),
+                ]),
+            ]),
+        ]),
+        handler: { params in
+            let label = params?["label"]?.stringValue  // null → nil
+            return await callBridge(tool: "dock_badge_set", arguments: .object([
+                "label": label.map { .string($0) } ?? .null,
+            ]))
+        }
+    )
+
+    static let notify = ToolDefinition(
+        name: "notify",
+        description: "macOS bildirim merkezi üzerinden kullanıcıya bildirim gönderir. PixelAgent.app çalışıyor olmalı.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "title": .object([
+                    "type": .string("string"),
+                    "description": .string("Bildirim başlığı (zorunlu)"),
+                ]),
+                "body": .object([
+                    "type": .string("string"),
+                    "description": .string("Bildirim gövdesi (opsiyonel)"),
+                ]),
+            ]),
+            "required": .array([.string("title")]),
+        ]),
+        handler: { params in
+            guard let title = params?["title"]?.stringValue else {
+                return ToolResultBuilder.error("`title` parametresi zorunlu.")
+            }
+            var args: [String: JSONValue] = ["title": .string(title)]
+            if let body = params?["body"]?.stringValue { args["body"] = .string(body) }
+            return await callBridge(tool: "notify", arguments: .object(args))
+        }
+    )
+
+    static let playSound = ToolDefinition(
+        name: "play_sound",
+        description: "Bir macOS sistem sesi çalar. PixelAgent.app çalışıyor olmalı.",
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "name": .object([
+                    "type": .string("string"),
+                    "description": .string("Sistem ses adı (örn: Glass, Basso, Tink, Ping, Pop, Funk, Submarine, Sosumi)"),
+                ]),
+            ]),
+            "required": .array([.string("name")]),
+        ]),
+        handler: { params in
+            guard let name = params?["name"]?.stringValue else {
+                return ToolResultBuilder.error("`name` parametresi zorunlu.")
+            }
+            return await callBridge(tool: "play_sound", arguments: .object([
+                "name": .string(name),
+            ]))
+        }
+    )
+
+    /// BridgeClient.call() sarmalayıcı — başarı/başarısızlık MCP `content` shape'ine
+    /// dönüştürür. PixelAgent.app çalışmıyorsa connect EACCES/ENOENT döner.
+    private static func callBridge(tool: String, arguments: JSONValue) async -> JSONValue {
+        do {
+            let response = try await BridgeClient.call(tool: tool, arguments: arguments)
+            if response.ok {
+                let text = response.result?.stringValue ?? "OK"
+                return ToolResultBuilder.text(text)
+            }
+            return ToolResultBuilder.error(response.error ?? "Bilinmeyen bridge hatası.")
+        } catch {
+            return ToolResultBuilder.error((error as? LocalizedError)?.errorDescription ?? "\(error)")
+        }
+    }
 }

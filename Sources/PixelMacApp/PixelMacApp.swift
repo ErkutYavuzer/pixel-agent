@@ -50,8 +50,27 @@ struct RootView: View {
         }
         .task {
             _ = await SystemNotifications.requestAuthorization()
+            await Self.startControlBridge()
         }
     }
+
+    /// MCP server'ın bundle-bağımlı tool isteklerini dinleyen Unix socket
+    /// sunucusunu (`ControlSocketServer`) açılışta başlatır. Hata olursa
+    /// sessizce yutulur — MCP server'ın saf-data tool'ları yine çalışır.
+    private static func startControlBridge() async {
+        do {
+            try await Self.controlServer.start()
+        } catch {
+            // Hata olursa stderr'e bas; UI'ı bloke etmesin.
+            FileHandle.standardError.write(
+                Data("[pixel-agent] Control bridge başlatılamadı: \(error.localizedDescription)\n".utf8)
+            )
+        }
+    }
+
+    /// App lifetime boyunca tek instance — `WindowGroup` yeniden yaratılırsa
+    /// `start()` idempotent (`running` flag).
+    static let controlServer = ControlSocketServer()
 
     private func rescan() {
         backends = Self.resolveBackends()
