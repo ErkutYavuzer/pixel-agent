@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "PixelMemory", targets: ["PixelMemory"]),
         .library(name: "PixelMascot", targets: ["PixelMascot"]),
         .library(name: "PixelRemote", targets: ["PixelRemote"]),
+        .library(name: "PixelSubagent", targets: ["PixelSubagent"]),
         .library(name: "PixelMCPServer", targets: ["PixelMCPServer"]),
         .executable(name: "PixelMacApp", targets: ["PixelMacApp"]),
         .executable(name: "pixel-mcp-server", targets: ["pixel-mcp-server"]),
@@ -25,6 +26,7 @@ let package = Package(
         .target(name: "PixelMemory", dependencies: ["PixelCore"]),
         .target(name: "PixelMascot"),
         .target(name: "PixelRemote", dependencies: ["PixelCore"]),
+        .target(name: "PixelSubagent", dependencies: ["PixelCore"]),
         .target(name: "PixelMCPServer"),
         .executableTarget(
             name: "pixel-mcp-server",
@@ -48,6 +50,7 @@ let package = Package(
         .testTarget(name: "PixelMemoryTests", dependencies: ["PixelMemory"]),
         .testTarget(name: "PixelMascotTests", dependencies: ["PixelMascot"]),
         .testTarget(name: "PixelRemoteTests", dependencies: ["PixelRemote"]),
+        .testTarget(name: "PixelSubagentTests", dependencies: ["PixelSubagent"]),
         .testTarget(name: "PixelMCPServerTests", dependencies: ["PixelMCPServer"]),
         .testTarget(name: "PixelMacAppTests", dependencies: ["PixelMacApp", "PixelMCPServer"]),
     ],

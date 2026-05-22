@@ -7,6 +7,17 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Added — Subagent Runner Faz 1 (22 May 2026)
+- **`PixelSubagent`** yeni SPM library: `Budget` struct (wallclock + opsiyonel UTF-8 byte cap; preset'ler `.default` 60s, `.exploratory` 10s+8KB), `SubagentResult` enum (4 vaka: `completed` / `budgetExceeded(.duration|.outputBytes)` / `cancelled` / `failed`), `SubagentRunner` actor (tek-turlu prompt → result).
+- **Concurrency tasarımı**: `withTaskGroup` ile worker + watchdog yarışır; shared `OutputBuffer` actor partial çıktı için. `group.next()` ilk biteni döner; cancel propagation `AsyncThrowingStream.onTermination` üzerinden CLI subprocess'lerine ulaşır.
+- **`PixelCore.AgentContext.currentSubagentID`** yeni TaskLocal (`SubagentID?`). `SubagentRunner.run(...)` boyunca binding ile set edilir; log/tracing context'i tutarlı (ADR-0003 pattern).
+- **`SubagentID`** PixelCore'da yeni Sendable struct — UUID tabanlı, Codable, CustomStringConvertible.
+- 15 yeni test (4 `BudgetTests` + 4 `SubagentResultTests` + 7 `SubagentRunnerTests`). Test path'leri: completed happy, budget exceeded by duration, budget exceeded by bytes, failed via backend throw, completed without explicit done, TaskLocal propagation, TaskLocal scope cleanup.
+- Toplam test: **177 → 192** yeşil.
+- Token-level budget yok (CLI provider quota opak); wallclock+byte cap pratikte yeterli.
+- Faz 2+ (defer): MCP tool `dispatch_subagent`, UI background subagent listesi, multi-turn `Workflow` chain.
+- [ADR-0019](docs/adr/0019-subagent-runner.md): tasarım gerekçesi + v2 Sprint 3 ile karşılaştırma + alternatif analizi.
+
 ### Changed — dokümantasyon konsolidasyonu (22 May 2026)
 - README v0.2.4 + 177 test + 18 ADR durumuyla yeniden yazıldı. Eski `(hazırlanıyor)` placeholder'ları temizlendi (ADR 0001-0009 zaten içerikle dolu, sadece linkler stale idi). Sürüm geçmişi tablosu + tool tablosu eklendi.
 - `docs/architecture.md` v0.2.4 ile senkronlandı: modül grafiğine `PixelMCPServer` + `pixel-mcp-server`; AnthropicBackend referansları çıkarıldı; CLIBackend + Plan Mode `ChatOptions` akışı; ed25519 imzalı Mac↔iOS handshake sequence; yeni MCP server akışı (Faz 1 saf-data + Faz 2 Unix socket bridge); katman tablosu + tasarım prensipleri (10 madde) güncel.
