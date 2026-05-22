@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.6-blue)
-![tests](https://img.shields.io/badge/tests-195%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.7-blue)
+![tests](https://img.shields.io/badge/tests-226%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -77,6 +77,8 @@ Her büyük tasarım kararı [docs/adr/](docs/adr/) altında belgeli.
 - [ADR-0018](docs/adr/0018-mcp-bridge-unix-socket.md) MCP Faz 2 — Unix socket bridge (3 bundle-bağımlı tool)
 - [ADR-0019](docs/adr/0019-subagent-runner.md) Subagent Runner Faz 1 (`PixelSubagent` library, budget'lı tek-turlu çalıştırıcı)
 - [ADR-0020](docs/adr/0020-mcp-dispatch-subagent.md) Subagent Faz 2 — MCP tool `dispatch_subagent` (headless orchestration)
+- [ADR-0021](docs/adr/0021-lan-mode-bonjour.md) LAN-only mode Faz 1 (`PixelLAN` library: Bonjour + Network.framework, relay bypass altyapısı)
+- [ADR-0022](docs/adr/0022-remote-transport-adapter.md) LAN Faz 2 — `RemoteTransport` protocol + 4 adapter + `FallbackTransport`
 
 Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md) — birinci sürümden çıkarılan 14 desen ve 3 anti-pattern.
 
@@ -109,7 +111,8 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `PixelTools` | Native macOS toolkit: `DockBadge`, `SystemNotifications`, `SoundEffect` | `PixelCore` |
 | `PixelMemory` | `ConversationStore` actor (JSONL append-only + archive) | `PixelCore` |
 | `PixelMascot` | 48×48 pixel-art sprite (12×12 ASCII grid), 4 state, SwiftUI `Canvas` render | — |
-| `PixelRemote` | `RemoteEnvelope` (Codable + sig), `EnvelopeSigner` (ed25519), `KeyStore` (Keychain/InMemory), `RelayClient`, `RemoteHost`, `PairingCode` | `PixelCore` |
+| `PixelRemote` | `RemoteEnvelope` (Codable + sig), `EnvelopeSigner` (ed25519), `KeyStore` (Keychain/InMemory), `RelayClient` + `RelayTransport`, `RemoteHost`, `RemoteTransport` protocol, `PairingCode` | `PixelCore` |
+| `PixelLAN` | Bonjour LAN bypass: `LANService` + `LANClient` (Network.framework), `LANServerTransport` / `LANClientTransport` / `FallbackTransport` adapter'ları | `PixelRemote` |
 | `PixelSubagent` | Tek-turlu subagent çalıştırıcı: `Budget` (wallclock + byte cap), `SubagentResult` enum, `SubagentRunner` actor (worker + watchdog yarışı) | `PixelCore` |
 | `PixelMCPServer` | MCP server library: `JSONValue`, `JSONRPCMessage`, `MCPServer` actor, `ToolRegistry`, `BridgeProtocol`, `BridgeClient` | — |
 | `PixelMacApp` (exe) | SwiftUI App composition root, `ChatView`, `PairingView`, `ControlSocketServer` | hepsi |
@@ -117,7 +120,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.6` (22 May 2026) · **195 test** yeşil · **20 ADR** · 8 library + 2 executable target
+**Versiyon:** `v0.2.7` (22 May 2026) · **226 test** yeşil · **22 ADR** · 9 library + 2 executable target
 
 ### Sürüm geçmişi
 
@@ -130,6 +133,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.4` | 22 May | Plan Mode + MCP Faz 2 (Unix socket bridge) | 177 |
 | `v0.2.5` | 22 May | Subagent Runner Faz 1 + dokümantasyon konsolidasyonu | 192 |
 | `v0.2.6` | 22 May | Subagent Faz 2 — MCP tool `dispatch_subagent` | 195 |
+| `v0.2.7` | 22 May | LAN-only mode Faz 1+2 — `PixelLAN` + `RemoteTransport` + 4 adapter + `FallbackTransport` | 226 |
 
 ### v0.2 yol haritası
 
@@ -141,7 +145,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 - ✅ MCP server expose — Faz 1+2 (ADR-0016 + ADR-0018, 8 tool)
 - ✅ Plan Mode (ADR-0017)
 - ◐ Subagent dispatching — Faz 1 (ADR-0019, `PixelSubagent` library) + Faz 2 (ADR-0020, MCP `dispatch_subagent` tool) landed; Faz 3+ UI panel + multi-turn workflow + streaming defer
-- ☐ LAN-only mode (Bonjour discovery, relay bypass)
+- ◐ LAN-only mode — Faz 1 (ADR-0021, `PixelLAN` library) + Faz 2 (ADR-0022, `RemoteTransport` protocol + 4 adapter + `FallbackTransport`) landed; Faz 3 UI defaults (Mac side-by-side advertise, iOS LAN-first default, TXT record, indicator) defer
 - ☐ App Store signing + submission
 
 ## iOS app & relay

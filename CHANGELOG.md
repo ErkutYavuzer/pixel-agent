@@ -7,6 +7,13 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Notes
+- v0.2 kalan: Subagent Faz 3+ (UI panel + multi-turn workflow + streaming), LAN Faz 3 (Mac side-by-side + iOS LAN-first default + TXT record + indicator), App Store signing.
+
+## [0.2.7] — 2026-05-22
+
+**LAN-only mode Faz 1 + Faz 2** — `PixelLAN` library (Bonjour + Network.framework) + `RemoteTransport` protocol abstraction'u (4 adapter + `FallbackTransport` composite) + `RemoteHost`/`RemoteSession` transport DI. v0.2.6'dan beri 2 Faz landed; **226 test yeşil** (+31). UI defaults değişmedi (Faz 3'e ertelendi); altyapı tam. Breaking change yok.
+
 ### Added — LAN Faz 2: transport adapter + fallback (22 May 2026)
 - **`RemoteTransport`** protocol (PixelRemote) — `connect/send/disconnect` üçlü API; `RemoteHost` ve iOS `RemoteSession` artık transport-agnostic.
 - **`RelayTransport`** (PixelRemote) — `RelayClient`'ı wraplar; behavior birebir aynı.
@@ -233,7 +240,8 @@ Mac + iOS arasında **end-to-end ed25519 imzalı kanal**, **MCP server expose Fa
 - Platform: macOS 14+, iOS 17+ (uzak istemci).
 - Lisans: MIT.
 
-[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.7
 [0.2.6]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.4

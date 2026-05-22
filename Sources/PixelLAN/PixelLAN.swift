@@ -4,5 +4,5 @@
 /// Faz 1 (bu modül): library + framing + Bonjour advertise/browse.
 /// Faz 2 (gelecek): RemoteHost / RemoteSession entegrasyonu, otomatik fallback.
 public enum PixelLAN {
-    public static let version = "0.2.6"
+    public static let version = "0.2.7"
 }
