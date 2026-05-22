@@ -7,6 +7,16 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Notes
+- v0.2 kalan yol haritası: Plan Mode, Subagent dispatching, MCP Faz 2 (bundle-bağımlı tool'lar), LAN-only mode (Bonjour), App Store signing.
+
+## [0.2.3] — 2026-05-22
+
+Mac + iOS arasında **end-to-end ed25519 imzalı kanal**, **MCP server expose Faz 1** (5 saf-data tool, claude-cli uyumlu), iOS App Store asset/manifest hazırlığı, **162 test yeşil**. v0.1.0'dan beri biriken 10 commit'in 4 büyük başlığı bu sürümde.
+
+### ⚠️ Breaking change
+- Remote protocol v1 → v2. v0.1.x istemciler v0.2.3 relay'ine bağlanamaz; iOS app güncellenmeli + yeni QR taranmalı. UserDefaults pairing key `v1 → v2` (eski pairing'ler invalide).
+
 ### Added — MCP server expose Faz 1 (22 May 2026)
 - **`PixelMCPServer`** kütüphanesi: `JSONValue` (tip-güvenli JSON ağacı), `JSONRPCMessage` (Request/Response/Error tipleri + standart error code'lar), `ToolRegistry` (`ToolDefinition` + descriptor üretimi), `MCPServer` actor (handle/processLine/runStdio).
 - **`pixel-mcp-server`** executable target — `main.swift` 3 satır, `MCPServer.runStdio()` çağırır.
@@ -44,8 +54,18 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - [ADR-0014](docs/adr/0014-ios-app-store-assets.md): icon/launch/privacy manifest tasarım kararı.
 - `ios/README.md` xcodegen flow + asset üretim talimatı ile yeniden yazıldı (eski "Xcode New Project" manuel kurulum çıkarıldı).
 
-### Notes
-- v0.2 kalan yol haritası: MCP server expose, Plan Mode, Subagent dispatching, ed25519 envelope signing, LAN-only mode (Bonjour).
+### Test
+- 91 (v0.1.0) → **162** test. 71 yeni: 14 ed25519 Faz 1 (8 EnvelopeSigner + 6 KeyStore), 5 Faz 2 (RemoteEnvelope + RemoteHost ek), 30 MCP server, 22 dual-agent + stream-json + Codex (önceki commit'lerden).
+
+### Changed (v0.2.0 → v0.2.3 cumulative)
+- Mac `ChatView` dual-agent paralel sohbet desteğine refactor (v0.2.1, e2d9fa4).
+- Claude CLI stream-json parser ile gerçek token-by-token streaming (v0.2.2, 67723c7).
+- 60s backend timeout watchdog (6aba9e9).
+- Codex CLI desteği `exec --json` + stdin + `CodexJSONParser` (8bb11d1).
+- iOS auto-reconnect 5s timeout (bc7bf49) + Hakkında sayfası.
+
+### Removed
+- v1 remote protocol. `pixel-agent.pairing.v1` UserDefaults key'leri sessizce yok sayılır (yeni QR taratılması beklenir).
 
 ## [0.1.0] — 2026-05-21
 
@@ -115,5 +135,6 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Platform: macOS 14+, iOS 17+ (uzak istemci).
 - Lisans: MIT.
 
-[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.3
 [0.1.0]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.1.0
