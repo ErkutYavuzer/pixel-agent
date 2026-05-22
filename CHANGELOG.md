@@ -7,6 +7,13 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Notes
+- v0.2 kalan yol haritası: Subagent Faz 3+ (UI background panel, multi-turn `Workflow`, streaming progress), LAN-only mode (Bonjour), App Store signing.
+
+## [0.2.6] — 2026-05-22
+
+**Subagent Faz 2** — `PixelSubagent` library artık MCP üzerinden wired. claude-cli ve uyumlu istemciler `dispatch_subagent` tool'u ile Mac üzerinde Codex/Claude/Gemini subagent orkestre edebilir. **195 test yeşil** (+3). Breaking change yok.
+
 ### Added — Subagent Faz 2: MCP `dispatch_subagent` (22 May 2026)
 - **MCP tool `dispatch_subagent`** (`BuiltInTools` registry, 8 → 9 tool): `prompt` + `backend` (`claude|codex|gemini`) + opsiyonel `max_duration_seconds` / `max_output_bytes`. claude-cli ve uyumlu istemcilerden subagent orchestration için bridge tool. PixelAgent.app çalışıyor olmalı.
 - **`ControlSocketServer.dispatchSubagent`** handler: her request'te fresh `CLIDetector` (kullanıcı CLI değişikliklerine cevap), `CLIBackend(kind:, executablePath:)` resolve, `SubagentRunner(budget:).run(prompt:)`. Sonuç structured JSON payload (`status`/`output`/`duration_seconds`/`backend`); `BridgeResponse.result` üzerinde döner.
@@ -199,7 +206,8 @@ Mac + iOS arasında **end-to-end ed25519 imzalı kanal**, **MCP server expose Fa
 - Platform: macOS 14+, iOS 17+ (uzak istemci).
 - Lisans: MIT.
 
-[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.6
 [0.2.5]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.5
 [0.2.4]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.3

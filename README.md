@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.5-blue)
-![tests](https://img.shields.io/badge/tests-192%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.6-blue)
+![tests](https://img.shields.io/badge/tests-195%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -76,6 +76,7 @@ Her büyük tasarım kararı [docs/adr/](docs/adr/) altında belgeli.
 - [ADR-0017](docs/adr/0017-plan-mode.md) Plan Mode (`--permission-mode plan` + UI toggle)
 - [ADR-0018](docs/adr/0018-mcp-bridge-unix-socket.md) MCP Faz 2 — Unix socket bridge (3 bundle-bağımlı tool)
 - [ADR-0019](docs/adr/0019-subagent-runner.md) Subagent Runner Faz 1 (`PixelSubagent` library, budget'lı tek-turlu çalıştırıcı)
+- [ADR-0020](docs/adr/0020-mcp-dispatch-subagent.md) Subagent Faz 2 — MCP tool `dispatch_subagent` (headless orchestration)
 
 Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-from-v2.md) — birinci sürümden çıkarılan 14 desen ve 3 anti-pattern.
 
@@ -116,7 +117,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.5` (22 May 2026) · **192 test** yeşil · **19 ADR** · 8 library + 2 executable target
+**Versiyon:** `v0.2.6` (22 May 2026) · **195 test** yeşil · **20 ADR** · 8 library + 2 executable target
 
 ### Sürüm geçmişi
 
@@ -128,6 +129,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.3` | 22 May | iOS App Store hazırlık + ed25519 Faz 1+2 + MCP Faz 1 ⚠️ proto v1→v2 | 162 |
 | `v0.2.4` | 22 May | Plan Mode + MCP Faz 2 (Unix socket bridge) | 177 |
 | `v0.2.5` | 22 May | Subagent Runner Faz 1 + dokümantasyon konsolidasyonu | 192 |
+| `v0.2.6` | 22 May | Subagent Faz 2 — MCP tool `dispatch_subagent` | 195 |
 
 ### v0.2 yol haritası
 
@@ -138,7 +140,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 - ✅ ed25519 envelope signing — Faz 1+2 (ADR-0015)
 - ✅ MCP server expose — Faz 1+2 (ADR-0016 + ADR-0018, 8 tool)
 - ✅ Plan Mode (ADR-0017)
-- ◐ Subagent dispatching — Faz 1 landed (ADR-0019, `PixelSubagent` library + Budget'lı runner); Faz 2+ MCP tool + UI + multi-turn defer
+- ◐ Subagent dispatching — Faz 1 (ADR-0019, `PixelSubagent` library) + Faz 2 (ADR-0020, MCP `dispatch_subagent` tool) landed; Faz 3+ UI panel + multi-turn workflow + streaming defer
 - ☐ LAN-only mode (Bonjour discovery, relay bypass)
 - ☐ App Store signing + submission
 
@@ -179,6 +181,7 @@ ls .build/release/pixel-mcp-server     # ↑ command path bu
 | `dock_badge_set` | bridge | **evet** (Unix socket) |
 | `notify` | bridge | **evet** |
 | `play_sound` | bridge | **evet** |
+| `dispatch_subagent` | bridge | **evet** (PixelMacApp `SubagentRunner` invoke eder) |
 
 Stdio sanity check (claude-cli olmadan):
 
