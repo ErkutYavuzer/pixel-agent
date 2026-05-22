@@ -7,6 +7,13 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ## [Unreleased]
 
+### Notes
+- v0.2 kalan yol haritası: Subagent dispatching, LAN-only mode (Bonjour), App Store signing.
+
+## [0.2.4] — 2026-05-22
+
+**Plan Mode** (Claude `--permission-mode plan`) + **MCP Faz 2 Unix socket bridge** ile bundle-bağımlı tool'lar (DockBadge, Notify, Sound). v0.2.3'ten sonra biriken 2 büyük başlık. **177 test yeşil** (+11). Breaking change yok.
+
 ### Added — MCP server expose Faz 2: Unix socket bridge (22 May 2026)
 - **`BridgeProtocol`** (PixelMCPServer): `BridgeRequest` + `BridgeResponse` Codable tipleri; `BridgePaths.defaultSocketPath()` → `~/Library/Caches/dev.erkutyavuzer.pixel-agent/control.sock`.
 - **`BridgeClient`** (PixelMCPServer): POSIX `socket(AF_UNIX, SOCK_STREAM)` single-shot RPC. connect → write newline-delimited JSON → read until `\n` → close. `BridgeError` (`socketCreateFailed`/`pathTooLong`/`connectFailed`/`writeFailed`/`readFailed`/`decodeFailed`).
@@ -161,6 +168,7 @@ Mac + iOS arasında **end-to-end ed25519 imzalı kanal**, **MCP server expose Fa
 - Platform: macOS 14+, iOS 17+ (uzak istemci).
 - Lisans: MIT.
 
-[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/ErkutYavuzer/pixel-agent/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.4
 [0.2.3]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.2.3
 [0.1.0]: https://github.com/ErkutYavuzer/pixel-agent/releases/tag/v0.1.0
