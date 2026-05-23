@@ -19,7 +19,8 @@ final class ChatViewModel: ObservableObject {
 
     let backend: any ChatBackend
     let conversationStore: ConversationStore
-    var onAssistantComplete: ((String) -> Void)?
+    var onAssistantChunk: ((String, String) -> Void)?
+    var onAssistantComplete: ((String, String) -> Void)?
 
     private var streamTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
@@ -32,10 +33,12 @@ final class ChatViewModel: ObservableObject {
     init(
         backend: any ChatBackend,
         conversationStore: ConversationStore,
-        onAssistantComplete: ((String) -> Void)? = nil
+        onAssistantChunk: ((String, String) -> Void)? = nil,
+        onAssistantComplete: ((String, String) -> Void)? = nil
     ) {
         self.backend = backend
         self.conversationStore = conversationStore
+        self.onAssistantChunk = onAssistantChunk
         self.onAssistantComplete = onAssistantComplete
     }
 
@@ -96,6 +99,7 @@ final class ChatViewModel: ObservableObject {
                                 self.mascotState = .speaking
                             }
                             self.updateAssistantText(id: assistantID, appending: chunk)
+                            self.onAssistantChunk?(chunk, assistantID.uuidString)
                         }
                     case .done:
                         break
@@ -161,7 +165,7 @@ final class ChatViewModel: ObservableObject {
                 let store = conversationStore
                 let text = assistant.text
                 Task { try? await store.append(assistant) }
-                onAssistantComplete?(text)
+                onAssistantComplete?(text, assistantID.uuidString)
             }
 
             if NSApp.isActive {

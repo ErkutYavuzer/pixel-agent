@@ -26,6 +26,20 @@ Bu dosya projenin tek gerçek kaynağıdır (source of truth). Kronolojik oturum
   - Kullanıcının yerel tercihlerinde (UserDefaults/AppStorage) kayıtlı kalmış olabilecek eski geçersiz `gemini-3.5-flash` veya `gemini-3.1-pro` modellerini otomatik olarak tespit edip temizleyen ve çalışan varsayılana düşüren mantık `PixelMacApp.swift` içindeki `currentModel(for:)` metoduna eklendi.
   - İlgili birim testleri güncellenerek tüm testler (`swift test`) başarıyla koşturuldu.
 
+
+---
+
+### 23 Mayıs 2026 - iOS Mobil Uygulama Geliştirmeleri (Streaming & Yeniden Bağlanma)
+- **Gerçekleştirilen İş:**
+  - Mac ile iOS remote arasındaki veri paketi (`RemoteEnvelope`) genişletilerek `.assistantChunk` enum tipi ve `assistantChunk` factory metodu eklendi.
+  - Mac tarafında `RemoteHost` sınıfına kelime kelime (chunk) gönderimini sağlayan `sendAssistantChunk` metodu entegre edildi.
+  - `ChatViewModel`, `ChatView` ve `PixelMacApp` güncellenerek LLM yanıt akışı (streaming) anlık olarak iOS remote istemcisine yönlendirildi.
+  - iOS mobil uygulamasına (`PixelAgentRemote`) monorepo içindeki `PixelMascot` kütüphanesi entegre edildi, `project.yml` güncellendi ve `xcodegen` ile proje dosyaları yeniden üretildi.
+  - `RemoteSession` üzerinde exponential backoff tabanlı otomatik yeniden bağlanma algoritması ve WebSocket chunk okuma mekanizması geliştirildi.
+  - iOS tarafında bağlantı kopsa dahi pairing bilgisinin silinip doğrudan kameraya atılması engellendi; chat ekranında kalınarak en üstte "Bağlantı kesildi, yeniden bağlanılıyor..." uyarısı ve "Tekrar Dene" butonu gösterilmesi sağlandı.
+  - Sohbet arayüzüne `MascotView` entegre edilerek maskot durumunun anlık mesaj akışıyla senkron çalışması (.thinking, .speaking, .idle, .error) ve modern sağ-sol hizalı sohbet balonları eklendi.
+  - Birim testleri güncellenerek tüm SPM paket testlerinin (`swift test`) ve iOS simulator hedefinin (`xcodebuild`) başarıyla derlendiği doğrulandı.
+
 ---
 
 ## 2. Aktif Durum ve Proje Yapısı

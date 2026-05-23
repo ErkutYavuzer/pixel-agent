@@ -43,6 +43,8 @@ targets:
         product: PixelRemote
       - package: PixelAgent
         product: PixelLAN
+      - package: PixelAgent
+        product: PixelMascot
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.erkutyavuzer.PixelAgentRemote

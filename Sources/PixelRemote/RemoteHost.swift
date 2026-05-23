@@ -185,14 +185,25 @@ public final class RemoteHost: ObservableObject {
         peerPublicKey = nil
     }
 
-    public func sendAssistantMessage(_ text: String) async {
+    public func sendAssistantMessage(_ text: String, messageID: String? = nil) async {
         guard let transport = activeTransport else { return }
-        let envelope = RemoteEnvelope.assistantMessage(text: text)
+        let envelope = RemoteEnvelope.assistantMessage(text: text, messageID: messageID)
         do {
             let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
             try await transport.send(signed)
         } catch {
             lastError = "Mesaj gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
+    public func sendAssistantChunk(_ text: String, messageID: String) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.assistantChunk(text: text, messageID: messageID)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Chunk gönderilemedi: \(error.localizedDescription)"
         }
     }
 

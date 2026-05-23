@@ -8,6 +8,7 @@ public enum EnvelopeType: String, Codable, Sendable, CaseIterable {
     case error
     case userMessage
     case assistantMessage
+    case assistantChunk
 }
 
 public struct EnvelopePayload: Codable, Sendable, Equatable {
@@ -75,6 +76,13 @@ extension RemoteEnvelope {
     public static func assistantMessage(text: String, messageID: String? = nil) -> RemoteEnvelope {
         RemoteEnvelope(
             type: .assistantMessage,
+            payload: EnvelopePayload(text: text, role: "assistant", messageID: messageID)
+        )
+    }
+
+    public static func assistantChunk(text: String, messageID: String? = nil) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .assistantChunk,
             payload: EnvelopePayload(text: text, role: "assistant", messageID: messageID)
         )
     }

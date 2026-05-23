@@ -21,12 +21,14 @@ struct ChatView: View {
         subagentManager: SubagentManager,
         incomingRemoteText: Binding<String?>,
         planMode: Bool = false,
-        onAssistantComplete: ((String) -> Void)? = nil
+        onAssistantChunk: ((String, String) -> Void)? = nil,
+        onAssistantComplete: ((String, String) -> Void)? = nil
     ) {
         _viewModel = StateObject(
             wrappedValue: ChatViewModel(
                 backend: backend,
                 conversationStore: conversationStore,
+                onAssistantChunk: onAssistantChunk,
                 onAssistantComplete: onAssistantComplete
             )
         )

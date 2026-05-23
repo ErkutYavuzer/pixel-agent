@@ -8,12 +8,13 @@ final class RemoteEnvelopeTests: XCTestCase {
         XCTAssertEqual(EnvelopeType.hello.rawValue, "hello")
         XCTAssertEqual(EnvelopeType.userMessage.rawValue, "userMessage")
         XCTAssertEqual(EnvelopeType.assistantMessage.rawValue, "assistantMessage")
+        XCTAssertEqual(EnvelopeType.assistantChunk.rawValue, "assistantChunk")
         XCTAssertEqual(EnvelopeType.ack.rawValue, "ack")
         XCTAssertEqual(EnvelopeType.error.rawValue, "error")
     }
 
     func testEnvelopeTypeContainsAllExpectedCases() {
-        let expected: Set<String> = ["hello", "ready", "ping", "ack", "error", "userMessage", "assistantMessage"]
+        let expected: Set<String> = ["hello", "ready", "ping", "ack", "error", "userMessage", "assistantMessage", "assistantChunk"]
         let actual = Set(EnvelopeType.allCases.map { $0.rawValue })
         XCTAssertEqual(actual, expected)
     }
@@ -104,5 +105,16 @@ final class RemoteEnvelopeTests: XCTestCase {
 
     func testProtocolVersionIsV2() {
         XCTAssertEqual(PixelRemote.protocolVersion, 2)
+    }
+
+    func testAssistantChunkFactoryRoundTrip() throws {
+        let original = RemoteEnvelope.assistantChunk(text: "chunk text", messageID: "msg-123")
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.type, .assistantChunk)
+        XCTAssertEqual(decoded.payload?.text, "chunk text")
+        XCTAssertEqual(decoded.payload?.messageID, "msg-123")
+        XCTAssertEqual(decoded.payload?.role, "assistant")
     }
 }

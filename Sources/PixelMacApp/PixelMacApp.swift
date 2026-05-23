@@ -406,8 +406,11 @@ struct ChatHost: View {
                         subagentManager: subagentManager,
                         incomingRemoteText: $incomingFromRemote,
                         planMode: planMode,
-                        onAssistantComplete: { text in
-                            Task { await remoteHost.sendAssistantMessage(text) }
+                        onAssistantChunk: { chunk, messageID in
+                            Task { await remoteHost.sendAssistantChunk(chunk, messageID: messageID) }
+                        },
+                        onAssistantComplete: { text, messageID in
+                            Task { await remoteHost.sendAssistantMessage(text, messageID: messageID) }
                         }
                     )
                     // Backend veya model değişiminde ChatViewModel @StateObject

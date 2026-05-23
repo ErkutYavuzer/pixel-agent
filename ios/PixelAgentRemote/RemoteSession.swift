@@ -3,6 +3,7 @@ import Foundation
 import PixelCore
 import PixelLAN
 import PixelRemote
+import PixelMascot
 
 /// Bir `PairingInfo`'dan iOS-rolünde transport üretir. v0.2.11'den itibaren
 /// varsayılan `defaultLANFirstTransportFactory` — `FallbackTransport(primary: LAN,
@@ -48,9 +49,11 @@ final class RemoteSession: ObservableObject {
     /// `FallbackTransport` kullanılıyorsa `connect` sonrası `currentSelection`'dan
     /// türetilir; aksi halde generic "Bağlı".
     @Published var transportLabel: String?
+    @Published var mascotState: MascotState = .idle
 
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
 
     private let signingKey: Curve25519.Signing.PrivateKey
     private var macPublicKey: Curve25519.Signing.PublicKey?
@@ -114,18 +117,16 @@ final class RemoteSession: ObservableObject {
                 guard let self else { return }
                 do {
                     for try await envelope in stream {
+                        if Task.isCancelled { break }
                         await self.handle(envelope)
                     }
+                    await self.onConnectionLost()
                 } catch {
-                    await MainActor.run {
-                        self.lastError = error.localizedDescription
-                        self.isConnected = false
-                    }
+                    await self.onConnectionLost(error: error)
                 }
             }
         } catch {
-            lastError = error.localizedDescription
-            isConnected = false
+            await self.onConnectionLost(error: error)
         }
     }
 
@@ -136,6 +137,7 @@ final class RemoteSession: ObservableObject {
         }
         let userMsg = Message(role: .user, text: text)
         messages.append(userMsg)
+        mascotState = .thinking
 
         let envelope = RemoteEnvelope.userMessage(text: text, messageID: userMsg.id.uuidString)
         do {
@@ -143,10 +145,14 @@ final class RemoteSession: ObservableObject {
             try await transport.send(signed)
         } catch {
             lastError = error.localizedDescription
+            mascotState = .error
         }
     }
 
     func disconnect(forget: Bool = true) async {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        
         await transport?.disconnect()
         transport = nil
         receiveTask?.cancel()
@@ -154,9 +160,59 @@ final class RemoteSession: ObservableObject {
         isConnected = false
         transportLabel = nil
         macPublicKey = nil
+        mascotState = .idle
         if forget {
             pairing = nil
             Self.clearSavedPairing()
+        }
+    }
+
+    private func onConnectionLost(error: Error? = nil) async {
+        isConnected = false
+        transportLabel = nil
+        mascotState = .error
+        if let error {
+            lastError = error.localizedDescription
+        } else {
+            lastError = "Bağlantı koptu"
+        }
+        
+        if pairing != nil && reconnectTask == nil {
+            startReconnectionLoop()
+        }
+    }
+
+    private func startReconnectionLoop() {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            var delaySeconds: Double = 2.0
+            let maxDelaySeconds: Double = 30.0
+            
+            while !Task.isCancelled {
+                guard let self else { break }
+                guard let pairing = await self.pairing else { break }
+                guard !(await self.isConnected) else { break }
+                
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+                } catch {
+                    break // Task cancelled
+                }
+                
+                if Task.isCancelled { break }
+                
+                await self.connect(pairing: pairing)
+                
+                if await self.isConnected {
+                    break
+                } else {
+                    delaySeconds = min(delaySeconds * 2, maxDelaySeconds)
+                }
+            }
+            
+            await MainActor.run { [weak self] in
+                self?.reconnectTask = nil
+            }
         }
     }
 
@@ -181,21 +237,11 @@ final class RemoteSession: ObservableObject {
 
     private func autoReconnect(to pairing: PairingInfo) async {
         isAutoConnecting = true
-        defer { isAutoConnecting = false }
-
-        let connectTask = Task { await self.connect(pairing: pairing) }
-
-        let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline {
-            if isConnected || connectTask.isCancelled { break }
-            try? await Task.sleep(nanoseconds: 200_000_000)
-        }
+        await connect(pairing: pairing)
+        isAutoConnecting = false
 
         if !isConnected {
-            connectTask.cancel()
-            try? await Task.sleep(nanoseconds: 100_000_000)
-            await disconnect(forget: true)
-            lastError = "Otomatik bağlanma başarısız (5s timeout). QR kodu yeniden tarayın."
+            startReconnectionLoop()
         }
     }
 
@@ -207,14 +253,34 @@ final class RemoteSession: ObservableObject {
         }
 
         switch envelope.type {
+        case .assistantChunk:
+            if let text = envelope.payload?.text,
+               let msgIDString = envelope.payload?.messageID,
+               let msgID = UUID(uuidString: msgIDString) {
+                if let idx = messages.firstIndex(where: { $0.id == msgID }) {
+                    messages[idx].text += text
+                } else {
+                    let assistantMsg = Message(id: msgID, role: .assistant, text: text)
+                    messages.append(assistantMsg)
+                }
+                mascotState = .speaking
+            }
         case .assistantMessage:
             if let text = envelope.payload?.text {
-                let assistantMsg = Message(role: .assistant, text: text)
-                messages.append(assistantMsg)
+                if let msgIDString = envelope.payload?.messageID,
+                   let msgID = UUID(uuidString: msgIDString),
+                   let idx = messages.firstIndex(where: { $0.id == msgID }) {
+                    messages[idx].text = text
+                } else {
+                    let assistantMsg = Message(role: .assistant, text: text)
+                    messages.append(assistantMsg)
+                }
+                mascotState = .idle
             }
         case .error:
             if let message = envelope.payload?.errorMessage {
                 lastError = message
+                mascotState = .error
             }
         default:
             break
