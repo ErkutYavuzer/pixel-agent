@@ -88,8 +88,25 @@ final class RemoteSession: ObservableObject {
         signingKey.publicKey.rawRepresentation.base64EncodedString()
     }
 
+    private func cleanActiveConnection() async {
+        await transport?.disconnect()
+        transport = nil
+        receiveTask?.cancel()
+        receiveTask = nil
+        isConnected = false
+        transportLabel = nil
+        macPublicKey = nil
+        mascotState = .idle
+    }
+
     func connect(pairing: PairingInfo) async {
-        await disconnect(forget: false)
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        await establishConnection(pairing: pairing)
+    }
+
+    private func establishConnection(pairing: PairingInfo) async {
+        await cleanActiveConnection()
 
         guard let macKeyData = Data(base64Encoded: pairing.macPublicKey),
               let macKey = try? Curve25519.Signing.PublicKey(rawRepresentation: macKeyData)
@@ -153,14 +170,8 @@ final class RemoteSession: ObservableObject {
         reconnectTask?.cancel()
         reconnectTask = nil
         
-        await transport?.disconnect()
-        transport = nil
-        receiveTask?.cancel()
-        receiveTask = nil
-        isConnected = false
-        transportLabel = nil
-        macPublicKey = nil
-        mascotState = .idle
+        await cleanActiveConnection()
+        
         if forget {
             pairing = nil
             Self.clearSavedPairing()
@@ -201,7 +212,7 @@ final class RemoteSession: ObservableObject {
                 
                 if Task.isCancelled { break }
                 
-                await self.connect(pairing: pairing)
+                await self.establishConnection(pairing: pairing)
                 
                 if await self.isConnected {
                     break

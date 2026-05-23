@@ -38,7 +38,9 @@ Bu dosya projenin tek gerçek kaynağıdır (source of truth). Kronolojik oturum
   - `RemoteSession` üzerinde exponential backoff tabanlı otomatik yeniden bağlanma algoritması ve WebSocket chunk okuma mekanizması geliştirildi.
   - iOS tarafında bağlantı kopsa dahi pairing bilgisinin silinip doğrudan kameraya atılması engellendi; chat ekranında kalınarak en üstte "Bağlantı kesildi, yeniden bağlanılıyor..." uyarısı ve "Tekrar Dene" butonu gösterilmesi sağlandı.
   - Sohbet arayüzüne `MascotView` entegre edilerek maskot durumunun anlık mesaj akışıyla senkron çalışması (.thinking, .speaking, .idle, .error) ve modern sağ-sol hizalı sohbet balonları eklendi.
-  - Birim testleri güncellenerek tüm SPM paket testlerinin (`swift test`) ve iOS simulator hedefinin (`xcodebuild`) başarıyla derlendiği doğrulandı.
+  - **Bağlantı Kararlılığı ve Döngü Düzeltmesi:** `RemoteSession` içindeki yeniden bağlanma döngüsünün `disconnect(forget: false)` çağrısı üzerinden kendi kendini iptal etme (self-cancellation) hatası giderildi; bağlantı temizleme ve başlatma mantığı izole edilerek kararlı bir Bonjour LAN ↔ Cloudflare Relay geçişi ve kesintisiz yeniden bağlanma sağlandı.
+  - **Klavye Kapatma Gestures (Keyboard Dismissal):** Sohbet arayüzündeki boşluğa/arka plana tıklandığında klavyeyi otomatik kapatan `onTapGesture` ve kaydırma yapıldığında klavyeyi kapatan `.scrollDismissesKeyboard(.interactively)` modifikatörleri eklenerek iOS mesajlaşma deneyimi iyileştirildi.
+  - Birim testleri güncellenerek tüm SPM paket testlerinin (`swift test`) ve iOS simulator/cihaz hedefinin (`xcodebuild`) başarıyla derlendiği doğrulandı.
 
 ---
 
