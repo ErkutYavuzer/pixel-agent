@@ -21,18 +21,21 @@ struct PixelMacApp: App {
 
 struct RootView: View {
     @State private var backends: [CLIKind: CLIBackend]
-    @State private var conversationStore: ConversationStore?
+    @State private var conversationStores: [CLIKind: ConversationStore] = [:]
     @State private var initErrorMessage: String?
 
     init() {
         _backends = State(initialValue: Self.resolveBackends())
         do {
-            let store = try ConversationStore()
-            _conversationStore = State(initialValue: store)
+            var stores: [CLIKind: ConversationStore] = [:]
+            for kind in CLIKind.allCases {
+                stores[kind] = try ConversationStore(fileName: "conversation-\(kind.rawValue).jsonl")
+            }
+            _conversationStores = State(initialValue: stores)
             _initErrorMessage = State(initialValue: nil)
         } catch {
-            _conversationStore = State(initialValue: nil)
-            _initErrorMessage = State(initialValue: "Mesaj deposu açılamadı: \(error.localizedDescription)")
+            _conversationStores = State(initialValue: [:])
+            _initErrorMessage = State(initialValue: "Mesaj depoları açılamadı: \(error.localizedDescription)")
         }
     }
 
@@ -45,8 +48,8 @@ struct RootView: View {
                     message: BackendError.noBackendAvailable.errorDescription ?? "",
                     onRetry: rescan
                 )
-            } else if let store = conversationStore {
-                ChatHost(backends: backends, conversationStore: store)
+            } else if !conversationStores.isEmpty {
+                ChatHost(backends: backends, conversationStores: conversationStores)
                     // Backends seti değişirse (rescan) ChatHost re-init → SubagentManager
                     // backendResolver closure'u yeni snapshot ile yakalanır. Trade-off:
                     // aktif subagent kartları kaybolur (rescan nadir bir event).
@@ -85,11 +88,15 @@ struct RootView: View {
 
     private func retryStore() {
         do {
-            conversationStore = try ConversationStore()
+            var stores: [CLIKind: ConversationStore] = [:]
+            for kind in CLIKind.allCases {
+                stores[kind] = try ConversationStore(fileName: "conversation-\(kind.rawValue).jsonl")
+            }
+            conversationStores = stores
             initErrorMessage = nil
         } catch {
-            conversationStore = nil
-            initErrorMessage = "Mesaj deposu açılamadı: \(error.localizedDescription)"
+            conversationStores = [:]
+            initErrorMessage = "Mesaj depoları açılamadı: \(error.localizedDescription)"
         }
     }
 
@@ -123,7 +130,7 @@ enum ChatMode: String, CaseIterable {
 
 struct ChatHost: View {
     let backends: [CLIKind: CLIBackend]
-    let conversationStore: ConversationStore
+    let conversationStores: [CLIKind: ConversationStore]
     @State private var selectedKind: CLIKind
     @State private var secondaryKind: CLIKind
     @State private var mode: ChatMode = .single
@@ -185,9 +192,9 @@ struct ChatHost: View {
         return address
     }
 
-    init(backends: [CLIKind: CLIBackend], conversationStore: ConversationStore) {
+    init(backends: [CLIKind: CLIBackend], conversationStores: [CLIKind: ConversationStore]) {
         self.backends = backends
-        self.conversationStore = conversationStore
+        self.conversationStores = conversationStores
         let primary = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
         let secondary = CLIKind.allCases.first(where: { backends[$0] != nil && $0 != primary }) ?? primary
         _selectedKind = State(initialValue: primary)
@@ -384,11 +391,12 @@ struct ChatHost: View {
 
             switch mode {
             case .single:
-                if let backend = currentBackend(for: selectedKind) {
+                if let backend = currentBackend(for: selectedKind),
+                   let store = conversationStores[selectedKind] {
                     ChatView(
                         backend: backend,
                         backendKind: selectedKind,
-                        conversationStore: conversationStore,
+                        conversationStore: store,
                         subagentManager: subagentManager,
                         incomingRemoteText: $incomingFromRemote,
                         planMode: planMode,

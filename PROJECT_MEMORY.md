@@ -18,6 +18,15 @@ Bu dosya projenin tek gerçek kaynağıdır (source of truth). Kronolojik oturum
 
 ---
 
+### 23 Mayıs 2026 - Gemini Modeli Güncellemesi ve Chat İzolasyonu
+- **Gerçekleştirilen İş:**
+  - Gemini varsayılan model ID'si `gemini-3.5-flash`'tan `gemini-2.5-flash`'a çekildi (v0.43.0 CLI uyumluluğu için).
+  - `ModelCatalog` içinde `gemini-3.5-flash` ve `gemini-3.1-pro` modelleri picker menüsünde seçilebilir olarak korundu.
+  - Tekli chat modunda sekmeler arası sohbet geçmişinin karışmasını (spillover) önlemek amacıyla `RootView` ve `ChatHost` güncellenerek her backend için ayrı `ConversationStore` (`conversation-<kind>.jsonl`) kullanımı sağlandı.
+  - İlgili birim testleri güncellenerek tüm testler (`swift test`) başarıyla koşturuldu.
+
+---
+
 ## 2. Aktif Durum ve Proje Yapısı
 
 ### Modül Dağılımı ve Görevleri

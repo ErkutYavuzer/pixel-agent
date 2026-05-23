@@ -109,8 +109,8 @@ final class ModelCatalogTests: XCTestCase {
             XCTAssertEqual(CLIBackend.defaultModelID(for: .claude), "opus")
         }
         if ProcessInfo.processInfo.environment["PIXEL_GEMINI_MODEL"] == nil {
-            // v0.2.23: kullanıcı tercihi 3.5-flash hardcoded default
-            XCTAssertEqual(CLIBackend.defaultModelID(for: .gemini), "gemini-3.5-flash")
+            // v0.2.25: varsayılan model gemini-2.5-flash
+            XCTAssertEqual(CLIBackend.defaultModelID(for: .gemini), "gemini-2.5-flash")
         }
     }
 
