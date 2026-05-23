@@ -10,6 +10,23 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.19] — 2026-05-23
+
+**Backend default model wiring.** `CLIBackend` artık her CLI'a `--model <id>` flag'i geçiyor; default değerler kullanıcı yapılandırmasına göre: **Claude Opus 4.7** (`claude-opus-4-7`), **Codex 5.5** (`gpt-5.5`), **Gemini 3.5 Flash** (`gemini-3.5-flash`). Env var override desteği (`PIXEL_CLAUDE_MODEL` / `PIXEL_CODEX_MODEL` / `PIXEL_GEMINI_MODEL`). **418 test yeşil** (+5). Breaking change yok.
+
+### Added
+- **`CLIBackend.defaultModelID(for: CLIKind) -> String`** static — env override + hardcoded fallback. Öncelik: env var > `init(modelID:)` explicit param > hardcoded.
+- **`CLIBackend.arguments(for:prompt:options:modelID:)`** yeni imza — eski `arguments(for:prompt:options:)` kaldırıldı (test'ler dahil hepsi güncellendi). Her CLI için `--model <modelID>` flag'i prepend edilir:
+  - Claude: args başında `--model <id>`, prompt en sonda.
+  - Codex: `exec --model <id> --json ...` (subcommand'tan sonra).
+  - Gemini: `--model <id> --skip-trust -p <prompt>`.
+- **Env override:** `export PIXEL_CLAUDE_MODEL=claude-sonnet-4-7` gibi yapılandırmalar app restart'ında geçerli olur.
+
+### Tests
+- **`CLIBackendTests`** +5 yeni test: hardcoded defaults (Opus 4.7 / GPT-5.5 / Gemini 3.5 Flash), her CLI için `--model` flag pozisyonu, Codex exec subcommand'ın --model'den önce gelmesi, Claude model prompt'tan önce.
+- Eski testler `args(for:prompt:options:model:)` helper'a refactor edildi.
+- Toplam test: **413 → 418** yeşil (+5). 0 regression.
+
 ## [0.2.18] — 2026-05-23
 
 **Hotfix: Gemini CLI exit 55 (trusted directory promptu).** v0.2.17 PATH fix'inden sonra Gemini CLI bulunup çalıştırılabildi ama bu sefer "Gemini CLI is not running in a trusted directory" hatası geldi. Headless/automated context için `--skip-trust` argümanı + `GEMINI_CLI_TRUST_WORKSPACE=true` env var ile çözüldü. **413 test yeşil** (+2). Breaking change yok.

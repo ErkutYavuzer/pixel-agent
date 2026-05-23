@@ -9,7 +9,7 @@ public struct CLIBackend: ChatBackend {
     public init(kind: CLIKind, executablePath: String, modelID: String? = nil) {
         self.kind = kind
         self.executablePath = executablePath
-        self.modelID = modelID ?? "\(kind.rawValue)-cli"
+        self.modelID = modelID ?? Self.defaultModelID(for: kind)
     }
 
     public init(kind: CLIKind, detector: CLIDetector = CLIDetector()) throws {
@@ -17,6 +17,36 @@ public struct CLIBackend: ChatBackend {
             throw BackendError.cliNotFound(name: kind.executableName)
         }
         self.init(kind: kind, executablePath: path)
+    }
+
+    /// **v0.2.19:** Her CLI için varsayılan model ID. `PIXEL_CLAUDE_MODEL`,
+    /// `PIXEL_CODEX_MODEL`, `PIXEL_GEMINI_MODEL` env var'ları override eder
+    /// (boş veya set değilse hardcoded fallback). Caller `CLIBackend.init(...,
+    /// modelID:)` ile de override edebilir — env > explicit param > default.
+    ///
+    /// Hardcoded değerler (23 May 2026 itibarıyla):
+    /// - Claude: `claude-opus-4-7` (latest 4.7 patch resolve eder)
+    /// - Codex: `gpt-5.5`
+    /// - Gemini: `gemini-3.5-flash`
+    public static func defaultModelID(for kind: CLIKind) -> String {
+        let envKey: String
+        let hardcoded: String
+        switch kind {
+        case .claude:
+            envKey = "PIXEL_CLAUDE_MODEL"
+            hardcoded = "claude-opus-4-7"
+        case .codex:
+            envKey = "PIXEL_CODEX_MODEL"
+            hardcoded = "gpt-5.5"
+        case .gemini:
+            envKey = "PIXEL_GEMINI_MODEL"
+            hardcoded = "gemini-3.5-flash"
+        }
+        if let override = ProcessInfo.processInfo.environment[envKey],
+           !override.trimmingCharacters(in: .whitespaces).isEmpty {
+            return override
+        }
+        return hardcoded
     }
 
     public func send(
@@ -28,6 +58,7 @@ public struct CLIBackend: ChatBackend {
         let kind = self.kind
         let executablePath = self.executablePath
 
+        let modelID = self.modelID
         return AsyncThrowingStream { continuation in
             let task = Task {
                 let stdin: String? = Self.usesStdinForPrompt(for: kind) ? prompt : nil
@@ -36,7 +67,7 @@ public struct CLIBackend: ChatBackend {
                 // EnvironmentBuilder bilinen lokasyonları PATH'e prepend eder.
                 let runner = CLIProcessRunner(
                     executablePath: executablePath,
-                    arguments: Self.arguments(for: kind, prompt: prompt, options: options),
+                    arguments: Self.arguments(for: kind, prompt: prompt, options: options, modelID: modelID),
                     environment: EnvironmentBuilder.augmentedEnvironment()
                 )
                 let mode = Self.outputMode(for: kind)
@@ -102,10 +133,19 @@ public struct CLIBackend: ChatBackend {
     }
 
     /// CLI binary'sine geçilecek argümanlar. `internal` yapıldı ki testler doğrulayabilsin.
-    static func arguments(for kind: CLIKind, prompt: String, options: ChatOptions) -> [String] {
+    ///
+    /// **v0.2.19:** Her CLI için `--model <modelID>` flag'i prepend edilir
+    /// (Claude/Codex/Gemini hepsi long-form `--model`'i destekliyor).
+    static func arguments(
+        for kind: CLIKind,
+        prompt: String,
+        options: ChatOptions,
+        modelID: String
+    ) -> [String] {
         switch kind {
         case .claude:
             var args = [
+                "--model", modelID,
                 "-p",
                 "--output-format", "stream-json",
                 "--include-partial-messages",
@@ -123,6 +163,7 @@ public struct CLIBackend: ChatBackend {
             // Plan Mode native değil — bayrak yok, normal akışa devam.
             return [
                 "exec",
+                "--model", modelID,
                 "--json",
                 "--ignore-user-config",
                 "--skip-git-repo-check",
@@ -136,7 +177,7 @@ public struct CLIBackend: ChatBackend {
             // EnvironmentBuilder GEMINI_CLI_TRUST_WORKSPACE=true set ediyor —
             // belt & suspenders (eski Gemini CLI sürümleri flag, yeni'ler env
             // var bekliyor olabilir).
-            return ["--skip-trust", "-p", prompt]
+            return ["--model", modelID, "--skip-trust", "-p", prompt]
         }
     }
 
