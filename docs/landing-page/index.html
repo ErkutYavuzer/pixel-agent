@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pixel-agent — Personal AI agent for macOS</title>
+  <meta name="description" content="Native macOS AI agent. Chat with Claude/Codex/Gemini side by side, dispatch subagents, see your screen via Set-of-Mark, control everything from iPhone.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="pixel-agent — Personal AI agent for macOS">
+  <meta property="og:description" content="Native macOS AI agent — multi-LLM CLIs, subagents, iOS remote dashboard, MCP server, computer use with Set-of-Mark.">
+  <meta property="og:image" content="https://erkutyavuzer.github.io/pixel-agent/og-image.png">
+  <meta property="og:url" content="https://erkutyavuzer.github.io/pixel-agent/">
+  <meta property="og:type" content="website">
+
+  <!-- Twitter card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="pixel-agent — Personal AI agent for macOS">
+  <meta name="twitter:description" content="Native macOS AI agent — multi-LLM CLIs, subagents, iOS remote dashboard, MCP server, computer use with Set-of-Mark.">
+  <meta name="twitter:image" content="https://erkutyavuzer.github.io/pixel-agent/og-image.png">
+
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="assets/ios-home-icon.png">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="./" class="logo">pixel-agent</a>
+      <a href="documentation/pixelcore/" class="nav-link">API docs</a>
+      <a href="https://github.com/ErkutYavuzer/pixel-agent" class="nav-link">GitHub</a>
+      <a href="https://github.com/ErkutYavuzer/pixel-agent/discussions" class="nav-link">Discussions</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div class="hero-content">
+      <h1>Personal AI agent for macOS</h1>
+      <p class="tagline">Chat with multiple LLM CLIs, dispatch subagents in parallel, see your screen via Set-of-Mark, and control everything from your iPhone.</p>
+      <div class="install-box">
+        <code><span class="prompt">$</span> HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask ErkutYavuzer/tap/pixel-agent</code>
+        <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+      </div>
+      <div class="badges">
+        <a href="https://github.com/ErkutYavuzer/pixel-agent/releases/latest"><img src="https://img.shields.io/badge/version-0.2.25-blue" alt="version"></a>
+        <a href="https://github.com/ErkutYavuzer/pixel-agent/actions"><img src="https://img.shields.io/badge/tests-443%20passing-brightgreen" alt="tests"></a>
+        <img src="https://img.shields.io/badge/swift-6.0-orange" alt="swift">
+        <img src="https://img.shields.io/badge/macOS-14%2B-blue" alt="macOS">
+        <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
+      </div>
+    </div>
+    <div class="hero-image">
+      <img src="assets/hero-mac-chat.png" alt="pixel-agent Mac chat view with mascot in the corner and Claude CLI replying">
+    </div>
+  </section>
+
+  <section class="features">
+    <h2>Five things you don't usually get together</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">💬</div>
+        <h3>Multi-CLI orchestration</h3>
+        <p>Talk to Claude Code, Codex, and Gemini side by side. Single or dual mode. Each backend has its own per-kind conversation history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <h3>Subagent panel</h3>
+        <p>Fan out work to up to 3 parallel subagents with a budget (wall-clock + bytes). Cancellable from UI or via the MCP <code>dispatch_subagent</code> tool.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📱</div>
+        <h3>iOS remote dashboard</h3>
+        <p>Pair with QR. From your iPhone: switch backend/model, toggle Plan Mode, request screenshots, watch real CPU/RAM, cancel subagents. LAN or relay; ed25519-signed.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <h3>MCP server — 14 tools</h3>
+        <p><code>pixel-mcp-server</code> exposes clipboard, time, dock badge, notifications, screenshot, <code>dispatch_subagent</code>, plus 5 <code>ui_*</code> AX-first tools to Claude Code, Cline, Continue, Cursor.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👁️</div>
+        <h3>Computer use with Set-of-Mark</h3>
+        <p>AX-first hybrid UI control. Annotate screenshots with numbered badges so a vision model can say "click #5" — deterministic ID → element mapping, no coordinate guessing.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📚</div>
+        <h3>32 ADRs · 443 tests</h3>
+        <p>Every major decision documented as an Architectural Decision Record. Swift 6 strict concurrency, 12 SPM modules with one-way deps, hermetic tests.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="comparison">
+    <h2>Why pixel-agent vs …</h2>
+    <div class="comparison-table">
+      <table>
+        <thead>
+          <tr><th>Feature</th><th>pixel-agent</th><th>Claude Desktop</th><th>Cline</th><th>Aider</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Native macOS</td><td>✅ Swift, ~60 MB</td><td>❌ Electron</td><td>❌ VS Code</td><td>❌ terminal</td></tr>
+          <tr><td>Multi-LLM side by side</td><td>✅ Dual chat</td><td>❌</td><td>❌</td><td>❌</td></tr>
+          <tr><td>iPhone remote dashboard</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr>
+          <tr><td>MCP server (expose tools)</td><td>✅ 14 tools</td><td>client only</td><td>❌</td><td>❌</td></tr>
+          <tr><td>Subagent UI (parallel)</td><td>✅ cap=3</td><td>❌</td><td>❌</td><td>❌</td></tr>
+          <tr><td>Computer use</td><td>✅ AX + Set-of-Mark</td><td>❌</td><td>via tools</td><td>❌</td></tr>
+          <tr><td>Open source</td><td>✅ MIT</td><td>❌</td><td>✅ Apache</td><td>✅ Apache</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="install">
+    <h2>Get started in 5 minutes</h2>
+    <div class="install-steps">
+      <div class="step">
+        <h3>1. Install a CLI</h3>
+        <p>At least one of:</p>
+        <ul>
+          <li><a href="https://github.com/anthropics/claude-code">Claude Code</a></li>
+          <li><a href="https://github.com/openai/codex">OpenAI Codex</a></li>
+          <li><a href="https://github.com/google-gemini/gemini-cli">Google Gemini</a></li>
+        </ul>
+        <p class="note">Log in to whichever you installed; pixel-agent uses its OAuth state.</p>
+      </div>
+      <div class="step">
+        <h3>2. Install pixel-agent</h3>
+        <pre><code>HOMEBREW_CASK_OPTS="--no-quarantine" \
+brew install --cask \
+  ErkutYavuzer/tap/pixel-agent</code></pre>
+        <p class="note">Or <a href="https://github.com/ErkutYavuzer/pixel-agent#option-b--build-from-source">build from source</a>.</p>
+      </div>
+      <div class="step">
+        <h3>3. Launch</h3>
+        <pre><code>open /Applications/PixelAgent.app</code></pre>
+        <p>Optionally pair your iPhone via the QR code in the Pairing view.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="screenshots">
+    <h2>What it looks like</h2>
+    <div class="screenshots-grid">
+      <figure>
+        <img src="assets/hero-mac-chat.png" alt="Chat view with mascot in the corner">
+        <figcaption>Chat with Claude (single mode)</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/mac-app.png" alt="Fresh launch view">
+        <figcaption>Fresh launch</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/ios-home-icon.png" alt="iPhone home icon" style="max-width: 120px;">
+        <figcaption>iPhone companion app</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="architecture">
+    <h2>Architecture</h2>
+    <p>10 libraries + 2 executables. Dependencies flow one-way toward <code>PixelCore</code>; cycles blocked at SPM compile time. Swift 6 strict concurrency throughout.</p>
+    <div class="modules">
+      <span>PixelCore</span>
+      <span>PixelBackends</span>
+      <span>PixelTools</span>
+      <span>PixelMemory</span>
+      <span>PixelMascot</span>
+      <span>PixelRemote</span>
+      <span>PixelLAN</span>
+      <span>PixelSubagent</span>
+      <span>PixelMCPServer</span>
+      <span>PixelComputerUse</span>
+      <span class="exe">PixelMacApp (exe)</span>
+      <span class="exe">pixel-mcp-server (exe)</span>
+    </div>
+    <div class="arch-links">
+      <a href="https://github.com/ErkutYavuzer/pixel-agent/blob/main/docs/architecture.md">Full diagram</a>
+      <span class="dot">·</span>
+      <a href="https://github.com/ErkutYavuzer/pixel-agent/tree/main/docs/adr">32 ADRs</a>
+      <span class="dot">·</span>
+      <a href="documentation/pixelcore/">API docs (DocC)</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-content">
+      <div>
+        <strong>pixel-agent</strong>
+        <p>Personal AI agent for macOS. MIT licensed. Built by <a href="https://github.com/ErkutYavuzer">Erkut Yavuzer</a>.</p>
+      </div>
+      <div>
+        <h4>Docs</h4>
+        <a href="https://github.com/ErkutYavuzer/pixel-agent/blob/main/README.md">README</a>
+        <a href="https://github.com/ErkutYavuzer/pixel-agent/blob/main/CHANGELOG.md">Changelog</a>
+        <a href="documentation/pixelcore/">API docs</a>
+      </div>
+      <div>
+        <h4>Community</h4>
+        <a href="https://github.com/ErkutYavuzer/pixel-agent">GitHub</a>
+        <a href="https://github.com/ErkutYavuzer/pixel-agent/discussions">Discussions</a>
+        <a href="https://github.com/ErkutYavuzer/pixel-agent/issues">Issues</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      Built with <strong>Swift 6</strong> for macOS. Made in Türkiye 🇹🇷.
+    </div>
+  </footer>
+
+  <script>
+    function copyInstall(btn) {
+      const text = btn.previousElementSibling.textContent.replace(/^\$\s+/, '');
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+      });
+    }
+  </script>
+</body>
+</html>

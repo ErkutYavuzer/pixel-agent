@@ -37,18 +37,18 @@ jobs:
             --hosting-base-path pixel-agent \
             --output-path ./docs/_site
 
-      - name: Add redirect index
+      - name: Compose Pages output (landing page + assets + DocC)
         run: |
-          cat > ./docs/_site/index.html <<'EOF'
-          <!DOCTYPE html>
-          <html><head>
-            <meta charset="utf-8">
-            <meta http-equiv="refresh" content="0; url=./documentation/pixelcore/">
-            <title>pixel-agent docs</title>
-          </head><body>
-            <p>Redirecting to <a href="./documentation/pixelcore/">documentation</a>...</p>
-          </body></html>
-          EOF
+          # DocC çıktısı docs/_site'a build edildi (documentation/ altında).
+          # Landing page'i _site root'una koy; DocC API docs /documentation/pixelcore/
+          # subpath'ında erişilebilir kalır.
+          cp docs/landing-page/index.html docs/_site/index.html
+          cp docs/landing-page/style.css docs/_site/style.css
+
+          # Hero/screenshot için assets/, OG image için root'a kopya.
+          mkdir -p docs/_site/assets
+          cp docs/assets/*.png docs/_site/assets/
+          cp docs/assets/og-image.png docs/_site/og-image.png
 
       - uses: actions/upload-pages-artifact@v3
         with:
