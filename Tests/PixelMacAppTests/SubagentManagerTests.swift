@@ -201,7 +201,35 @@ final class SubagentManagerTests: XCTestCase {
         XCTAssertEqual(manager.sessions.count, 0)
     }
 
-    // MARK: - 8. Dismiss only removes terminal sessions
+    // MARK: - 8. Partial output build-up during streaming
+
+    func testPartialOutputBuildsUpDuringStreaming() async {
+        // Yavaş chunk akışı — chunk'lar arası 80ms; ilk chunk geldikten sonra
+        // partialOutput dolu olmalı, terminal'e ulaşmadan önce.
+        let manager = SubagentManager(maxConcurrent: 3) { _ in
+            MockBackend(chunks: ["alpha", "-beta", "-gamma"], chunkDelay: 80_000_000)
+        }
+        let dispatchResult = manager.dispatch(prompt: "x", backend: .claude)
+        guard case .success(let id) = dispatchResult else {
+            return XCTFail("Expected success, got \(dispatchResult)")
+        }
+
+        // İlk chunk'tan sonra partial dolu olmalı, henüz terminal değil
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        let mid = manager.sessions.first(where: { $0.id == id })
+        XCTAssertNotNil(mid)
+        XCTAssertFalse(mid?.partialOutput.isEmpty ?? true)
+        XCTAssertEqual(mid?.status, .running)
+
+        // Streaming bitince partialOutput == result.output
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        let final = manager.sessions.first(where: { $0.id == id })
+        XCTAssertEqual(final?.status, .completed)
+        XCTAssertEqual(final?.partialOutput, "alpha-beta-gamma")
+        XCTAssertEqual(final?.result?.output, "alpha-beta-gamma")
+    }
+
+    // MARK: - 9. Dismiss only removes terminal sessions
 
     func testDismissOnlyRemovesTerminal() async {
         let manager = SubagentManager(maxConcurrent: 3) { _ in

@@ -96,6 +96,11 @@ public enum BuiltInTools {
         registry.register(notify)
         registry.register(playSound)
         registry.register(dispatchSubagent)
+        // Computer use (ADR-0026) — bridge tool'lar.
+        registry.register(uiQuery)
+        registry.register(uiClick)
+        registry.register(uiType)
+        registry.register(uiScreenshot)
         return registry
     }
 
@@ -316,6 +321,167 @@ public enum BuiltInTools {
             return await callBridge(tool: "dispatch_subagent", arguments: .object(args))
         }
     )
+
+    // MARK: - Computer use (ADR-0026)
+
+    /// `UIQuery` JSON schema — `ui_query/ui_click/ui_type` tarafından paylaşılır.
+    static let uiQuerySchema: JSONValue = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "bundle_id": .object([
+                "type": .string("string"),
+                "description": .string("Hedef uygulama bundle ID'si (örn. com.apple.Safari). Atlanırsa frontmost app."),
+            ]),
+            "role": .object([
+                "type": .string("string"),
+                "description": .string("AX role (örn. AXButton, AXTextField, AXLink, AXMenuItem). * = herhangi."),
+            ]),
+            "title": .object([
+                "type": .string("string"),
+                "description": .string("AXTitle değeri."),
+            ]),
+            "label": .object([
+                "type": .string("string"),
+                "description": .string("AXDescription veya AXLabel değeri."),
+            ]),
+            "identifier": .object([
+                "type": .string("string"),
+                "description": .string("AXIdentifier (Accessibility Inspector). Set ise diğer alanlar override edilir."),
+            ]),
+            "match_mode": .object([
+                "type": .string("string"),
+                "enum": .array([.string("exact"), .string("fuzzy"), .string("regex")]),
+                "description": .string("title/label eşleşme stratejisi. Default exact."),
+            ]),
+            "max_depth": .object([
+                "type": .string("integer"),
+                "description": .string("Tree traversal max derinlik (default 12)."),
+            ]),
+            "timeout": .object([
+                "type": .string("number"),
+                "description": .string("Genel timeout (saniye, default 3.0)."),
+            ]),
+        ]),
+    ])
+
+    static let uiQuery = ToolDefinition(
+        name: "ui_query",
+        description: """
+            macOS AX hiyerarşisini tarayıp eşleşen UI element'leri JSON listesi olarak döner.
+            Read-only — Plan modunda kullanılabilir. Accessibility izni gerekir. \
+            Sonuç: { role, title, label, identifier, frame:{x,y,w,h}, bundle_id, path[], opaque_id }.
+            """,
+        inputSchema: uiQuerySchema,
+        handler: { params in
+            await callBridge(tool: "ui_query", arguments: .object(["query": params ?? .object([:])]))
+        }
+    )
+
+    static let uiClick = ToolDefinition(
+        name: "ui_click",
+        description: """
+            UIQuery'ye uyan tek element'i tıklar (CGEvent leftMouseDown/Up). \
+            Destructive — Plan modunda kullanılmamalı. count=2 double-click. \
+            0 eşleşme → noMatch hatası; ≥2 → ambiguousMatch (query daraltılmalı). \
+            Accessibility izni gerekir.
+            """,
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "query": uiQuerySchema,
+                "count": .object([
+                    "type": .string("integer"),
+                    "description": .string("Tıklama sayısı (default 1, double-click=2)."),
+                ]),
+            ]),
+            "required": .array([.string("query")]),
+        ]),
+        handler: { params in
+            if let err = planModeGuard("ui_click") { return err }
+            guard let query = params?["query"] else {
+                return ToolResultBuilder.error("`query` parametresi zorunlu.")
+            }
+            var args: [String: JSONValue] = ["query": query]
+            if let count = params?["count"] { args["count"] = count }
+            return await callBridge(tool: "ui_click", arguments: .object(args))
+        }
+    )
+
+    static let uiType = ToolDefinition(
+        name: "ui_type",
+        description: """
+            Aktif text input element'ine veya `into` query'sine uyan element'e \
+            metin yazar (CGEvent unicode key inject). Destructive — Plan modunda \
+            kullanılmamalı. Accessibility izni gerekir.
+            """,
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "text": .object([
+                    "type": .string("string"),
+                    "description": .string("Yazılacak metin (Unicode-aware)."),
+                ]),
+                "into": uiQuerySchema,
+            ]),
+            "required": .array([.string("text")]),
+        ]),
+        handler: { params in
+            if let err = planModeGuard("ui_type") { return err }
+            guard let text = params?["text"]?.stringValue else {
+                return ToolResultBuilder.error("`text` parametresi zorunlu.")
+            }
+            var args: [String: JSONValue] = ["text": .string(text)]
+            if let into = params?["into"] { args["into"] = into }
+            return await callBridge(tool: "ui_type", arguments: .object(args))
+        }
+    )
+
+    static let uiScreenshot = ToolDefinition(
+        name: "ui_screenshot",
+        description: """
+            Ekran görüntüsü alır (SCScreenshotManager). Read-only — Plan modunda \
+            kullanılabilir. Screen Recording izni gerekir. target: \
+            "active_display" (default) | "all_displays" | "window". window seçilirse \
+            bundle_id zorunlu. Sonuç base64-encoded PNG + pixel boyutları + logical frame.
+            """,
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "target": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("active_display"), .string("all_displays"), .string("window")]),
+                    "description": .string("Ne yakalanacak (default active_display)."),
+                ]),
+                "bundle_id": .object([
+                    "type": .string("string"),
+                    "description": .string("target=window ise hedef uygulama bundle ID'si."),
+                ]),
+            ]),
+        ]),
+        handler: { params in
+            var args: [String: JSONValue] = [:]
+            if let target = params?["target"] { args["target"] = target }
+            if let bid = params?["bundle_id"] { args["bundle_id"] = bid }
+            return await callBridge(tool: "ui_screenshot", arguments: .object(args))
+        }
+    )
+
+    /// `PIXEL_PLAN_MODE=1` env var set ise destructive tool'lar (ui_click/ui_type)
+    /// hata döner. Read-only tool'lar (ui_query/ui_screenshot) hep çalışır.
+    ///
+    /// ADR-0017 (Plan Mode) için MCP tarafı enforcement. PixelMacApp Claude
+    /// CLI'yi `--permission-mode plan` ile spawn ederken bu env var'ı da set
+    /// eder; MCP server start'ında okunur, her tool çağrısında check edilir
+    /// (process env runtime'da değişebilir — Faz 3'te static cache opsiyonu).
+    static func planModeGuard(_ tool: String) -> JSONValue? {
+        if ProcessInfo.processInfo.environment["PIXEL_PLAN_MODE"] == "1" {
+            return ToolResultBuilder.error(
+                "Plan modunda destructive tool çağrılamaz: \(tool). " +
+                "Sadece ui_query / ui_screenshot kullan."
+            )
+        }
+        return nil
+    }
 
     /// BridgeClient.call() sarmalayıcı — başarı/başarısızlık MCP `content` shape'ine
     /// dönüştürür. PixelAgent.app çalışmıyorsa connect EACCES/ENOENT → error.

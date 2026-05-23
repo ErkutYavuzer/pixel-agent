@@ -151,6 +151,64 @@ final class SubagentRunnerTests: XCTestCase {
         // run bittiğinde TaskLocal binding kapsamı dışında — yine nil
         XCTAssertNil(AgentContext.currentSubagentID)
     }
+
+    // MARK: - runStreaming (Faz 4)
+
+    func testRunStreamingEmitsChunksThenFinished() async {
+        let backend = MockBackend(chunks: ["foo", "bar", "baz"])
+        let runner = SubagentRunner(backend: backend)
+        var events: [SubagentEvent] = []
+        for await event in runner.runStreaming(prompt: "x") {
+            events.append(event)
+        }
+
+        // 3 chunk + 1 finished beklenir
+        XCTAssertEqual(events.count, 4)
+        XCTAssertEqual(events[0], .chunk("foo"))
+        XCTAssertEqual(events[1], .chunk("bar"))
+        XCTAssertEqual(events[2], .chunk("baz"))
+        guard case .finished(let result) = events[3] else {
+            return XCTFail("Son event finished olmalı, got \(events[3])")
+        }
+        guard case .completed(let output, _) = result else {
+            return XCTFail("Result completed olmalı, got \(result)")
+        }
+        XCTAssertEqual(output, "foobarbaz")
+    }
+
+    func testRunStreamingEndsWithFinishedOnBudgetExceeded() async {
+        // 2s chunk delay × 5 chunk = 10s; 0.3s budget ile duration aşılır
+        let backend = MockBackend(chunks: ["a", "b", "c"], chunkDelay: 2_000_000_000)
+        let runner = SubagentRunner(backend: backend, budget: Budget(maxDuration: 0.3))
+        var finishedResult: SubagentResult?
+        for await event in runner.runStreaming(prompt: "x") {
+            if case .finished(let r) = event { finishedResult = r }
+        }
+        guard let result = finishedResult else {
+            return XCTFail("finished event görülmedi")
+        }
+        guard case .budgetExceeded(let reason, _, _) = result else {
+            return XCTFail("budgetExceeded bekleniyordu, got \(result)")
+        }
+        XCTAssertEqual(reason, .duration)
+    }
+
+    func testRunStreamingFinishedAsLastEventOnCLIExitWithoutDone() async {
+        // CLI subprocess `.done` yield etmeden bitti senaryosu — graceful completed.
+        let backend = MockBackend(chunks: ["partial"], endWithoutDone: true)
+        let runner = SubagentRunner(backend: backend)
+        var events: [SubagentEvent] = []
+        for await event in runner.runStreaming(prompt: "x") {
+            events.append(event)
+        }
+        XCTAssertEqual(events.count, 2)  // 1 chunk + 1 finished
+        XCTAssertEqual(events[0], .chunk("partial"))
+        guard case .finished(let result) = events.last,
+              case .completed(let output, _) = result else {
+            return XCTFail("Beklenen .finished(.completed), got \(events.last as Any)")
+        }
+        XCTAssertEqual(output, "partial")
+    }
 }
 
 // MARK: - Test helpers

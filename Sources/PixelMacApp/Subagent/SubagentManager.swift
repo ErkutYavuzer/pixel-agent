@@ -68,8 +68,35 @@ final class SubagentManager: ObservableObject {
         let runner = SubagentRunner(backend: backend, budget: budget, id: id)
         runners[id] = Task { [weak self] in
             await MainActor.run { self?.updateStatus(id: id, to: .running) }
-            let result = await runner.run(prompt: prompt)
-            await MainActor.run { self?.finalize(id: id, result: result) }
+
+            // Streaming — her chunk MainActor'da session.partialOutput'a append
+            // edilir; terminal event session'ı finalize eder.
+            var didFinalize = false
+            for await event in runner.runStreaming(prompt: prompt) {
+                switch event {
+                case .chunk(let chunk):
+                    await MainActor.run { self?.appendChunk(id: id, chunk: chunk) }
+                case .finished(let result):
+                    didFinalize = true
+                    await MainActor.run { self?.finalize(id: id, result: result) }
+                }
+            }
+
+            // `cancel(_:)` outer Task'i iptal edince AsyncStream consumer'ı kooperatif
+            // sonlanır — `.finished` event'i ulaşmadan döngü çıkabilir. Finalize
+            // çağrılmazsa `dispatchAndWait` continuation leak olur. Defensive:
+            // synthetic `.cancelled` ile finalize et (partial output session'dan okunur).
+            if !didFinalize {
+                let partial = await MainActor.run {
+                    self?.sessions.first(where: { $0.id == id })?.partialOutput ?? ""
+                }
+                await MainActor.run {
+                    self?.finalize(
+                        id: id,
+                        result: .cancelled(partialOutput: partial, durationSeconds: 0)
+                    )
+                }
+            }
         }
 
         return .success(id)
@@ -133,6 +160,11 @@ final class SubagentManager: ObservableObject {
     private func updateStatus(id: SubagentID, to status: SubagentStatus) {
         guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[idx].status = status
+    }
+
+    private func appendChunk(id: SubagentID, chunk: String) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[idx].partialOutput += chunk
     }
 
     private func finalize(id: SubagentID, result: SubagentResult) {

@@ -1,5 +1,6 @@
 import Darwin
 import PixelBackends
+import PixelComputerUse
 import PixelCore
 import PixelLAN
 import PixelMemory
@@ -128,6 +129,8 @@ struct ChatHost: View {
     @State private var mode: ChatMode = .single
     @State private var showPairing: Bool = false
     @State private var showAbout: Bool = false
+    @State private var showPermissions: Bool = false
+    @State private var permissionsStatus: ComputerUsePermissions.Status = ComputerUsePermissions.status()
     @State private var incomingFromRemote: String?
     @State private var planMode: Bool = false
     @StateObject private var remoteHost: RemoteHost
@@ -258,6 +261,15 @@ struct ChatHost: View {
                         .help("iOS bağlı")
                 }
 
+                Button { showPermissions = true } label: {
+                    Image(systemName: permissionsStatus.allGranted ? "lock.shield.fill" : "lock.shield")
+                        .foregroundStyle(permissionsStatus.allGranted ? .green : .orange)
+                }
+                .buttonStyle(.borderless)
+                .help(permissionsStatus.allGranted
+                      ? "Computer Use izinleri tamam"
+                      : "Computer Use izinleri eksik — tıkla")
+
                 Button { showAbout = true } label: {
                     Image(systemName: "info.circle")
                 }
@@ -323,6 +335,12 @@ struct ChatHost: View {
         }
         .sheet(isPresented: $showAbout) {
             AboutView(relayURL: remoteHost.relayURL)
+        }
+        .sheet(isPresented: $showPermissions, onDismiss: {
+            // Kullanıcı System Settings'ten dönerken durum değişmiş olabilir.
+            permissionsStatus = ComputerUsePermissions.status()
+        }) {
+            PermissionsView()
         }
         .task {
             // MCP bridge'in dispatch_subagent çağrılarını UI havuzuna yönlendir.

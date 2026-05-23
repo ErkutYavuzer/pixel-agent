@@ -20,6 +20,9 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
     let startedAt: Date
     var finishedAt: Date?
     var result: SubagentResult?
+    /// Streaming sırasında her chunk burada birikir. Terminal status'a geçildiğinde
+    /// `result.output` ile aynı olur. UI canlı render için bunu okur.
+    var partialOutput: String
 
     init(
         id: SubagentID = SubagentID(),
@@ -29,7 +32,8 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
         status: SubagentStatus = .pending,
         startedAt: Date = Date(),
         finishedAt: Date? = nil,
-        result: SubagentResult? = nil
+        result: SubagentResult? = nil,
+        partialOutput: String = ""
     ) {
         self.id = id
         self.prompt = prompt
@@ -39,6 +43,7 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.result = result
+        self.partialOutput = partialOutput
     }
 
     /// Prompt'un kart üzerinde gösterilecek kısaltılmış hali (40 karakter).

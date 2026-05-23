@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import PixelBackends
+import PixelComputerUse
 import PixelCore
 import PixelMCPServer
 import PixelSubagent
@@ -27,6 +28,10 @@ public actor ControlSocketServer {
     /// `dispatch_subagent` eski stateless yola düşer (her request fresh
     /// `CLIDetector` + `SubagentRunner`). Test target için backwards compat.
     private var manager: SubagentManager?
+
+    /// Computer use facade — lazily oluşturulur (ADR-0026). Bridge handler'da
+    /// `ui_*` çağrılarında kullanılır.
+    private lazy var computer = PixelComputerUse()
 
     public init(socketPath: String = BridgePaths.defaultSocketPath()) {
         self.socketPath = socketPath
@@ -173,9 +178,141 @@ public actor ControlSocketServer {
         case "dispatch_subagent":
             return await dispatchSubagent(request.arguments)
 
+        case "ui_query":
+            return await uiQuery(request.arguments)
+
+        case "ui_click":
+            return await uiClick(request.arguments)
+
+        case "ui_type":
+            return await uiType(request.arguments)
+
+        case "ui_screenshot":
+            return await uiScreenshot(request.arguments)
+
         default:
             return .failure("Bilinmeyen bridge tool: \(request.tool)")
         }
+    }
+
+    // MARK: - Computer use bridge handlers (ADR-0026)
+
+    private func uiQuery(_ args: JSONValue) async -> BridgeResponse {
+        guard let queryArg = args["query"] else {
+            return .failure("`query` parametresi zorunlu.")
+        }
+        do {
+            let query = try Self.decodeUIQuery(from: queryArg)
+            let elements = try await computer.query(query)
+            let payload = try Self.encodeJSON(elements)
+            return .success(payload)
+        } catch let error as ComputerUseError {
+            return .failure(error.errorDescription ?? "\(error)")
+        } catch {
+            return .failure("ui_query: \(error.localizedDescription)")
+        }
+    }
+
+    private func uiClick(_ args: JSONValue) async -> BridgeResponse {
+        guard let queryArg = args["query"] else {
+            return .failure("`query` parametresi zorunlu.")
+        }
+        let count: Int = {
+            if case .int(let n) = args["count"], n > 0 { return n }
+            return 1
+        }()
+        do {
+            let query = try Self.decodeUIQuery(from: queryArg)
+            let element = try await computer.click(query, count: count)
+            let payload = try Self.encodeJSON(element)
+            return .success(payload)
+        } catch let error as ComputerUseError {
+            return .failure(error.errorDescription ?? "\(error)")
+        } catch {
+            return .failure("ui_click: \(error.localizedDescription)")
+        }
+    }
+
+    private func uiType(_ args: JSONValue) async -> BridgeResponse {
+        guard let text = args["text"]?.stringValue else {
+            return .failure("`text` parametresi zorunlu.")
+        }
+        let intoQuery: UIQuery?
+        if let intoArg = args["into"] {
+            do {
+                intoQuery = try Self.decodeUIQuery(from: intoArg)
+            } catch {
+                return .failure("`into` parse edilemedi: \(error.localizedDescription)")
+            }
+        } else {
+            intoQuery = nil
+        }
+        do {
+            try await computer.type(text, into: intoQuery)
+            return .success(.string("Yazıldı (\(text.count) karakter)."))
+        } catch let error as ComputerUseError {
+            return .failure(error.errorDescription ?? "\(error)")
+        } catch {
+            return .failure("ui_type: \(error.localizedDescription)")
+        }
+    }
+
+    private func uiScreenshot(_ args: JSONValue) async -> BridgeResponse {
+        let target: ScreenshotTarget
+        switch args["target"]?.stringValue {
+        case "window":
+            guard let bid = args["bundle_id"]?.stringValue else {
+                return .failure("target=window iken `bundle_id` zorunlu.")
+            }
+            target = .window(bundleID: bid)
+        case "all_displays":
+            target = .allDisplays
+        default:
+            target = .activeDisplay
+        }
+        do {
+            let result = try await computer.screenshot(of: target)
+            // PNG'i base64 olarak göm — MCP image content shape'i Faz 2 (şu an text).
+            let base64 = result.pngData.base64EncodedString()
+            let payload: JSONValue = .object([
+                "format": .string("png"),
+                "pixel_width": .int(result.pixelWidth),
+                "pixel_height": .int(result.pixelHeight),
+                "logical_frame": .object([
+                    "x": .double(result.logicalFrame.x),
+                    "y": .double(result.logicalFrame.y),
+                    "width": .double(result.logicalFrame.width),
+                    "height": .double(result.logicalFrame.height),
+                ]),
+                "bundle_id": result.bundleID.map { .string($0) } ?? .null,
+                "png_base64": .string(base64),
+            ])
+            return .success(payload)
+        } catch let error as ComputerUseError {
+            return .failure(error.errorDescription ?? "\(error)")
+        } catch {
+            return .failure("ui_screenshot: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - JSON ↔ Codable bridge
+
+    /// `JSONValue` → `Codable` decode (Foundation JSON üzerinden round-trip).
+    private static func decodeUIQuery(from value: JSONValue) throws -> UIQuery {
+        let data = try JSONEncoder().encode(value)
+        // MCP JSON snake_case kullanıyor; Codable default match için CodingKeys
+        // veya snake_case stratejisi gerekiyor. UIQuery alanları zaten camelCase
+        // → convertFromSnakeCase strategy ile bundle_id → bundleID otomatik.
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(UIQuery.self, from: data)
+    }
+
+    private static func encodeJSON<T: Encodable>(_ value: T) throws -> JSONValue {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let data = try encoder.encode(value)
+        return try JSONDecoder().decode(JSONValue.self, from: data)
     }
 
     /// MCP üzerinden gelen `dispatch_subagent` çağrısı.

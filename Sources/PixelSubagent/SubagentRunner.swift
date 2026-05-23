@@ -1,10 +1,22 @@
 import Foundation
 import PixelCore
 
+/// Bir subagent çalışması sırasında dış dünyaya yayınlanan olaylar.
+///
+/// `runStreaming` AsyncStream'inde sırasıyla yayınlanır:
+/// 1. Sıfır veya daha fazla `.chunk(String)` — backend'den gelen partial output.
+/// 2. Tek bir terminal `.finished(SubagentResult)` — completed/budgetExceeded/cancelled/failed.
+public enum SubagentEvent: Sendable, Equatable {
+    case chunk(String)
+    case finished(SubagentResult)
+}
+
 /// Tek-turlu (one-shot) subagent çalıştırıcısı.
 ///
-/// Bir prompt'u verilen `ChatBackend`'e gönderir, budget içinde tamamlanırsa
-/// `.completed`, aksi halde `.budgetExceeded` / `.cancelled` / `.failed` döner.
+/// İki API:
+/// - `run(prompt:)` — sadece final `SubagentResult` döndürür (backwards compat).
+/// - `runStreaming(prompt:)` — AsyncStream<SubagentEvent>; UI'ya canlı partial output
+///   akıtmak için.
 ///
 /// **Mimari notlar:**
 /// - Backend ve watchdog `withTaskGroup` ile yarışır; ilk biten kazanır.
@@ -28,10 +40,51 @@ public actor SubagentRunner {
         self.budget = budget
     }
 
+    /// Backwards-compatible API. İçeride streaming çalışır ama sadece final sonuç döner.
     public func run(
         prompt: String,
         system: String? = nil,
         options: ChatOptions = ChatOptions()
+    ) async -> SubagentResult {
+        await runInternal(prompt: prompt, system: system, options: options, onChunk: nil)
+    }
+
+    /// Streaming API — caller her chunk için event alır, terminal event'te
+    /// `SubagentResult` gömülü olarak gelir. Stream her zaman tam olarak bir
+    /// `.finished` event ile biter.
+    ///
+    /// `nonisolated` — caller actor await'i olmadan stream döndürür; gerçek iş
+    /// içeride Task spawn edip `runInternal`'ı çağırır.
+    public nonisolated func runStreaming(
+        prompt: String,
+        system: String? = nil,
+        options: ChatOptions = ChatOptions()
+    ) -> AsyncStream<SubagentEvent> {
+        AsyncStream(SubagentEvent.self) { continuation in
+            let task = Task {
+                let result = await self.runInternal(
+                    prompt: prompt,
+                    system: system,
+                    options: options,
+                    onChunk: { chunk in
+                        continuation.yield(.chunk(chunk))
+                    }
+                )
+                continuation.yield(.finished(result))
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Hem `run` hem `runStreaming` için ortak çalıştırıcı. `onChunk` `nil` ise
+    /// chunk'lar yalnız OutputBuffer'a yazılır; `runStreaming` durumunda her
+    /// chunk için event yayını yapar.
+    private func runInternal(
+        prompt: String,
+        system: String?,
+        options: ChatOptions,
+        onChunk: (@Sendable (String) -> Void)?
     ) async -> SubagentResult {
         let start = Date()
         let buffer = OutputBuffer()
@@ -50,7 +103,8 @@ public actor SubagentRunner {
                         options: options,
                         budget: budget,
                         buffer: buffer,
-                        start: start
+                        start: start,
+                        onChunk: onChunk
                     )
                 }
 
@@ -97,7 +151,8 @@ public actor SubagentRunner {
         options: ChatOptions,
         budget: Budget,
         buffer: OutputBuffer,
-        start: Date
+        start: Date,
+        onChunk: (@Sendable (String) -> Void)?
     ) async -> SubagentResult {
         let userMessage = Message(role: .user, text: prompt)
         do {
@@ -113,6 +168,7 @@ public actor SubagentRunner {
                 switch delta {
                 case .textChunk(let chunk):
                     await buffer.append(chunk)
+                    onChunk?(chunk)
                     if let maxBytes = budget.maxOutputBytes {
                         let snap = await buffer.snapshot()
                         if snap.bytes > maxBytes {

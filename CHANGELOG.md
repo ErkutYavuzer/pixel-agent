@@ -8,7 +8,55 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: Subagent Faz 4+ (streaming partial output + multi-turn workflow + settings UI), App Store signing.
+- v0.2 kalan: PixelComputerUse Faz 3 (fuzzy/chained query DSL, IME-aware text injection) + Faz 4 (Set-of-Mark visual annotation); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+
+## [0.2.12] — 2026-05-23
+
+**PixelComputerUse Faz 1+2 + ToolArbiter implementasyonu.** pixel artık AX-first hybrid yaklaşımıyla macOS UI'sini *görüyor* ve fareyi/klavyeyi *tutuyor*. Sıfır harici dep — sadece `ApplicationServices` + `CoreGraphics` + `ScreenCaptureKit`. 4 yeni MCP tool (`ui_query` / `ui_click` / `ui_type` / `ui_screenshot`) Plan Mode-aware ve `ToolArbiter.shared` ile serialize. ADR-0005'in koda inişi. **315 test yeşil** (+65). Breaking change yok.
+
+### Added — PixelComputerUse Faz 1+2 (23 May 2026)
+- **`PixelComputerUse`** yeni library (`Sources/PixelComputerUse/`, 7 dosya) — `actor PixelComputerUse` façade: `query / click / type / screenshot`. Sıfır external dep, sadece `ApplicationServices` (AX) + `CoreGraphics` (CGEvent) + `ScreenCaptureKit` (SCScreenshotManager) + `AppKit`. iOS'ta API yüzeyi compile eder ama metodlar `ComputerUseError.unsupported("iOS")` fırlatır.
+- **`AXBridge`** actor — `ApplicationServices` C API wrap. `UIQuery` (role + title + identifier + matchMode) ile AX ağacı traverse + match.
+- **`PointerControl`** — `CGEvent` mouse click (single/double/triple) + keyboard type. v0.2.12'de `ToolArbiter.shared.with([.pointer])` ile serialize (Faz 2, ADR-0027).
+- **`ScreenshotCapture`** — `SCScreenshotManager` wrap, `ScreenshotTarget` = `.activeDisplay` / `.allDisplays` / `.app(bundleID:)`. PNG + base64 metadata.
+- **`ComputerUsePermissions`** — `AXIsProcessTrusted()` + `CGPreflightScreenCaptureAccess()` silent check; `requestAccessibility(prompt: true)` System Settings deep-link. `preflight()` ve `status()` her ikisini birden kontrol eder.
+- **`UIQuery` + `UIElement` + `Match`** value-type'lar, `Sendable + Codable` — MCP JSON üzerinden geçirilebilir, in-process'te aynı API.
+- **`ComputerUseError`** — `accessibilityNotAuthorized` / `screenRecordingNotAuthorized` / `noMatch(UIQuery)` / `ambiguousMatch(UIQuery, count:)` / `axCallFailed(String)` / `unsupported(String)`.
+- **`PermissionsView`** (`Sources/PixelMacApp/PermissionsView.swift`) — SwiftUI sheet: iki izin durumu (yeşil/kırmızı badge), eksik olanlar için "System Settings'i aç" butonu (`x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility` / `...?Privacy_ScreenCapture` deep-link).
+- **PixelMacApp top bar** `lock.shield` badge — `ComputerUsePermissions.status().allGranted` ise yeşil, değilse kırmızı; tap → `PermissionsView`.
+
+### Added — MCP `ui_*` tool'lar (Faz 2)
+- **`ui_query`** — `UIQuery` JSON → `[UIElement]` JSON. Plan Mode'da çalışır (read-only).
+- **`ui_click`** — query → tek match → tıkla. 0/≥2 match'te yapısal hata. Plan Mode'da `planModeGuard` blokluyor.
+- **`ui_type`** — opsiyonel `into` query ile focus + text inject. Plan Mode'da blokluyor.
+- **`ui_screenshot`** — `target` (`.activeDisplay` / `.allDisplays` / bundle ID) → PNG bytes + base64. Plan Mode'da çalışır.
+- BuiltInTools.makeRegistry artık **13 tool** döner (5 saf-data + 4 bridge + 4 ui_*).
+- `ControlSocketServer` dispatch handler'ları ui_* tool'ları için ekledi (ADR-0018 bridge pattern). Standalone `pixel-mcp-server` ui_* çağrılırsa "PixelAgent.app çalışıyor mu?" hatası döner.
+- **Plan Mode env guard** — `PIXEL_PLAN_MODE=1` set ise `ui_click` / `ui_type` server tarafında bloklanır; `ui_query` / `ui_screenshot` her durumda çalışır. `PlanModeGuardTests` (Faz 2, 4 yeni test).
+
+### Added — `ToolArbiter` implementasyonu (ADR-0005 → koda)
+- **`PixelCore.ToolArbiter`** actor — process-global `shared` singleton (ADR-0009 istisnası, gerçek fiziksel kaynak mutex). `Resource` enum 6 case: `pointer / screen / clipboard / mic / speaker / fileWrite(path:)` — `Comparable` (canonical sıralama, deadlock-free multi-acquire).
+- **API:** `acquire(_:) async` (FIFO waiter queue), `release(_:)`, `with(_:body:)` (exception-safe defer). Inspection: `currentlyLocked()` + `waiterCount()` test/observability için.
+- **`PointerControl` entegrasyonu:** `click` ve `typeText` artık `ToolArbiter.shared.with([.pointer])` ile sarıldı. Paralel subagent (cap=3, ADR-0024) iki `ui_click` yapsa fare serialize edilir.
+- Single-agent MVP'de overhead pratik olarak sıfır (acquire her zaman anında döner).
+
+### Fixed
+- **Subagent streaming cancel deadlock** (`Sources/PixelMacApp/Subagent/SubagentManager.swift`) — streaming refactor sonrası `cancel(_:)` outer Task'i iptal edince `for await event in runner.runStreaming(...)` döngüsü `.finished` event'i tüketmeden çıkıyor, `finalize()` çağrılmıyor, `dispatchAndWait` continuation leak olup `testCancelTransitionsToCancelled` sonsuza kadar asılıyordu. Defensive synthetic `.cancelled` finalize eklendi (loop sonrası `didFinalize` check).
+- **`ToolRegistryTests`** sayım test'leri yeni 4 `ui_*` tool için güncellendi (9 → 13).
+
+### Changed
+- **`SubagentRunner`** streaming API'si (Faz 4 başlangıcı): `runStreaming(prompt:) -> AsyncStream<SubagentEvent>` yeni; eski `run(prompt:) -> SubagentResult` backwards-compat tutuldu (içeride `runInternal` ile birleşti, `onChunk` callback). `SubagentEvent` enum: `.chunk(String)` + `.finished(SubagentResult)`. UI artık her chunk için partial output görüyor.
+- **`SubagentManager`** streaming consume + `appendChunk` MainActor mutation eklendi. `SubagentSession.partialOutput` artık canlı dolar.
+
+### Tests
+- **`PixelComputerUseTests`** 5 dosya, 43 yeni test: `AXMatchTests`, `ComputerUseErrorTests`, `PermissionsTests`, `PixelComputerUseTests`, `UITypesTests`. Permission tier'ları için bypass policy + status round-trip.
+- **`ToolArbiterTests`** — 13 yeni test: acquire/release temel, FIFO waiter ordering, multi-resource canonical sort, `with(_:body:)` exception-safe rollback, `fileWrite(path:)` path-bazlı paralelizm, `currentlyLocked()` + `waiterCount()` inspection.
+- **`PlanModeGuardTests`** — 5 yeni test: env var read, ui_click/ui_type bloklanması, ui_query/ui_screenshot allowlist.
+- **`SubagentRunnerTests`** — 3 yeni streaming test (`runStreaming` chunk → finished ordering, budget exceeded terminal, CLI exit without `.done`).
+- **`SubagentManagerTests`** — 1 yeni test (`testPartialOutputBuildsUpDuringStreaming`).
+- Toplam test: **250 → 315** yeşil (+65). 0 regression.
+- [ADR-0026](docs/adr/0026-pixel-computer-use.md): AX-first hybrid mimari + 3 katman + Plan Mode entegrasyonu + iOS no-op stub.
+- [ADR-0027](docs/adr/0027-toolarbiter-implementation.md): ADR-0005'in koda inişi + Resource enum + waiter queue + PointerControl wire-up.
 
 ## [0.2.11] — 2026-05-22
 

@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "PixelLAN", targets: ["PixelLAN"]),
         .library(name: "PixelSubagent", targets: ["PixelSubagent"]),
         .library(name: "PixelMCPServer", targets: ["PixelMCPServer"]),
+        .library(name: "PixelComputerUse", targets: ["PixelComputerUse"]),
         .executable(name: "PixelMacApp", targets: ["PixelMacApp"]),
         .executable(name: "pixel-mcp-server", targets: ["pixel-mcp-server"]),
     ],
@@ -30,6 +31,7 @@ let package = Package(
         .target(name: "PixelLAN", dependencies: ["PixelRemote"]),
         .target(name: "PixelSubagent", dependencies: ["PixelCore"]),
         .target(name: "PixelMCPServer"),
+        .target(name: "PixelComputerUse", dependencies: ["PixelCore"]),
         .executableTarget(
             name: "pixel-mcp-server",
             dependencies: ["PixelMCPServer"]
@@ -46,6 +48,7 @@ let package = Package(
                 "PixelLAN",
                 "PixelSubagent",
                 "PixelMCPServer",
+                "PixelComputerUse",
             ]
         ),
         .testTarget(name: "PixelCoreTests", dependencies: ["PixelCore"]),
@@ -57,6 +60,7 @@ let package = Package(
         .testTarget(name: "PixelLANTests", dependencies: ["PixelLAN"]),
         .testTarget(name: "PixelSubagentTests", dependencies: ["PixelSubagent"]),
         .testTarget(name: "PixelMCPServerTests", dependencies: ["PixelMCPServer"]),
+        .testTarget(name: "PixelComputerUseTests", dependencies: ["PixelComputerUse"]),
         .testTarget(name: "PixelMacAppTests", dependencies: ["PixelMacApp", "PixelMCPServer"]),
     ],
     swiftLanguageModes: [.v6]

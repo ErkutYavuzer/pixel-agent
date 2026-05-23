@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.11-blue)
-![tests](https://img.shields.io/badge/tests-250%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.12-blue)
+![tests](https://img.shields.io/badge/tests-315%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (9 tool) · Subagent UI paneli (paralel cap=3) · LAN-first Bonjour transport (iOS) · 250 test yeşil · 25 ADR</em>
+  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (13 tool, 4 yeni `ui_*` AX-first) · Subagent UI paneli (paralel cap=3) · LAN-first Bonjour transport (iOS) · 315 test yeşil · 27 ADR</em>
 </p>
 
 <details>
@@ -142,7 +142,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.11` (22 May 2026) · **250 test** yeşil · **25 ADR** · 9 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
+**Versiyon:** `v0.2.12` (23 May 2026) · **315 test** yeşil · **27 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
 
 ### Sürüm geçmişi
 
@@ -160,6 +160,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.9` | 22 May | Hotfix: Info.plist `NSLocalNetworkUsageDescription` + `NSBonjourServices` + repo public | 235 |
 | `v0.2.10` | 22 May | Subagent Faz 3 — UI panel + paralel cap=3 + MCP/UI birleşik bridge + cancel bug fix | 244 |
 | `v0.2.11` | 22 May | LAN Faz 4 — iOS LAN-first default + Bonjour TXT record + transport indicator | 250 |
+| `v0.2.12` | 23 May | PixelComputerUse Faz 1+2 (AX-first hybrid, 4 `ui_*` tool) + ToolArbiter implementasyonu + Subagent streaming cancel fix | 315 |
 
 ### v0.2 yol haritası
 
