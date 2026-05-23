@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ChatComposer: View {
@@ -14,6 +15,10 @@ struct ChatComposer: View {
     /// `true` ise subagent butonu disabled — havuz dolu olduğunda kullanılır.
     var subagentDisabled: Bool = false
 
+    /// A8: TextField fokusta mı? `@FocusState` SwiftUI'ın native fokus
+    /// takibi — animate ile birlikte halo'yu yumuşatır.
+    @FocusState private var isComposerFocused: Bool
+
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -22,12 +27,22 @@ struct ChatComposer: View {
         planMode ? "Plan modu — sadece okuma/araştırma" : "Mesaj yaz..."
     }
 
+    /// Saf helper sonucu — overlay stroke rengini + kalınlığını verir.
+    private var haloStyle: ComposerHaloStyle {
+        ComposerHaloStyle.resolve(
+            planMode: planMode,
+            isFocused: isComposerFocused,
+            isStreaming: isStreaming
+        )
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             TextField(placeholder, text: $draft, axis: .vertical)
+                .focused($isComposerFocused)
                 .lineLimit(1...5)
                 .textFieldStyle(.roundedBorder)
-                .onSubmit { if canSend { onSend() } }
+                .onSubmit { if canSend { performSend() } }
                 // **v0.2.20:** Shift+Enter → newline (multi-line composer). Plain
                 // Enter zaten `.onSubmit` ile submit ediyor; bu handler sadece
                 // shift basılıyken devreye girer ve newline append eder. SwiftUI
@@ -42,19 +57,20 @@ struct ChatComposer: View {
                 }
                 .disabled(isStreaming)
                 .overlay {
-                    if planMode {
+                    if haloStyle.isVisible {
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(.orange.opacity(0.55), lineWidth: 1.5)
+                            .stroke(haloStyle.strokeColor, lineWidth: haloStyle.lineWidth)
                             .allowsHitTesting(false)
                     }
                 }
+                .animation(.easeInOut(duration: 0.18), value: haloStyle)
 
             if isStreaming {
                 Button("Durdur", action: onCancel)
                     .keyboardShortcut(.escape, modifiers: [])
             } else {
                 if let dispatch = onDispatchSubagent {
-                    Button(action: dispatch) {
+                    Button(action: { performHaptic(); dispatch() }) {
                         Image(systemName: "person.2.wave.2")
                     }
                     .buttonStyle(.borderless)
@@ -64,11 +80,24 @@ struct ChatComposer: View {
                           ? "Subagent havuzu dolu (3/3 aktif)"
                           : "Arka plan subagent başlat (⌘⇧Return)")
                 }
-                Button("Gönder", action: onSend)
+                Button("Gönder", action: performSend)
                     .keyboardShortcut(.return)
                     .disabled(!canSend)
             }
         }
         .padding()
+    }
+
+    /// A8: send tetiklemeden önce hafif `.alignment` haptic — kullanıcı
+    /// trackpad'inde "yolladım" hissi alır. Onsubmit ve Gönder butonu
+    /// her ikisi de buradan geçer.
+    private func performSend() {
+        guard canSend else { return }
+        performHaptic()
+        onSend()
+    }
+
+    private func performHaptic() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 }

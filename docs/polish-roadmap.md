@@ -89,7 +89,7 @@ C7, B6, B3, A8, C10, C2/C3 + sprint 1 follow-up'lar.
 | ✅ | C7 | Daimi connection pill |
 | ✅ | B6 | Quick-actions menu (copy last) |
 | ✅ | B3 | Conversation export (markdown/JSON) |
-| ⏳ | A8 | Composer focus halo + haptic |
+| ✅ | A8 | Composer focus halo + haptic |
 | ⏳ | C10 | Subagent cap-reached banner |
 | ⏳ | C2/C3 | Screenshot in-chat + SoM overlay UI |
 
