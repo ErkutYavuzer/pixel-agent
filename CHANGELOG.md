@@ -8,7 +8,27 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: PixelComputerUse Faz 3b (modifier flags + IME injection verification + window content-area crop) + Faz 4 (Set-of-Mark visual annotation); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+- v0.2 kalan: PixelComputerUse Faz 3c (window content-area screenshot crop) + Faz 4 (Set-of-Mark visual annotation); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+
+## [0.2.14] — 2026-05-23
+
+**PixelComputerUse Faz 3b: modifier flag combinations + IME-aware text injection.** ⌘/⌥/⇧/⌃-click artık MCP üzerinden çağrılabilir; Türkçe karakter, emoji (skin-tone, ZWJ) ve birleşik diakritik text injection'da tek keypress olarak gönderiliyor. **362 test yeşil** (+24). Breaking change yok.
+
+### Added — Faz 3b (23 May 2026)
+- **`ModifierFlags`** (`Sources/PixelComputerUse/PointerControl.swift`) — `OptionSet`, Sendable + Codable: `.command / .option / .shift / .control`. `parse(_ names: [String])` kanonik isim + alias (cmd/opt/alt/ctrl) + glyph (⌘/⌥/⇧/⌃) kabul eder; bilinmeyen anahtarlar silently atlanır.
+- **`PointerControl.click(at:count:modifiers:)`** — `event.flags = modifiers.cgEventFlags`; tek arbiter acquire altında (partial-state yok).
+- **`PixelComputerUse.click(_:count:modifiers:)`** façade extension.
+- **MCP `ui_click` schema** `modifiers: [string]` parametresi (enum: command/option/shift/control). ControlSocketServer.uiClick bridge handler `ModifierFlags.parse` ile çevirir.
+
+### Changed — IME injection
+- **`PointerControl.typeText`** artık per-`Character` (grapheme cluster) iterasyon yapar. Eski per-`Unicode.Scalar` davranışı "👋🏼" (wave + skin-tone), "👨‍👩‍👧" (ZWJ), `e\u{0301}` (combining mark) gibi multi-scalar grapheme'leri bölüyordu — text field iki ayrı karakter görüyordu. Artık her grapheme tek `CGEventKeyboardSetUnicodeString` çağrısı.
+- **`PointerControl.unicodeChunks(for:)`** `nonisolated static` saf fonksiyon — testlerden senkron çağrılabilir.
+
+### Tests
+- **`IMEChunkingTests`** — 13 yeni test: ASCII per-char, Türkçe BMP characters (ş/ğ/ü/ö/ç/ı, İ), birleşik diakritik (e + COMBINING ACUTE), basic emoji surrogate pair, emoji + skin tone (4 UTF-16 birlikte), ZWJ family emoji (8 UTF-16), multiple emoji ayrık, mixed ASCII+emoji, CJK BMP, newline.
+- **`ModifierFlagsTests`** — 11 yeni test: OptionSet temel + kombinasyon, parse kanonik/alias/glyph/mixed-case/duplicates, bilinmeyen silent skip, Codable round-trip.
+- Toplam test: **338 → 362** yeşil (+24). 0 regression.
+- [ADR-0029](docs/adr/0029-modifier-flags-and-ime.md): ModifierFlags + IME grapheme grouping + saf helper extract'i tasarımı.
 
 ## [0.2.13] — 2026-05-23
 

@@ -397,6 +397,7 @@ public enum BuiltInTools {
         description: """
             UIQuery'ye uyan tek element'i tıklar (CGEvent leftMouseDown/Up). \
             Destructive — Plan modunda kullanılmamalı. count=2 double-click. \
+            modifiers: ["command","option","shift","control"] kombinleri (⌘-click vb). \
             0 eşleşme → noMatch hatası; ≥2 → ambiguousMatch (query daraltılmalı). \
             Accessibility izni gerekir.
             """,
@@ -408,6 +409,17 @@ public enum BuiltInTools {
                     "type": .string("integer"),
                     "description": .string("Tıklama sayısı (default 1, double-click=2)."),
                 ]),
+                "modifiers": .object([
+                    "type": .string("array"),
+                    "items": .object([
+                        "type": .string("string"),
+                        "enum": .array([
+                            .string("command"), .string("option"),
+                            .string("shift"), .string("control"),
+                        ]),
+                    ]),
+                    "description": .string("Tıklama sırasında basılı tutulacak modifier tuşlar (Faz 3b)."),
+                ]),
             ]),
             "required": .array([.string("query")]),
         ]),
@@ -418,6 +430,7 @@ public enum BuiltInTools {
             }
             var args: [String: JSONValue] = ["query": query]
             if let count = params?["count"] { args["count"] = count }
+            if let mods = params?["modifiers"] { args["modifiers"] = mods }
             return await callBridge(tool: "ui_click", arguments: .object(args))
         }
     )

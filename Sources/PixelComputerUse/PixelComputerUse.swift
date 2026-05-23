@@ -17,7 +17,7 @@ import Foundation
 ///
 /// İlgili ADR: [`docs/adr/0026-pixel-computer-use.md`](../../../docs/adr/0026-pixel-computer-use.md)
 public actor PixelComputerUse {
-    public static let version = "0.2.0"
+    public static let version = "0.2.14"
 
     /// Permission preflight stratejisi (test için DI).
     public enum PermissionPolicy: Sendable {
@@ -46,8 +46,11 @@ public actor PixelComputerUse {
 
     /// Query'ye uyan tek element'i tıklar. 0 match → `.noMatch`; ≥2 match →
     /// `.ambiguousMatch`; tıklama başarısızlığı → `.axCallFailed`.
+    ///
+    /// **Faz 3b (ADR-0029):** `modifiers` ile cmd/opt/shift/ctrl-click gönderebilir
+    /// (örn. `[.command]` = ⌘-click).
     @discardableResult
-    public func click(_ q: UIQuery, count: Int = 1) async throws -> UIElement {
+    public func click(_ q: UIQuery, count: Int = 1, modifiers: ModifierFlags = []) async throws -> UIElement {
         try await ensureAccessibility()
         let elements = try await axBridge.find(q)
         switch elements.count {
@@ -55,7 +58,7 @@ public actor PixelComputerUse {
             throw ComputerUseError.noMatch(query: q)
         case 1:
             let target = elements[0]
-            try await PointerControl.click(at: target.frame.center, count: count)
+            try await PointerControl.click(at: target.frame.center, count: count, modifiers: modifiers)
             return target
         default:
             throw ComputerUseError.ambiguousMatch(query: q, count: elements.count)

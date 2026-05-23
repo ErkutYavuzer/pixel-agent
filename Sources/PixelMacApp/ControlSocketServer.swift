@@ -224,9 +224,16 @@ public actor ControlSocketServer {
             if case .int(let n) = args["count"], n > 0 { return n }
             return 1
         }()
+        // **Faz 3b (ADR-0029):** modifiers JSON array of strings ("command",
+        // "option", "shift", "control"; aliases & glyphs de kabul edilir).
+        let modifiers: ModifierFlags = {
+            guard case .array(let arr) = args["modifiers"] else { return [] }
+            let names = arr.compactMap { $0.stringValue }
+            return ModifierFlags.parse(names)
+        }()
         do {
             let query = try Self.decodeUIQuery(from: queryArg)
-            let element = try await computer.click(query, count: count)
+            let element = try await computer.click(query, count: count, modifiers: modifiers)
             let payload = try Self.encodeJSON(element)
             return .success(payload)
         } catch let error as ComputerUseError {
