@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.22-blue)
-![tests](https://img.shields.io/badge/tests-430%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.23-blue)
+![tests](https://img.shields.io/badge/tests-431%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -142,7 +142,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.22` (23 May 2026) · **430 test** yeşil · **31 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
+**Versiyon:** `v0.2.23` (23 May 2026) · **431 test** yeşil · **31 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
 
 ### Sürüm geçmişi
 
@@ -171,6 +171,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.20` | 23 May | UX: ChatComposer Shift+Enter = newline (plain Enter submit korundu) | 418 |
 | `v0.2.21` | 23 May | Hotfix: Gemini "root directory" uyarısı + ModelNotFound — dedicated cwd workspace + default `gemini-2.5-flash` | 420 |
 | `v0.2.22` | 23 May | UI: per-backend model picker (Menu + catalog + özel ID sheet + UserDefaults persist) | 430 |
+| `v0.2.23` | 23 May | Gemini catalog güncellendi: `gemini-3.5-flash` (default) + `gemini-3.1-pro` öncelikli | 431 |
 
 ### v0.2 yol haritası
 

@@ -48,7 +48,10 @@ public struct CLIBackend: ChatBackend {
             hardcoded = "gpt-5.5"
         case .gemini:
             envKey = "PIXEL_GEMINI_MODEL"
-            hardcoded = "gemini-2.5-flash"
+            // Kullanıcı tercihi: 3.5 Flash (v0.2.23). v0.2.21'de CLI'nin tanıdığı
+            // sürümde yoktu; ilerlemiş bir CLI sürümünde mevcut olabilir. Catalog'da
+            // 2.5/2.0/1.5 family yedek olarak var — picker'dan seçilebilir.
+            hardcoded = "gemini-3.5-flash"
         }
         if let override = ProcessInfo.processInfo.environment[envKey],
            !override.trimmingCharacters(in: .whitespaces).isEmpty {

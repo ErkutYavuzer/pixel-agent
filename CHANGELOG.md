@@ -10,6 +10,18 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.23] — 2026-05-23
+
+**Gemini catalog güncellendi: 3.5 Flash + 3.1 Pro öncelikli.** Kullanıcı tercihi doğrultusunda hardcoded default `gemini-3.5-flash` (eski 2.5-flash'tan), catalog ilk iki sırada 3.x family. 2.5/2.0/1.5 yedek olarak listede kalmaya devam. **431 test yeşil** (+1). Breaking change yok.
+
+### Changed
+- **`ModelCatalog.knownModels(.gemini)`** sıralaması güncellendi: `gemini-3.5-flash` → `gemini-3.1-pro` → `gemini-2.5-flash` → `gemini-2.5-pro` → `gemini-2.0-flash` → `gemini-2.0-flash-exp` → `gemini-1.5-flash` → `gemini-1.5-pro` (8 model).
+- **`CLIBackend.defaultModelID(.gemini)`** hardcoded `gemini-2.5-flash` → `gemini-3.5-flash`. UserDefaults boşsa kullanıcı 3.5 Flash görür; UI picker'dan istediğine geçer.
+
+### Tests
+- **`ModelCatalogTests`** +1 test (`testGeminiCatalogPrioritizes3xVersions`) — 3.5-flash ve 3.1-pro index'i 2.5-flash'tan küçük olmalı.
+- Toplam test: **430 → 431** yeşil (+1).
+
 ## [0.2.22] — 2026-05-23
 
 **Per-backend model picker UI.** Toolbar'da her backend için Menu (catalog + Özel ID… + Varsayılana sıfırla); seçim UserDefaults'ta persiste edilir. Tek mode aktif backend için, Çift mode hem sol hem sağ için ayrı picker. **430 test yeşil** (+10). Breaking change yok.

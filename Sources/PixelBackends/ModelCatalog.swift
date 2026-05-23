@@ -42,10 +42,12 @@ public enum ModelCatalog {
                 "o1-mini",
             ]
         case .gemini:
-            // Google Gemini family — 3.5 Flash henüz Google API'de yok
-            // (v0.2.21'de doğrulandı); listede tutuluyor ki kullanıcı denerse
-            // ne olduğunu görsün.
+            // Google Gemini family — kullanıcı tercihi: 3.5 Flash + 3.1 Pro ilk
+            // sırada (v0.2.23'te eklendi). 2.5/2.0/1.5 family fallback için
+            // listede; CLI sürümü 3.x'i tanımıyorsa kullanıcı buradan dener.
             return [
+                "gemini-3.5-flash",
+                "gemini-3.1-pro",
                 "gemini-2.5-flash",
                 "gemini-2.5-pro",
                 "gemini-2.0-flash",
