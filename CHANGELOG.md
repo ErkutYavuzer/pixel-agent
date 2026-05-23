@@ -8,7 +8,27 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: PixelComputerUse Faz 3c (window content-area screenshot crop) + Faz 4 (Set-of-Mark visual annotation); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+- v0.2 kalan: PixelComputerUse Faz 4 (Set-of-Mark visual annotation) + Faz 5 (AX-based otomatik titlebar/toolbar offset); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+
+## [0.2.15] — 2026-05-23
+
+**PixelComputerUse Faz 3c: window content-area screenshot crop.** Vision model artık titlebar/toolbar token'larından kurtuluyor — caller `ui_screenshot(target="window_content", bundle_id="...", titlebar_offset=28)` ile pencerenin sadece içeriğini alır. **382 test yeşil** (+20). Breaking change yok.
+
+### Added — Faz 3c (23 May 2026)
+- **`ScreenshotTarget.windowContent(bundleID:String, titlebarOffset:Double)`** yeni case. `ScreenshotTarget.defaultTitlebarOffset = 28` (standart macOS titlebar).
+- **`WindowCrop`** (`Sources/PixelComputerUse/WindowCrop.swift`) — saf helper enum: `computeCropRect(...)` (retina scale + pixel offset) ve `computeLogicalFrame(...)` (yeni metadata frame). ScreenCaptureKit bağımsız, deterministic, unit-test friendly.
+- **`ScreenshotCapture.capture`** artık titlebarOffset varsa `CGImage.cropping(to:)` ile post-process kesim yapar; `ScreenshotResult.logicalFrame` da o oranda kayar. `resolve(target:)` imzası 4-tuple döner: `(filter, frame, bundleID, titlebarOffset?)`.
+- **MCP `ui_screenshot` schema**:
+  - `target` enum'una `window_content` eklendi.
+  - `titlebar_offset: number` opsiyonel (default 28).
+  - `description`'a "toolbar varsa 64-72 deneyin" rehberi.
+- **`ControlSocketServer.uiScreenshot`** bridge `"window_content"` target string'ini ScreenshotTarget.windowContent'e map eder; `titlebar_offset` JSON'da yoksa `defaultTitlebarOffset` kullanır.
+
+### Tests
+- **`WindowCropTests`** — 13 yeni test: 1x/2x/3x retina scale, 28pt/72pt offset, zero/negative/oversize offset edge cases, logical frame shift, clamp.
+- **`ScreenshotTargetTests`** — 7 yeni test: tüm 4 case için Codable round-trip, custom offset, default 28pt sabiti, `window` vs `windowContent` distinct.
+- Toplam test: **362 → 382** yeşil (+20). 0 regression.
+- [ADR-0030](docs/adr/0030-window-content-crop.md): post-process crop vs `SCStreamConfiguration.sourceRect` trade-off + AX-based offset alternatifi rasyoneli.
 
 ## [0.2.14] — 2026-05-23
 

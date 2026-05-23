@@ -254,8 +254,17 @@ public enum ScreenshotTarget: Sendable, Codable, Equatable {
     case allDisplays
     /// Frontmost app'ın bulunduğu display (default).
     case activeDisplay
-    /// Belirli bundleID'li uygulamanın frontmost penceresi.
+    /// Belirli bundleID'li uygulamanın frontmost penceresi (titlebar dahil).
     case window(bundleID: String)
+    /// **Faz 3c (ADR-0030):** Pencerenin titlebar (ve opsiyonel toolbar) bölgesi
+    /// kesilmiş hali. `titlebarOffset` üst kenardan atılan logical point sayısı.
+    /// Standart macOS titlebar'ı için `.defaultTitlebarOffset` (28pt). Toolbar
+    /// + titlebar için tipik 64-72pt — uygulamaya göre değişir.
+    case windowContent(bundleID: String, titlebarOffset: Double)
+
+    /// Standart macOS titlebar yüksekliği (logical points). `.windowContent`
+    /// default'u olarak önerilir.
+    public static let defaultTitlebarOffset: Double = 28
 }
 
 /// Capture sonucu. `pngData` PNG-encoded; MCP üzerinden base64'lenir.

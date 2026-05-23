@@ -295,6 +295,19 @@ public actor ControlSocketServer {
                 return .failure("target=window iken `bundle_id` zorunlu.")
             }
             target = .window(bundleID: bid)
+        case "window_content":
+            // **Faz 3c (ADR-0030):** titlebar kesilmiş pencere içeriği.
+            guard let bid = args["bundle_id"]?.stringValue else {
+                return .failure("target=window_content iken `bundle_id` zorunlu.")
+            }
+            let offset: Double = {
+                switch args["titlebar_offset"] {
+                case .double(let d): return d
+                case .int(let n): return Double(n)
+                default: return ScreenshotTarget.defaultTitlebarOffset
+                }
+            }()
+            target = .windowContent(bundleID: bid, titlebarOffset: offset)
         case "all_displays":
             target = .allDisplays
         default:

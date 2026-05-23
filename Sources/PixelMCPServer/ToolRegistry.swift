@@ -495,20 +495,30 @@ public enum BuiltInTools {
         description: """
             Ekran görüntüsü alır (SCScreenshotManager). Read-only — Plan modunda \
             kullanılabilir. Screen Recording izni gerekir. target: \
-            "active_display" (default) | "all_displays" | "window". window seçilirse \
-            bundle_id zorunlu. Sonuç base64-encoded PNG + pixel boyutları + logical frame.
+            "active_display" (default) | "all_displays" | "window" | "window_content". \
+            window* seçilirse bundle_id zorunlu. "window_content" ile üst kenardan \
+            titlebar_offset kadar (default 28pt) kesilir — toolbar varsa daha büyük \
+            offset verin (ör. 64-72). Sonuç base64-encoded PNG + pixel boyutları + \
+            logical frame.
             """,
         inputSchema: .object([
             "type": .string("object"),
             "properties": .object([
                 "target": .object([
                     "type": .string("string"),
-                    "enum": .array([.string("active_display"), .string("all_displays"), .string("window")]),
+                    "enum": .array([
+                        .string("active_display"), .string("all_displays"),
+                        .string("window"), .string("window_content"),
+                    ]),
                     "description": .string("Ne yakalanacak (default active_display)."),
                 ]),
                 "bundle_id": .object([
                     "type": .string("string"),
-                    "description": .string("target=window ise hedef uygulama bundle ID'si."),
+                    "description": .string("target=window | window_content ise hedef uygulama bundle ID'si."),
+                ]),
+                "titlebar_offset": .object([
+                    "type": .string("number"),
+                    "description": .string("target=window_content için üst kenardan atılan logical point (default 28). Toolbar varsa 64-72 deneyin."),
                 ]),
             ]),
         ]),
@@ -516,6 +526,7 @@ public enum BuiltInTools {
             var args: [String: JSONValue] = [:]
             if let target = params?["target"] { args["target"] = target }
             if let bid = params?["bundle_id"] { args["bundle_id"] = bid }
+            if let off = params?["titlebar_offset"] { args["titlebar_offset"] = off }
             return await callBridge(tool: "ui_screenshot", arguments: .object(args))
         }
     )

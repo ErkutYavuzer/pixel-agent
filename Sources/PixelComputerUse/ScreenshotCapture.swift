@@ -27,7 +27,7 @@ enum ScreenshotCapture {
         #if canImport(ScreenCaptureKit) && canImport(AppKit) && canImport(ImageIO)
         let content = try await fetchContent()
 
-        let (filter, logicalFrame, bundleID) = try resolve(target: target, content: content)
+        let (filter, logicalFrame, bundleID, titlebarOffset) = try resolve(target: target, content: content)
         let config = SCStreamConfiguration()
         config.width = Int(logicalFrame.width)
         config.height = Int(logicalFrame.height)
@@ -44,12 +44,37 @@ enum ScreenshotCapture {
             throw ComputerUseError.screenshotFailed(reason: "SCScreenshotManager: \(error.localizedDescription)")
         }
 
-        let pngData = try encodePNG(cgImage)
+        // **Faz 3c (ADR-0030):** `.windowContent` ise titlebar'ı kes.
+        let finalImage: CGImage
+        let finalLogicalFrame: CGRect
+        if let offset = titlebarOffset, offset > 0 {
+            guard let cropRect = WindowCrop.computeCropRect(
+                imageWidth: cgImage.width,
+                imageHeight: cgImage.height,
+                windowWidth: logicalFrame.width,
+                windowHeight: logicalFrame.height,
+                titlebarOffsetPoints: offset
+            ), let cropped = cgImage.cropping(to: cropRect) else {
+                throw ComputerUseError.screenshotFailed(
+                    reason: "Titlebar crop hesabı başarısız (offset=\(offset)pt, window=\(logicalFrame.size))"
+                )
+            }
+            finalImage = cropped
+            finalLogicalFrame = WindowCrop.computeLogicalFrame(
+                windowFrame: logicalFrame,
+                titlebarOffsetPoints: offset
+            )
+        } else {
+            finalImage = cgImage
+            finalLogicalFrame = logicalFrame
+        }
+
+        let pngData = try encodePNG(finalImage)
         return ScreenshotResult(
             pngData: pngData,
-            pixelWidth: cgImage.width,
-            pixelHeight: cgImage.height,
-            logicalFrame: CGRectBox(logicalFrame),
+            pixelWidth: finalImage.width,
+            pixelHeight: finalImage.height,
+            logicalFrame: CGRectBox(finalLogicalFrame),
             bundleID: bundleID
         )
         #else
@@ -70,12 +95,12 @@ enum ScreenshotCapture {
         }
     }
 
-    /// `ScreenshotTarget` → `SCContentFilter` + logical frame + bundleID
-    /// üçlüsü. Hata durumunda `screenshotFailed`.
+    /// `ScreenshotTarget` → `SCContentFilter` + logical frame + bundleID + (Faz 3c)
+    /// opsiyonel titlebarOffset. Hata durumunda `screenshotFailed`.
     private static func resolve(
         target: ScreenshotTarget,
         content: SCShareableContent
-    ) throws -> (SCContentFilter, CGRect, String?) {
+    ) throws -> (SCContentFilter, CGRect, String?, Double?) {
         switch target {
         case .allDisplays, .activeDisplay:
             // Aktif display: frontmost app'ın bulunduğu display (yoksa ilk).
@@ -91,14 +116,26 @@ enum ScreenshotCapture {
             }
             let filter = SCContentFilter(display: display, excludingWindows: [])
             let frame = CGRect(x: 0, y: 0, width: display.width, height: display.height)
-            return (filter, frame, nil)
+            return (filter, frame, nil, nil)
 
         case .window(let bundleID):
             guard let window = content.windows.first(where: { $0.owningApplication?.bundleIdentifier == bundleID }) else {
                 throw ComputerUseError.screenshotFailed(reason: "BundleID için pencere yok: \(bundleID)")
             }
             let filter = SCContentFilter(desktopIndependentWindow: window)
-            return (filter, window.frame, bundleID)
+            return (filter, window.frame, bundleID, nil)
+
+        case .windowContent(let bundleID, let titlebarOffset):
+            guard let window = content.windows.first(where: { $0.owningApplication?.bundleIdentifier == bundleID }) else {
+                throw ComputerUseError.screenshotFailed(reason: "BundleID için pencere yok: \(bundleID)")
+            }
+            guard titlebarOffset >= 0, titlebarOffset < window.frame.height else {
+                throw ComputerUseError.screenshotFailed(
+                    reason: "titlebar_offset (\(titlebarOffset)pt) pencere yüksekliği (\(window.frame.height)pt) içinde olmalı"
+                )
+            }
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            return (filter, window.frame, bundleID, titlebarOffset)
         }
     }
 
