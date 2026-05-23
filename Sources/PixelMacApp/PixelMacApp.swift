@@ -157,6 +157,11 @@ struct ChatHost: View {
     @State private var permissionsStatus: ComputerUsePermissions.Status = ComputerUsePermissions.status()
     @State private var incomingFromRemote: String?
     @State private var planMode: Bool = false
+    /// iOS dashboard'dan clientConfig geldiğinde 3.5s görünen banner. `nil`
+    /// olduğunda gizli. Her yeni mesaj fresh UUID alır → SwiftUI transition
+    /// re-trigger eder.
+    @State private var configToast: RemoteConfigToast?
+    @State private var configToastDismissTask: Task<Void, Never>?
     @StateObject private var remoteHost: RemoteHost
     @StateObject private var subagentManager: SubagentManager
 
@@ -290,6 +295,24 @@ struct ChatHost: View {
             executablePath: existing.executablePath,
             modelID: currentModel(for: kind)
         )
+    }
+
+    /// iOS clientConfig değişimlerinde 3.5s görünen banner. Yeni mesaj
+    /// gelirse mevcut dismiss timer'ı iptal edilir → toast yenilenir.
+    private func showConfigToast(message: String) {
+        configToastDismissTask?.cancel()
+        configToast = RemoteConfigToast(message: message)
+        configToastDismissTask = Task { [toastID = configToast?.id] in
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                // Yarış: bu task uyurken yeni bir toast gelmiş olabilir;
+                // o zaman aktif toast'un id'si değişir, eskiyi kapatmıyoruz.
+                if configToast?.id == toastID {
+                    configToast = nil
+                }
+            }
+        }
     }
 
     /// `body`'nin chat alanı — Plan Mode panelinin yanına `HStack` ile
@@ -475,6 +498,16 @@ struct ChatHost: View {
             }
             .animation(.easeInOut(duration: 0.18), value: planMode)
         }
+        .overlay(alignment: .top) {
+            if let toast = configToast {
+                RemoteConfigToastView(message: toast.message)
+                    .id(toast.id)
+                    .padding(.top, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: configToast)
         .sheet(isPresented: $showPairing) {
             PairingView(remoteHost: remoteHost)
         }
@@ -503,9 +536,20 @@ struct ChatHost: View {
 
             remoteHost.onClientConfigReceived = { backend, model, plan in
                 guard let kind = CLIKind(rawValue: backend) else { return }
+                let oldBackend = self.selectedKind.rawValue
+                let oldModel = self.currentModel(for: self.selectedKind)
+                let oldPlan = self.planMode
+
                 self.selectedKind = kind
                 self.planMode = plan
                 self.setModel(model, for: kind)
+
+                if let message = RemoteConfigToastBuilder.buildMessage(
+                    oldBackend: oldBackend, oldModel: oldModel, oldPlanMode: oldPlan,
+                    newBackend: backend, newModel: model, newPlanMode: plan
+                ) {
+                    self.showConfigToast(message: message)
+                }
             }
 
             remoteHost.onClientActionReceived = { [weak remoteHost] action, targetID in
