@@ -1,3 +1,4 @@
+import AppKit
 import PixelBackends
 import PixelCore
 import PixelMascot
@@ -10,6 +11,10 @@ struct ChatColumn: View {
     /// C9: bilinirse auth hatası tespitinde "<Backend>'a Giriş Yap" butonu
     /// için kullanılır. nil → buton gizli (eski davranış).
     var backendKind: CLIKind? = nil
+
+    /// B6: "Son yanıtı kopyala" butonunda 1.5s feedback state'i tutar.
+    /// IntegrationView / CodeBlockView ile aynı pattern.
+    @State private var didCopyLast: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,6 +30,7 @@ struct ChatColumn: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                copyLastButton
                 if showNewButton {
                     Button(action: viewModel.newConversation) {
                         Image(systemName: "plus.bubble")
@@ -94,6 +100,37 @@ struct ChatColumn: View {
             viewModel.newConversation()
         }
     }
+
+    // MARK: - Quick actions (B6)
+
+    /// Header'daki "Son yanıtı kopyala" buton — sadece kopyalanabilir bir
+    /// asistan mesajı varsa enabled. Tıklayınca panoya yazar ve 1.5s
+    /// "Kopyalandı ✓" feedback'i verir.
+    @ViewBuilder
+    private var copyLastButton: some View {
+        let target = MessageActionsHelper.lastCopyableAssistantText(in: viewModel.messages)
+        Button(action: copyLastResponse) {
+            Image(systemName: didCopyLast ? "checkmark.circle.fill" : "doc.on.doc")
+                .foregroundStyle(didCopyLast ? .green : .secondary)
+        }
+        .buttonStyle(.borderless)
+        .disabled(target == nil)
+        .help(target != nil
+              ? "Son yanıtı panoya kopyala"
+              : "Kopyalanacak yanıt yok")
+    }
+
+    private func copyLastResponse() {
+        guard let text = MessageActionsHelper.lastCopyableAssistantText(in: viewModel.messages) else {
+            return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        didCopyLast = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if didCopyLast { didCopyLast = false }
+        }
+    }
 }
 
 struct MessageRow: View {
@@ -113,6 +150,18 @@ struct MessageRow: View {
 
             messageBody
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        // B6: sağ-tık menüsü — her mesaj kopyalanabilir; assistant rolünde
+        // ek "ID'yi Kopyala" debugging affordance'ı yok (over-engineering),
+        // sadece basit metin kopyası.
+        .contextMenu {
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(message.text, forType: .string)
+            } label: {
+                Label("Mesajı Kopyala", systemImage: "doc.on.doc")
+            }
+            .disabled(message.text.trimmingCharacters(in: .whitespaces).isEmpty)
         }
     }
 
