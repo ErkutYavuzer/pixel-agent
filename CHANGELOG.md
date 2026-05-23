@@ -10,6 +10,19 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.21] — 2026-05-23
+
+**Hotfix: Launchpad cwd "root directory" + Gemini ModelNotFound.** İki ayrı kullanıcı raporu birleşti. `CLIBackend` artık subprocess'i app-specific bir workspace dizinde çalıştırıyor; Gemini default modeli `gemini-2.5-flash`'a düşürüldü. **420 test yeşil** (+2). Breaking change yok.
+
+### Fixed
+- **CWD "root directory" warning** — Launchpad'den açılan app cwd `/` olarak miras alıyordu; Gemini CLI "running in the root directory" uyarısı veriyor ve tüm filesystem'i context'e almaya çalışıyordu. Fix: `EnvironmentBuilder.resolveCLIWorkspaceDirectory()` yeni helper — `~/Library/Application Support/PixelAgent/cli-workspace` dizinini oluşturup `CLIProcessRunner.workingDirectory`'e set ediyor. CLI artık izole boş bir workspace'te çalışıyor.
+- **Gemini `ModelNotFoundError` for `gemini-3.5-flash`** — Google API CLI sürümünde 3.5 Flash henüz yok (veya farklı ID formatında). Default `gemini-2.5-flash`'a düşürüldü. Kullanıcı doğru ID'yi bilirse `PIXEL_GEMINI_MODEL` ile override edebilir.
+
+### Tests
+- **`EnvironmentBuilderTests`** +2 test (`testResolveCLIWorkspaceDirectoryReturnsAppSupportPath`, `testResolveCLIWorkspaceDirectoryIsIdempotent`).
+- **`CLIBackendTests`** Gemini default beklenen değer `gemini-3.5-flash` → `gemini-2.5-flash` olarak güncellendi.
+- Toplam test: **418 → 420** yeşil (+2). 0 regression.
+
 ## [0.2.20] — 2026-05-23
 
 **UX: ChatComposer Shift+Enter newline.** Composer'da plain Enter mesaj göndermeye devam ediyor; Shift+Enter ile draft sonuna `\n` eklenir (multi-line input). macOS 14+ `onKeyPress(.return, phases: [.down])` API'si ile gerçekleşti. Breaking change yok.

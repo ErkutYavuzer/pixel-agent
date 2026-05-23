@@ -35,7 +35,8 @@ final class CLIBackendTests: XCTestCase {
             XCTAssertEqual(CLIBackend.defaultModelID(for: .codex), "gpt-5.5")
         }
         if ProcessInfo.processInfo.environment["PIXEL_GEMINI_MODEL"] == nil {
-            XCTAssertEqual(CLIBackend.defaultModelID(for: .gemini), "gemini-3.5-flash")
+            // v0.2.21: 3.5-flash CLI'ce tanınmadı, 2.5-flash güvenli default
+            XCTAssertEqual(CLIBackend.defaultModelID(for: .gemini), "gemini-2.5-flash")
         }
     }
 

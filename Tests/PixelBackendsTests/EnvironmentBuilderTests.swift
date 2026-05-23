@@ -107,4 +107,24 @@ final class EnvironmentBuilderTests: XCTestCase {
         XCTAssertNotNil(usrLocalIdx)
         XCTAssertLessThan(homebrewIdx!, usrLocalIdx!)
     }
+
+    // MARK: - CLI workspace directory (v0.2.21)
+
+    func testResolveCLIWorkspaceDirectoryReturnsAppSupportPath() throws {
+        let url = try XCTUnwrap(EnvironmentBuilder.resolveCLIWorkspaceDirectory())
+        // Path "Application Support/PixelAgent/cli-workspace" ile bitmeli
+        XCTAssertTrue(url.path.contains("Application Support"))
+        XCTAssertTrue(url.path.hasSuffix("PixelAgent/cli-workspace"))
+        // Dizin gerçekten var (create edildi veya zaten varmış)
+        var isDir: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir))
+        XCTAssertTrue(isDir.boolValue)
+    }
+
+    func testResolveCLIWorkspaceDirectoryIsIdempotent() throws {
+        // İki kez çağırınca aynı path döner, ikinci çağrıda hata olmaz.
+        let first = try XCTUnwrap(EnvironmentBuilder.resolveCLIWorkspaceDirectory())
+        let second = try XCTUnwrap(EnvironmentBuilder.resolveCLIWorkspaceDirectory())
+        XCTAssertEqual(first.path, second.path)
+    }
 }

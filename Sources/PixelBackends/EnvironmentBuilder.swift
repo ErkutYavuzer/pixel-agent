@@ -30,6 +30,36 @@ public enum EnvironmentBuilder {
         return env
     }
 
+    /// **v0.2.21:** Subprocess `currentDirectoryURL` için PixelAgent'a özel
+    /// dedicated workspace. Launchpad'den açıldığında cwd `/` olur ve Gemini CLI
+    /// "running in the root directory" uyarısı + tüm filesystem'i context'e
+    /// almaya çalışır (yavaşlama + permission hataları). App Support altında
+    /// boş bir dir tutmak hem uyarıyı keser hem de CLI'a izole çalışma alanı
+    /// sağlar.
+    ///
+    /// Path: `~/Library/Application Support/PixelAgent/cli-workspace`.
+    /// Dizin yoksa oluşturulur; create edilemezse nil → caller cwd set etmez
+    /// (Launchpad default'una düşer).
+    public static func resolveCLIWorkspaceDirectory() -> URL? {
+        let fm = FileManager.default
+        guard let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let workspace = appSupport
+            .appendingPathComponent("PixelAgent", isDirectory: true)
+            .appendingPathComponent("cli-workspace", isDirectory: true)
+        do {
+            try fm.createDirectory(at: workspace, withIntermediateDirectories: true)
+        } catch {
+            // Already exists or permission error — fall back to existence check
+        }
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: workspace.path, isDirectory: &isDir), isDir.boolValue else {
+            return nil
+        }
+        return workspace
+    }
+
     /// Saf fonksiyon — `currentPATH` üzerine bilinen dizinleri prepend eder, dup
     /// entry'leri tekilleştirir, sıralamayı korur. Test'lerden direkt çağrılır.
     public static func augmentedPATH(currentPATH: String?, home: String) -> String {

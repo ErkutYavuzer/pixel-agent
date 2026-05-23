@@ -40,7 +40,11 @@ public struct CLIBackend: ChatBackend {
             hardcoded = "gpt-5.5"
         case .gemini:
             envKey = "PIXEL_GEMINI_MODEL"
-            hardcoded = "gemini-3.5-flash"
+            // v0.2.19'da `gemini-3.5-flash` denendi ama Google API "not found"
+            // döndü (CLI sürümü tanımıyor olabilir veya model adı farklı).
+            // v0.2.21 itibarıyla daha güvenli `gemini-2.5-flash` default;
+            // doğru ID bilinirse `PIXEL_GEMINI_MODEL` ile override edilir.
+            hardcoded = "gemini-2.5-flash"
         }
         if let override = ProcessInfo.processInfo.environment[envKey],
            !override.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -62,13 +66,18 @@ public struct CLIBackend: ChatBackend {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 let stdin: String? = Self.usesStdinForPrompt(for: kind) ? prompt : nil
-                // **Faz 4.1 fix:** Launchpad'den açıldığında PATH minimal —
+                // **v0.2.17 fix:** Launchpad'den açıldığında PATH minimal —
                 // Gemini CLI'ın `#!/usr/bin/env node` shebang'ı node'u bulamaz.
                 // EnvironmentBuilder bilinen lokasyonları PATH'e prepend eder.
+                //
+                // **v0.2.21 fix:** Launchpad cwd `/` — Gemini CLI uyarı veriyor
+                // ve tüm filesystem'i context'e alıyor. App Support altında
+                // dedicated boş workspace cwd olarak set edilir.
                 let runner = CLIProcessRunner(
                     executablePath: executablePath,
                     arguments: Self.arguments(for: kind, prompt: prompt, options: options, modelID: modelID),
-                    environment: EnvironmentBuilder.augmentedEnvironment()
+                    environment: EnvironmentBuilder.augmentedEnvironment(),
+                    workingDirectory: EnvironmentBuilder.resolveCLIWorkspaceDirectory()
                 )
                 let mode = Self.outputMode(for: kind)
 
