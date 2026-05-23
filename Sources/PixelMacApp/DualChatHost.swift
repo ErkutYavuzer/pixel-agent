@@ -14,6 +14,7 @@ struct DualChatHost: View {
     let leftBackend: any ChatBackend
     let rightBackend: any ChatBackend
     let leftKind: CLIKind
+    let rightKind: CLIKind
     let leftTitle: String
     let rightTitle: String
     let planMode: Bool
@@ -27,6 +28,7 @@ struct DualChatHost: View {
         leftBackend: any ChatBackend,
         rightBackend: any ChatBackend,
         leftKind: CLIKind,
+        rightKind: CLIKind,
         leftTitle: String,
         rightTitle: String,
         leftStoreFileName: String,
@@ -37,6 +39,7 @@ struct DualChatHost: View {
         self.leftBackend = leftBackend
         self.rightBackend = rightBackend
         self.leftKind = leftKind
+        self.rightKind = rightKind
         self.leftTitle = leftTitle
         self.rightTitle = rightTitle
         self.planMode = planMode
@@ -62,9 +65,9 @@ struct DualChatHost: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                ChatColumn(viewModel: leftVM, title: leftTitle)
+                ChatColumn(viewModel: leftVM, title: leftTitle, backendKind: leftKind)
                 Divider()
-                ChatColumn(viewModel: rightVM, title: rightTitle)
+                ChatColumn(viewModel: rightVM, title: rightTitle, backendKind: rightKind)
             }
 
             if !subagentManager.sessions.isEmpty {

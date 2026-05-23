@@ -1,3 +1,4 @@
+import PixelBackends
 import PixelCore
 import PixelMascot
 import SwiftUI
@@ -6,6 +7,9 @@ struct ChatColumn: View {
     @ObservedObject var viewModel: ChatViewModel
     var title: String?
     var showNewButton: Bool = true
+    /// C9: bilinirse auth hatası tespitinde "<Backend>'a Giriş Yap" butonu
+    /// için kullanılır. nil → buton gizli (eski davranış).
+    var backendKind: CLIKind? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,12 +72,16 @@ struct ChatColumn: View {
             }
 
             if let streamError = viewModel.streamError {
+                let authBackend: CLIKind? = (backendKind != nil
+                    && AuthErrorDetector.isAuthError(streamError)) ? backendKind : nil
                 ErrorRetryBanner(
                     message: streamError,
                     canRetry: !viewModel.isStreaming
                         && RetryHelper.candidateRetryText(messages: viewModel.messages) != nil,
                     onRetry: viewModel.retryLastSend,
-                    onDismiss: viewModel.clearError
+                    onDismiss: viewModel.clearError,
+                    authenticateLabel: authBackend.map(LoginLauncher.buttonLabel(for:)),
+                    onAuthenticate: authBackend.map { kind in { LoginLauncher.launch(for: kind) } }
                 )
             }
         }

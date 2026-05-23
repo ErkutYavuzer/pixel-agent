@@ -351,6 +351,7 @@ struct ChatHost: View {
                     leftBackend: leftBackend,
                     rightBackend: rightBackend,
                     leftKind: selectedKind,
+                    rightKind: secondaryKind,
                     leftTitle: selectedKind.displayName,
                     rightTitle: secondaryKind.displayName,
                     leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",

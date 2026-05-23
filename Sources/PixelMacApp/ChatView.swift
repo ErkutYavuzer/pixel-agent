@@ -40,7 +40,7 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ChatColumn(viewModel: viewModel)
+            ChatColumn(viewModel: viewModel, backendKind: backendKind)
 
             if !subagentManager.sessions.isEmpty {
                 Divider()

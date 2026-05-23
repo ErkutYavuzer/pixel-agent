@@ -17,6 +17,11 @@ struct ErrorRetryBanner: View {
     var canRetry: Bool = true
     let onRetry: () -> Void
     let onDismiss: () -> Void
+    /// C9: hata auth/credential ise üst sırada "<Backend>'a Giriş Yap"
+    /// butonunu render eder. Tıklayınca Terminal.app açılıp `<cli> login`
+    /// çalıştırır. nil ise buton gizli.
+    var authenticateLabel: String? = nil
+    var onAuthenticate: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -31,16 +36,18 @@ struct ErrorRetryBanner: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 4) {
-                Button(action: onRetry) {
-                    Label("Tekrar dene", systemImage: "arrow.clockwise")
-                        .font(.caption)
+                if let onAuthenticate, let label = authenticateLabel {
+                    Button(action: onAuthenticate) {
+                        Label(label, systemImage: "key.fill")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .controlSize(.small)
+                    .help("Terminal'i aç ve CLI login komutunu çalıştır")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(!canRetry)
-                .help(canRetry
-                      ? "Son mesajı yeniden gönder"
-                      : "Şu an yeniden gönderilemez")
+
+                retryButton
 
                 Button(action: onDismiss) {
                     Label("Kapat", systemImage: "xmark")
@@ -58,5 +65,32 @@ struct ErrorRetryBanner: View {
         )
         .padding(.horizontal, 12)
         .padding(.bottom, 6)
+    }
+
+    /// Auth butonu yoksa retry primary action (.borderedProminent); auth varsa
+    /// retry ikincil (.bordered) — login butonu görsel olarak daha öne çıkar.
+    /// `Button(...).buttonStyle(...)` farklı concrete tipler döndürdüğü için
+    /// ternary uyumsuzluk verir; ViewBuilder branch ile çözüyoruz.
+    @ViewBuilder
+    private var retryButton: some View {
+        if onAuthenticate == nil {
+            Button(action: onRetry) {
+                Label("Tekrar dene", systemImage: "arrow.clockwise")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(!canRetry)
+            .help(canRetry ? "Son mesajı yeniden gönder" : "Şu an yeniden gönderilemez")
+        } else {
+            Button(action: onRetry) {
+                Label("Tekrar dene", systemImage: "arrow.clockwise")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!canRetry)
+            .help(canRetry ? "Son mesajı yeniden gönder" : "Şu an yeniden gönderilemez")
+        }
     }
 }
