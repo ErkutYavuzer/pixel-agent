@@ -6,8 +6,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.25-blue)
-![tests](https://img.shields.io/badge/tests-443%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.26-blue)
+![tests](https://img.shields.io/badge/tests-529%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (14 tool, 5 `ui_*` AX-first + chained query DSL + opaqueID resolve + ⌘/⌥/⇧/⌃-click + IME-aware text + window content-area crop + **Set-of-Mark visual annotation**) · Subagent UI paneli (paralel cap=3) · LAN-first Bonjour transport (iOS) · 401 test yeşil · 31 ADR</em>
+  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist + tool list paneli · macOS Dock mascot · MCP server expose (14 tool, 5 `ui_*` AX-first + chained query DSL + opaqueID resolve + ⌘/⌥/⇧/⌃-click + IME-aware text + window content-area crop + Set-of-Mark visual annotation) · Subagent UI paneli (paralel cap=3) · LAN-first Bonjour transport (iOS) · **Demo-ready Sprint 1: markdown + code copy, typing indicator, retry banner, auth launcher, ⌘N/⌘⇧P/⌘⇧M kısayollar** · 529 test yeşil · 32 ADR</em>
 </p>
 
 <details>
@@ -127,7 +127,7 @@ Tap kaynağı: [ErkutYavuzer/homebrew-tap](https://github.com/ErkutYavuzer/homeb
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
 cd pixel-agent
 swift build -c release
-swift test                              # 443 yeşil
+swift test                              # 529 yeşil
 ./scripts/build-app.sh release && open PixelAgent.app
 ```
 
@@ -159,7 +159,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.24` (23 May 2026) · **432 test** yeşil · **31 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
+**Versiyon:** `v0.2.26` (24 May 2026) · **529 test** yeşil · **32 ADR** · 10 library + 2 executable target · **Sprint 1 demo-ready milestone** kapandı
 
 ### Sürüm geçmişi
 
@@ -190,6 +190,8 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.22` | 23 May | UI: per-backend model picker (Menu + catalog + özel ID sheet + UserDefaults persist) | 430 |
 | `v0.2.23` | 23 May | Gemini catalog güncellendi: `gemini-3.5-flash` (default) + `gemini-3.1-pro` öncelikli | 431 |
 | `v0.2.24` | 23 May | Claude catalog'a alias'lar (`opus`/`sonnet`/`haiku` = her zaman güncel); default `opus`. Fabrikasyon dated suffix'ler silindi | 432 |
+| `v0.2.25` | 23 May | iOS dashboard + per-backend store + real CPU metric (Mach `HOST_CPU_LOAD_INFO`) + ADR-0032 | 443 |
+| `v0.2.26` | 24 May | **Sprint 1 demo-ready milestone** — MCP entegrasyon yardımcısı, empty-state chip'leri, Plan Mode tool list paneli, markdown + kod copy, ⌘N/⌘⇧P/⌘⇧M kısayolları, typing indicator, iOS→Mac config toast, retry banner, auth login launcher, subagent → chat akışı | 529 |
 
 ### v0.2 yol haritası
 

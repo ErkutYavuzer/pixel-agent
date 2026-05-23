@@ -9,7 +9,94 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
-- v0.2.25 follow-up adayları: `EnvelopeType` `unknown` fallback case (forward-compat); `EnvelopePayload` sum-type refactor (16 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
+- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopeType` `unknown` fallback case (forward-compat); `EnvelopePayload` sum-type refactor (16 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
+- Sprint 2 ("Power-User Touches") hazır: C7 daimi connection pill, B6 quick-actions menu, B3 conversation export, A8 composer focus halo, C10 subagent cap-reached banner, C2/C3 screenshot in-chat + SoM overlay UI.
+
+## [0.2.26] — 2026-05-24
+
+**Sprint 1 "Demo-Ready Foundation" tamamlandı — 10 polish item tek release'te.** "Hızlı prototip" hissini "demo-ready" UX'e taşıyan komple paket. Audit'in (Plan agent, 23 May) en yüksek ROI 10 öğesi sırayla işlendi, her biri (i) saf, test edilebilir bir helper + (ii) minimal SwiftUI view ayrımıyla yazıldı. **529 test yeşil** (+86 bu release'te). Breaking change yok.
+
+Demo-readiness milestone: aşağıdaki 10 yetenek artık çalışıyor — empty-state chip'leri, Plan Mode tool list paneli, markdown + kod copy, ⌘N/⌘⇧P/⌘⇧M kısayolları, typing indicator, iOS→Mac config toast, retry banner, auth login launcher, subagent → chat akışı, MCP integration helper.
+
+### Added — Sprint 1 / Demo-Ready Foundation
+
+#### C8 MCP integration helper (commit `9d6a313`, ROI 20)
+- `Sources/PixelMacApp/IntegrationView.swift` — pixel-agent'ın MCP server'ını (`pixel-mcp-server`) dış IDE'lere (Claude Desktop, Cursor, Codex CLI) tanıtmak için kurulum yardımcısı. 3 IDE config snippet kartı, tek tıkla "Kopyala" + "Kopyalandı ✓" 1.5s feedback, Finder'da göster, binary path resolution (bundled detection).
+- `scripts/build-app.sh` artık `pixel-mcp-server` binary'sini de bundle'a paketler (`Contents/MacOS/pixel-mcp-server`). Brew ile kurulduğunda MCP server otomatik gelir.
+- AboutView'a "MCP Entegrasyonu…" buton.
+- 7 test: resolveBinaryPath fallback/bundled, snippet JSON syntactic validity, boşluklu path JSON escape, ClientID config path uniqueness.
+
+#### A3 Empty state + sample prompt chips (commit `5dc72f5`, ROI 15)
+- `ChatColumn` artık `messages.isEmpty && !isStreaming` durumunda `EmptyChatView` gösterir — sparkles icon + başlık + 4 chip stack. Chip tıklayınca `viewModel.draft = prompt` (send tetiklenmez, kullanıcı doğrular).
+- 4 chip Sprint 1 demo senaryosunun ana workflow'larını temsil eder: `summarize-folder`, `code-review`, `plan-research`, `subagent-compare`.
+- 5 test: catalog non-empty, ID uniqueness, demo workflow ID coverage.
+
+#### C4 Plan Mode tool list panel (commit `d2f8bbe`, ROI 16)
+- `Sources/PixelMacApp/PlanModeToolListView.swift` (yeni) — `PlanModeTool` struct + `PlanModeToolCatalog` enum (`tools`, `allowedTools`, `blockedTools`, `supportsPlanMode(kind:)`). SwiftUI sidebar 240pt sabit width, `.thinMaterial` background, 2 bölüm (Erişilebilir/Bloklandı), bloklu satırlar 0.78 opacity.
+- Catalog Claude Code'un `--permission-mode plan` davranışıyla hizalı: **Erişilebilir** Read/Glob/Grep/WebFetch/WebSearch · **Bloklanmış** Edit/Write/Bash/NotebookEdit.
+- ChatHost.body içinde chat alanı `HStack` ile sarıldı; `planMode == true` iken sağda Divider + panel; `easeInOut 0.18s` trailing edge slide-in. `chatContent` @ViewBuilder ayrıştırıldı.
+- Footer'da seçili backend'e göre yeşil ✓ "Claude `--permission-mode plan`'a eşlenir" veya turuncu ⚠ "X Plan modunu yoksayar" (ADR-0017 ile kasıtlı).
+- 10 test: catalog non-empty, ID/name uniqueness, allowed/blocked partition, demo senaryosu 4-tool regression guard (read/glob ✓, edit/bash ✗), backend support per kind.
+
+#### A1 Markdown rendering + code block copy (commit `27d7f7f`, ROI 12.5)
+- `Sources/PixelMacApp/MarkdownSegmenter.swift` (yeni, saf) — `MessageSegment` enum (`.text(String)` | `.codeBlock(content:language:)`) + `MarkdownSegmenter.segments(from:)` satır bazlı tarayıcı. Streaming-friendly: açık kalan fence içeriği `codeBlock` olarak emit edilir.
+- `Sources/PixelMacApp/MarkdownMessageView.swift` (yeni) — `InlineMarkdownText` (`AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)`) + `CodeBlockView` (`.thinMaterial` + language label + "Kopyala" butonu, NSPasteboard + 1.5s feedback).
+- `ChatColumn.MessageRow` artık `@ViewBuilder messageBody` ile rolü ayırıyor — `.assistant` → `MarkdownMessageView`, `.user`/`.system` → düz `Text`.
+- 14 test: empty/plain/multiline, single/multiple code blocks, empty block, unclosed fence (streaming), language tag (trim + `objective-c` hyphen), inline backticks değil fence, blank line preservation.
+
+#### B5 Keyboard shortcuts (`.commands` menu) (commit `b9d38a7`, ROI 12)
+- `Sources/PixelMacApp/AppCommand.swift` (yeni, saf) — `AppCommand: String, CaseIterable, Sendable` (3 case: newConversation, togglePlanMode, toggleChatMode) + `notificationName` + `post()` helper. `pixel.command.` prefix'iyle namespaced.
+- App `.commands { ... }` modifier: `CommandGroup(replacing: .newItem)` ile **⌘N** "Yeni Sohbet" (multi-document mantığı yok, store sıfırla); `CommandMenu("Sohbet")` özel menü: **⌘⇧P** Plan Mode toggle + **⌘⇧M** Single/Dual toggle.
+- ChatHost 2 `.onReceive` (togglePlanMode → `planMode.toggle()`, toggleChatMode → `mode = (.single ↔ .dual)`). ChatColumn `.onReceive(newConversation)` — streaming değilse `viewModel.newConversation()` (dual mode'da her iki sütun bağımsız dinler).
+- 5 test: allCases regression guard, raw value uniqueness, namespace prefix, notificationName eşitliği, `post()` observer expectation.
+
+#### A2 Typing indicator (3-dot pulse) (commit `6ee0309`, ROI 12)
+- `Sources/PixelMacApp/TypingIndicatorView.swift` (yeni) — 3 daire 0.18s gecikmeyle `.easeInOut(0.55s).repeatForever(autoreverses:true)` scale 0.5↔1.0 + opacity 0.4↔1.0; `onAppear` 3 ayrı `withAnimation`. Accessibility label "Pixel yazıyor".
+- `StreamingMessageHelper.isStreamingTail(message:in:isStreaming:)` saf helper: bu mesaj aktif streaming'in son assistant mesajı mı?
+- `MarkdownMessageView` `isStreaming: Bool = false` param. Empty text + streaming → TypingIndicatorView; empty text + !streaming → eski "…" placeholder (errored boş yanıt için).
+- 8 test: isStreaming flag gate, role gate (user/system false), tail position (son assistant true, önceki turlar false), empty messages, text dolu olsa bile tail+streaming true.
+
+#### C5 iOS→Mac config toast banner (commit `f59b5b8`, ROI 12)
+- `Sources/PixelMacApp/RemoteConfigToast.swift` (yeni) — `RemoteConfigToast` Identifiable+Equatable (UUID+message). `RemoteConfigToastBuilder.buildMessage(old/new × backend/model/plan)` saf — değişiklikleri " · " ile birleştirir (sıra: backend → model → plan); boş model "değişiklik yok" sayılır; bilinmeyen backend capitalize fallback (forward-compat).
+- `RemoteConfigToastView` koyu kapsül banner, hit-testing kapalı.
+- ChatHost `@State configToast` + dismiss Task. `showConfigToast` helper (eski timer cancel, 3.5s sonra id eşleşmesi koşuluyla temizle — yarış güvenli). `onClientConfigReceived` old state snapshot → apply → builder → showConfigToast. body'ye `.overlay(alignment: .top)` slide-from-top transition.
+- 11 test: no-change nil, empty model ignored, single field changes, combined order, üçü birden, unknown backend capitalize, Identifiable uniqueness, Equatable.
+
+#### A7 Inline retry banner (commit `cf9c86a`, ROI 12)
+- `Sources/PixelMacApp/RetryHelper.swift` (yeni, saf) — `candidateRetryText(messages:)` son `[user, assistant]` çiftini doğrular; whitespace-only/reverse sıra/ardışık assistant'lar nil.
+- `ChatViewModel.clearError()` (streamError=nil) + `retryLastSend()` (streaming değilse + retry adayı varsa son 2 mesajı siler — failed turn history'de iz bırakmasın, user metniyle send tekrar).
+- `Sources/PixelMacApp/ErrorRetryBanner.swift` (yeni) — turuncu warning ikon + callout text + sağda "Tekrar dene" (canRetry false → disabled) + "Kapat" (borderless). `.thinMaterial` + kırmızı 0.35 alpha stroke.
+- 8 test: empty/tek, normal pair, partial assistant (stream yarıda kesildi), çoklu tur, reverse sıra defensive, ardışık assistant, whitespace-only user.
+
+#### C9 Actionable auth error (commit `8d5d91e`, ROI 12)
+- `Sources/PixelMacApp/AuthErrorDetector.swift` (yeni) — `isAuthError(_:)` saf keyword tabanlı (auth, 401, unauthorized, expired token, oturum, giriş yap, yetki, vb.) lowercased substring; TR+EN karışık. `LoginLauncher.loginCommand(for:)` claude/codex `login`, gemini `auth login`; `buttonLabel(for:)` Türkçe ("Claude'a Giriş Yap"). `launch(for:)` `NSAppleScript` ile Terminal.app activate + do script.
+- `ErrorRetryBanner` `authenticateLabel` + `onAuthenticate` opsiyonel params. Auth butonu turuncu tint + key.fill ikon retry'dan ÜSTTE; varsa Retry sekonder (.bordered), yoksa primer (.borderedProminent).
+- ChatColumn `backendKind: CLIKind?` opsiyonel; streamError + isAuthError + backendKind → banner'a launch closure'u inject. **`DualChatHost`'a `rightKind: CLIKind` parametresi eklendi** (sağ sütun login butonu doğru CLI'yi açar).
+- 8 test: EN CLI mesajları (401, sign in, invalid api key), TR mesajlar (watchdog + giriş yap), non-auth negatif, case-insensitive, loginCommand per backend, buttonLabel TR, keyword roster lowercase, "Authentication expired" coverage.
+
+#### C1 Subagent → chat akışı (commit `d2a5287`, ROI 10)
+- `Sources/PixelMacApp/SubagentMessageFormatter.swift` (yeni, saf) — `format(session:)` 4 terminal status'a göre insan-okur metin: `completed → "[subagent <kind>] sonuç:\n<output>"`, `cancelled → "iptal edildi" (+ partial)`, `budgetExceeded → "bütçe aşıldı (<reason>)"`, `failed → "hata: <error>"`. Defensive no-result fallback. Kind prefix `rawValue` (case-stable).
+- `SubagentManager.onSessionCompleted: (@MainActor (SubagentSession) -> Void)?` eklendi; `finalize()` finalized session struct'ını yakalayıp callback'i tetikliyor. Tek-callback (single mode ChatView, dual mode DualChatHost set eder; ChatHost aynı anda yalnızca birini render → yarış yok).
+- `ChatViewModel.appendSubagentResult(_:)` text trim + `.system` rolünde Message + listeye append + ConversationStore'a persist. Rol seçimi: `.system` (gri SYS badge yan-akışı görsel ayırır).
+- ChatView/DualChatHost `.onAppear` blokları callback'i set — DualChatHost leftVM'e (sol sütun dispatch dispatcher).
+- 10 test: 4 status × (partial yok / partial var), whitespace trimleme, prefix rawValue case-stability, defensive no-result fallback.
+
+### Changed
+- **DualChatHost init imzası** — yeni `rightKind: CLIKind` parametresi eklendi (PixelMacApp.swift tek call-site güncellendi). Public API; eski init yok artık. *Practical impact: yok* — bu pakette tek dış kullanıcı.
+- **MessageRow** — yeni `isStreaming: Bool = false` opsiyonel parametresi (default false → eski davranış).
+- **ChatColumn** — yeni `backendKind: CLIKind?` opsiyonel parametresi (default nil → "<Backend>'a Giriş Yap" butonu gizli).
+- **MarkdownMessageView** — yeni `isStreaming: Bool = false` opsiyonel parametresi (typing indicator gating için).
+- **ErrorRetryBanner** — `authenticateLabel`/`onAuthenticate` opsiyonel params eklendi.
+
+### Tests
+- **Sprint 1 toplam:** 10 yeni test dosyası, 86 yeni test (**443 → 529**). 0 regression.
+- `PlanModeToolListTests` (10), `MarkdownSegmenterTests` (14), `AppCommandTests` (5), `StreamingMessageHelperTests` (8), `RemoteConfigToastTests` (11), `RetryHelperTests` (8), `AuthErrorDetectorTests` (8), `SubagentMessageFormatterTests` (10), `EmptyChatViewTests` (5, önceki release), `IntegrationViewTests` (7, önceki release).
+
+### Notes
+- **Mimari deseni:** her item için **saf helper / enum** (formatter, detector, builder, catalog) + **minimal SwiftUI view** ayrımı. Saf kısımlar hermetic test edilebildi; view'lar yalın render katmanı kaldı. Pattern Sprint 2'ye taşınacak.
+- **Demo senaryosu** ([polish-roadmap.md](docs/polish-roadmap.md#demo-senaryosu-sprint-1-sonrası)) artık uçtan uca canlı — empty state chip'inden subagent → chat'e kadar her adım test edilebilir.
+- **AppleScript Terminal.app launch** ad-hoc imzalı build'lerde de çalışır; başka sandbox kısıtlaması yok. Sandbox enabled bir App Store build'inde `do script` izin gerektirebilir — App Store dağıtım yol haritasında değerlendirilmeli.
+- **`onSessionCompleted` tek-callback** — gelecekte iki view aynı anda live olursa multicast publisher gerekir. Şu an `ChatHost` aynı anda single VEYA dual mode render ettiği için yarış yok.
 
 ## [0.2.25] — 2026-05-23
 

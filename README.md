@@ -6,8 +6,8 @@
 
 > **Personal AI agent for macOS** — chat with Claude/Codex/Gemini side by side, dispatch subagents in parallel, see and control your screen via Set-of-Mark, run your tools as an MCP server, and steer everything from your iPhone.
 
-![version](https://img.shields.io/badge/version-0.2.25-blue)
-![tests](https://img.shields.io/badge/tests-443%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.26-blue)
+![tests](https://img.shields.io/badge/tests-529%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <em>Native Swift · Multi-LLM · iOS remote dashboard · MCP server (14 tools) · Subagent UI · Computer use with Set-of-Mark · 443 tests · 32 ADRs</em>
+  <em>Native Swift · Multi-LLM · iOS remote dashboard · MCP server (14 tools) · Subagent UI · Computer use with Set-of-Mark · 529 tests · 32 ADRs</em>
 </p>
 
 <details>
@@ -255,12 +255,13 @@ Plus a retrospective: [v2 lessons](docs/architecture-decisions-from-v2.md) — 1
 
 ## Status
 
-**v0.2.25** (2026-05-23) · **443 tests** passing · **32 ADRs** · 10 libraries + 2 executables · end-to-end iPhone test verified.
+**v0.2.26** (2026-05-24) · **529 tests** passing · **32 ADRs** · 10 libraries + 2 executables · Sprint 1 demo-ready milestone shipped.
 
 Recent highlights ([full changelog](CHANGELOG.md)):
 
 | Version | Date | Highlight | Tests |
 |---|---|---|---|
+| `v0.2.26` | 24 May | **Sprint 1 demo-ready foundation** — MCP integration helper, empty state, Plan Mode tool list panel, markdown + code copy, ⌘N/⌘⇧P/⌘⇧M shortcuts, typing indicator, iOS config toast, retry banner, auth login launcher, subagent → chat | 529 |
 | `v0.2.25` | 23 May | iOS dashboard, real CPU metric (Mach `HOST_CPU_LOAD_INFO`), ADR-0032 | 443 |
 | `v0.2.16` | 23 May | Set-of-Mark visual annotation (ADR-0031) | 401 |
 | `v0.2.12` | 23 May | PixelComputerUse + ToolArbiter implementation | 315 |
