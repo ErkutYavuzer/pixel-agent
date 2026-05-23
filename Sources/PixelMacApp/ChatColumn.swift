@@ -39,13 +39,19 @@ struct ChatColumn: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(viewModel.messages) { msg in
-                            MessageRow(message: msg)
-                                .id(msg.id)
+                    if viewModel.messages.isEmpty && !viewModel.isStreaming {
+                        EmptyChatView { prompt in
+                            viewModel.draft = prompt
                         }
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(viewModel.messages) { msg in
+                                MessageRow(message: msg)
+                                    .id(msg.id)
+                            }
+                        }
+                        .padding()
                     }
-                    .padding()
                 }
                 .onChange(of: viewModel.messages.last?.text) {
                     if let last = viewModel.messages.last {
@@ -99,4 +105,101 @@ struct MessageRow: View {
         case .system: return .gray
         }
     }
+}
+
+// MARK: - Empty state (A3)
+
+/// Yeni / temizlenmiş bir sohbette `ChatColumn` boş ekran yerine bunu gösterir.
+/// Kullanıcı "ne yapayım şimdi?" sorusunu sormak yerine örnek prompt chip'ine
+/// tıklayıp `ChatViewModel.draft`'a doldurabilir.
+struct EmptyChatView: View {
+    let onPromptSelected: (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Spacer().frame(height: 16)
+
+            Image(systemName: "sparkles")
+                .font(.system(size: 38))
+                .foregroundStyle(.purple.opacity(0.75))
+
+            VStack(spacing: 6) {
+                Text("Pixel'le sohbete başla")
+                    .font(.title3.bold())
+                Text("Yazmaya başla — veya örnek bir promptla dene:")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(EmptyChatView.suggestedPrompts) { chip in
+                    Button(action: { onPromptSelected(chip.prompt) }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: chip.icon)
+                                .frame(width: 22)
+                                .foregroundStyle(.purple)
+                            Text(chip.label)
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 12)
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: 420)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.purple.opacity(0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.purple.opacity(0.18), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help(chip.prompt)
+                }
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+    }
+
+    /// Catalog — testlerden de erişilebilir, statik.
+    static let suggestedPrompts: [PromptChip] = [
+        PromptChip(
+            id: "summarize-folder",
+            label: "Bu klasörü özetle",
+            icon: "folder",
+            prompt: "Bu klasörü kısa özetle: ana dosyalar, mimari, dikkat çekici noktalar."
+        ),
+        PromptChip(
+            id: "code-review",
+            label: "Code review yap",
+            icon: "checklist",
+            prompt: "Son git diff'imi gözden geçir; bug, güvenlik, performans, kod kokusu açısından."
+        ),
+        PromptChip(
+            id: "plan-research",
+            label: "Plan modunda araştırma",
+            icon: "list.bullet.clipboard",
+            prompt: "Şu konuyu sadece okuma erişimiyle araştır ve bir plan çıkar: <konu>"
+        ),
+        PromptChip(
+            id: "subagent-compare",
+            label: "Subagent ile karşılaştır",
+            icon: "person.2.wave.2",
+            prompt: "İki yaklaşım için arka plana subagent dispatch et ve sonuçları karşılaştır: <yaklaşım A> vs <yaklaşım B>."
+        ),
+    ]
+}
+
+struct PromptChip: Identifiable, Equatable {
+    let id: String
+    let label: String
+    let icon: String
+    let prompt: String
 }
