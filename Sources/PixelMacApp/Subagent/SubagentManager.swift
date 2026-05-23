@@ -20,6 +20,13 @@ final class SubagentManager: ObservableObject {
 
     private let backendResolver: @MainActor (CLIKind) -> (any ChatBackend)?
 
+    /// C1: Bir subagent terminal status'a (completed/budgetExceeded/cancelled/
+    /// failed) ulaştığında çağrılır. Aktif ChatView/DualChatHost burayı set
+    /// edip sonucu ana chat'e bir `.system` mesajı olarak akıtır. Tek
+    /// callback — single mode'da ChatView, dual mode'da DualChatHost set
+    /// eder; ChatHost aynı anda yalnızca birini render ettiği için yarış yok.
+    var onSessionCompleted: (@MainActor (SubagentSession) -> Void)?
+
     /// Aktif çalışan subagent task'leri — cancel için referans.
     private var runners: [SubagentID: Task<Void, Never>] = [:]
 
@@ -168,14 +175,22 @@ final class SubagentManager: ObservableObject {
     }
 
     private func finalize(id: SubagentID, result: SubagentResult) {
+        var finalizedSession: SubagentSession?
         if let idx = sessions.firstIndex(where: { $0.id == id }) {
             sessions[idx].status = Self.status(from: result)
             sessions[idx].finishedAt = Date()
             sessions[idx].result = result
+            finalizedSession = sessions[idx]
         }
         runners.removeValue(forKey: id)
         if let continuation = continuations.removeValue(forKey: id) {
             continuation.resume(returning: result)
+        }
+        // C1: ChatView'a sonucu ilet — kayıtlı listener varsa ana chat'e
+        // bir mesaj olarak akar. Listener yoksa (henüz wire-up olmamış)
+        // panel yine de kartı gösterir, kaybedilen bir şey yok.
+        if let session = finalizedSession {
+            onSessionCompleted?(session)
         }
     }
 

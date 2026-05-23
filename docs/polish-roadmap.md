@@ -74,9 +74,11 @@ ROI = (Impact × Demo visibility) / Effort. Effort: S=1, M=2, L=3.
 | ✅ | C5 | iOS→Mac config toast |
 | ✅ | A7 | Inline retry banner |
 | ✅ | C9 | Actionable auth error |
-| ⏳ | C1 | Subagent → chat akışı |
+| ✅ | C1 | Subagent → chat akışı |
 
 Bitince **demo-ready milestone açılır** + demo GIF kaydı + Show HN hazırlığı başlar.
+
+**24 May 2026: Sprint 1 tamamlandı — demo-ready milestone AÇILDI.** Tüm 10 item landed (commits 9d6a313, 5dc72f5, d2f8bbe, 27d7f7f, b9d38a7, 6ee0309, f59b5b8, cf9c86a, 8d5d91e, ve C1'in commit'i). Test sayısı: 443 → 529 (+86). PixelAgent.app rebuild edildi. Sonraki adım: v0.2.26 release tag + demo GIF kaydı + DMG (notarized signing varsa) + Show HN hazırlığı.
 
 ## Sprint 2 — "Power-User Touches" (Sprint 1 sonrası)
 

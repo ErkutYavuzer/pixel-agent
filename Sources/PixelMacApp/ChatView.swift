@@ -63,7 +63,17 @@ struct ChatView: View {
                 subagentDisabled: subagentManager.isCapReached
             )
         }
-        .onAppear { viewModel.planMode = planMode }
+        .onAppear {
+            viewModel.planMode = planMode
+            // C1: Subagent terminal status'unda sonucu ana chat'e mesaj olarak
+            // düşür. Single mode'da yalnızca bu ChatView aktif olduğu için
+            // tek subscriber bizizdir; DualChatHost da kendi onAppear'ında
+            // bunu kendi leftVM'ine yönlendirir (last writer wins).
+            subagentManager.onSessionCompleted = { [weak viewModel] session in
+                let text = SubagentMessageFormatter.format(session: session)
+                viewModel?.appendSubagentResult(text)
+            }
+        }
         .onChange(of: planMode) { _, newValue in
             viewModel.planMode = newValue
         }

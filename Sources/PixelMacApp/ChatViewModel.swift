@@ -143,6 +143,19 @@ final class ChatViewModel: ObservableObject {
         send(text: userText)
     }
 
+    /// C1: Subagent terminal status'a ulaştığında ana chat'e formatlı bir
+    /// `.system` mesajı düşer ve conversationStore'a persist edilir. Mesaj
+    /// rolünü `.system` seçtik çünkü subagent çıktısı asıl assistant'ın
+    /// konuşması değil — uygulamanın yan-akış sonucunu duyurmasıdır.
+    func appendSubagentResult(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let msg = Message(role: .system, text: trimmed)
+        messages.append(msg)
+        let store = conversationStore
+        Task { try? await store.append(msg) }
+    }
+
     private func startTimeoutWatchdog() {
         watchdogTask?.cancel()
         let seconds = streamTimeoutSeconds

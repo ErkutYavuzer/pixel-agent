@@ -90,6 +90,14 @@ struct DualChatHost: View {
         .onAppear {
             leftVM.planMode = planMode
             rightVM.planMode = planMode
+            // C1: Dual mode'da subagent dispatch sol sütun üzerinden gidiyor —
+            // sonuç da sol sütunun mesaj akışına düşmeli. Right column
+            // subagent sonucu görmez (kullanıcı sağı bağımsız konuşma için
+            // kullanıyor).
+            subagentManager.onSessionCompleted = { [weak leftVM] session in
+                let text = SubagentMessageFormatter.format(session: session)
+                leftVM?.appendSubagentResult(text)
+            }
         }
         .onChange(of: planMode) { _, newValue in
             leftVM.planMode = newValue
