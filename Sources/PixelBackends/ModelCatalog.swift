@@ -18,21 +18,32 @@ public enum ModelCatalog {
         "\(userDefaultsKeyPrefix).\(kind.rawValue)"
     }
 
-    /// UI picker'ında listelenecek tipik modeller. Kullanıcı bunun dışında bir
-    /// model isterse "Özel..." girişiyle elle yazar.
+    /// UI picker'ında listelenecek tipik modeller. **En iyi/en güncel üstte.**
+    /// Kullanıcı bunun dışında bir model isterse "Özel ID…" girişiyle elle yazar.
+    ///
+    /// **Claude:** CLI doc'undaki alias'lar (`opus`/`sonnet`/`haiku`) her zaman
+    /// güncel sürüme resolve eder. Versionlu ID'ler belirli sürüme pinlemek için.
+    ///
+    /// **Codex / Gemini:** Alias sistemi yok; tam ID listeleniyor.
     public static func knownModels(for kind: CLIKind) -> [String] {
         switch kind {
         case .claude:
-            // Anthropic Claude family (May 2026 itibarıyla)
+            // Alias'lar üstte — CLI 2.1.128 help'ten doğrulandı:
+            //   "Provide an alias for the latest model (e.g. 'sonnet' or 'opus')"
+            // Alias seçince kullanıcı her zaman güncel modele bağlanır.
             return [
+                "opus",         // alias → güncel Opus
+                "sonnet",       // alias → güncel Sonnet
+                "haiku",        // alias → güncel Haiku
                 "claude-opus-4-7",
-                "claude-opus-4-7-20251101",
                 "claude-sonnet-4-7",
-                "claude-sonnet-4-7-20251101",
                 "claude-haiku-4-7",
+                "claude-opus-4-6",
+                "claude-sonnet-4-6",
+                "claude-haiku-4-6",
             ]
         case .codex:
-            // OpenAI Codex / GPT family
+            // OpenAI Codex / GPT family — en yeni/en güçlü üstte.
             return [
                 "gpt-5.5",
                 "gpt-5",
@@ -43,17 +54,16 @@ public enum ModelCatalog {
             ]
         case .gemini:
             // Google Gemini family — kullanıcı tercihi: 3.5 Flash + 3.1 Pro ilk
-            // sırada (v0.2.23'te eklendi). 2.5/2.0/1.5 family fallback için
-            // listede; CLI sürümü 3.x'i tanımıyorsa kullanıcı buradan dener.
+            // sırada. Pro variants > Flash same version (kalite > hız).
             return [
                 "gemini-3.5-flash",
                 "gemini-3.1-pro",
-                "gemini-2.5-flash",
                 "gemini-2.5-pro",
+                "gemini-2.5-flash",
                 "gemini-2.0-flash",
                 "gemini-2.0-flash-exp",
-                "gemini-1.5-flash",
                 "gemini-1.5-pro",
+                "gemini-1.5-flash",
             ]
         }
     }

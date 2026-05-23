@@ -37,10 +37,23 @@ final class ModelCatalogTests: XCTestCase {
 
     // MARK: - knownModels
 
-    func testKnownModelsClaudeIncludesOpus47() {
+    func testKnownModelsClaudeStartsWithOpusAlias() {
         let models = ModelCatalog.knownModels(for: .claude)
+        // v0.2.24: alias "opus" en üstte — her zaman güncel Opus
+        XCTAssertEqual(models.first, "opus")
+        XCTAssertTrue(models.contains("sonnet"))
+        XCTAssertTrue(models.contains("haiku"))
         XCTAssertTrue(models.contains("claude-opus-4-7"))
-        XCTAssertFalse(models.isEmpty)
+        XCTAssertTrue(models.contains("claude-opus-4-6"))
+    }
+
+    func testKnownModelsClaudeAliasesBeforeVersionedIDs() {
+        let models = ModelCatalog.knownModels(for: .claude)
+        guard let opusIdx = models.firstIndex(of: "opus"),
+              let versionedIdx = models.firstIndex(of: "claude-opus-4-7") else {
+            return XCTFail("alias veya versioned ID eksik")
+        }
+        XCTAssertLessThan(opusIdx, versionedIdx)
     }
 
     func testKnownModelsCodexIncludesGPT5() {
@@ -92,7 +105,8 @@ final class ModelCatalogTests: XCTestCase {
         // setUp clearAllStoredModels yapmıştı; UserDefaults boş.
         // Env var da set değilse hardcoded fallback gelmeli.
         if ProcessInfo.processInfo.environment["PIXEL_CLAUDE_MODEL"] == nil {
-            XCTAssertEqual(CLIBackend.defaultModelID(for: .claude), "claude-opus-4-7")
+            // v0.2.24: alias "opus" → her zaman güncel Opus
+            XCTAssertEqual(CLIBackend.defaultModelID(for: .claude), "opus")
         }
         if ProcessInfo.processInfo.environment["PIXEL_GEMINI_MODEL"] == nil {
             // v0.2.23: kullanıcı tercihi 3.5-flash hardcoded default

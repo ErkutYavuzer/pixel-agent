@@ -10,6 +10,24 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.24] — 2026-05-23
+
+**Claude catalog alias'larla genişledi; her sağlayıcının en iyi modeli üstte.** Anthropic CLI 2.1.128 doc'undan doğrulandı: `opus`/`sonnet`/`haiku` her zaman güncel sürüme resolve eder. Default Claude `opus` (alias, future-proof). Codex ve Gemini catalog'larında "en iyi üstte" sıralaması korundu. Fabrikasyon `-20251101` dated suffix'leri silindi. **432 test yeşil** (+1). Breaking change yok.
+
+### Changed
+- **`ModelCatalog.knownModels(.claude)`** yeniden düzenlendi:
+  - **Alias'lar üstte:** `opus`, `sonnet`, `haiku` (CLI doc'undan doğrulandı — her zaman güncel modele resolve eder).
+  - Versionlu ID'ler: `claude-opus-4-7`, `claude-sonnet-4-7`, `claude-haiku-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-6`.
+  - **Silindi:** `claude-opus-4-7-20251101`, `claude-sonnet-4-7-20251101` — bu dated suffix'ler tamamen fabrikasyondu (CLI'da örnek olarak verilen format `claude-sonnet-4-6`, dated değil).
+- **`CLIBackend.defaultModelID(.claude)`** hardcoded `claude-opus-4-7` → `opus` (alias). UserDefaults boşsa Anthropic'in her zaman güncel Opus'una bağlanır.
+- **`ModelCatalog.knownModels(.gemini)`** Pro variants önce: 3.5-flash → 3.1-pro → 2.5-pro → 2.5-flash → 2.0-flash → ... (Pro > Flash kalite önceliği).
+
+### Tests
+- **`ModelCatalogTests`** + 1 test (`testKnownModelsClaudeAliasesBeforeVersionedIDs`); `testKnownModelsClaudeStartsWithOpusAlias` Claude alias'larını doğrular.
+- `testEmptyUserDefaultsFallsBackToHardcoded` Claude beklenen `opus` olarak güncellendi.
+- `testClaudeArgsContainModelFlag` / `testClaudeArgsModelComesBeforePrompt` alias kullanır.
+- Toplam test: **431 → 432** yeşil (+1).
+
 ## [0.2.23] — 2026-05-23
 
 **Gemini catalog güncellendi: 3.5 Flash + 3.1 Pro öncelikli.** Kullanıcı tercihi doğrultusunda hardcoded default `gemini-3.5-flash` (eski 2.5-flash'tan), catalog ilk iki sırada 3.x family. 2.5/2.0/1.5 yedek olarak listede kalmaya devam. **431 test yeşil** (+1). Breaking change yok.

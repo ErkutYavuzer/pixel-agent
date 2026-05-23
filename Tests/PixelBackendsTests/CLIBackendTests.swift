@@ -29,7 +29,8 @@ final class CLIBackendTests: XCTestCase {
     func testHardcodedDefaultsWhenNoEnvOverride() {
         // Env var'lar set değilse (CI'da olmaz) bu spesifik değerler beklenir.
         if ProcessInfo.processInfo.environment["PIXEL_CLAUDE_MODEL"] == nil {
-            XCTAssertEqual(CLIBackend.defaultModelID(for: .claude), "claude-opus-4-7")
+            // v0.2.24: alias "opus" → her zaman güncel Opus
+            XCTAssertEqual(CLIBackend.defaultModelID(for: .claude), "opus")
         }
         if ProcessInfo.processInfo.environment["PIXEL_CODEX_MODEL"] == nil {
             XCTAssertEqual(CLIBackend.defaultModelID(for: .codex), "gpt-5.5")
@@ -116,11 +117,11 @@ final class CLIBackendTests: XCTestCase {
     // MARK: - v0.2.19 — --model flag tests
 
     func testClaudeArgsContainModelFlag() {
-        let a = args(for: .claude, prompt: "x", model: "claude-opus-4-7")
+        let a = args(for: .claude, prompt: "x", model: "opus")
         guard let idx = a.firstIndex(of: "--model") else {
             return XCTFail("--model bulunamadı")
         }
-        XCTAssertEqual(a[idx + 1], "claude-opus-4-7")
+        XCTAssertEqual(a[idx + 1], "opus")
     }
 
     func testCodexArgsContainModelFlagAfterExec() {
@@ -148,8 +149,8 @@ final class CLIBackendTests: XCTestCase {
     }
 
     func testClaudeArgsModelComesBeforePrompt() {
-        let a = args(for: .claude, prompt: "merhaba", model: "claude-opus-4-7")
-        guard let modelIdx = a.firstIndex(of: "claude-opus-4-7"),
+        let a = args(for: .claude, prompt: "merhaba", model: "opus")
+        guard let modelIdx = a.firstIndex(of: "opus"),
               let promptIdx = a.firstIndex(of: "merhaba") else {
             return XCTFail("model veya prompt bulunamadı")
         }

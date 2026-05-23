@@ -17,7 +17,7 @@ import Foundation
 ///
 /// İlgili ADR: [`docs/adr/0026-pixel-computer-use.md`](../../../docs/adr/0026-pixel-computer-use.md)
 public actor PixelComputerUse {
-    public static let version = "0.2.23"
+    public static let version = "0.2.24"
 
     /// Permission preflight stratejisi (test için DI).
     public enum PermissionPolicy: Sendable {

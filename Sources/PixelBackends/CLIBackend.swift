@@ -42,7 +42,10 @@ public struct CLIBackend: ChatBackend {
         switch kind {
         case .claude:
             envKey = "PIXEL_CLAUDE_MODEL"
-            hardcoded = "claude-opus-4-7"
+            // v0.2.24: "opus" alias → Anthropic'in her zaman güncel Opus'una resolve
+            // eder (CLI 2.1.128 doc'undan). Versionlu ID'ye pinlemek isterse
+            // kullanıcı UI picker'dan "claude-opus-4-7" vs. seçer.
+            hardcoded = "opus"
         case .codex:
             envKey = "PIXEL_CODEX_MODEL"
             hardcoded = "gpt-5.5"
