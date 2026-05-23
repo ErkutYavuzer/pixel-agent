@@ -10,6 +10,14 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.20] — 2026-05-23
+
+**UX: ChatComposer Shift+Enter newline.** Composer'da plain Enter mesaj göndermeye devam ediyor; Shift+Enter ile draft sonuna `\n` eklenir (multi-line input). macOS 14+ `onKeyPress(.return, phases: [.down])` API'si ile gerçekleşti. Breaking change yok.
+
+### Added — UX
+- **`ChatComposer.body`** `TextField`'a `onKeyPress(.return, phases: [.down])` modifier eklendi. `press.modifiers.contains(.shift)` ise `draft += "\n"` + `.handled`; aksi halde `.ignored` (default akış — plain Enter `.onSubmit`'a düşer).
+- SwiftUI `TextField` cursor pozisyonuna API olmadığı için newline draft sonuna append edilir — çoğu Shift+Enter kullanımı mesajın sonundadır. İleride NSTextView wrap edilirse cursor-aware insert eklenebilir.
+
 ## [0.2.19] — 2026-05-23
 
 **Backend default model wiring.** `CLIBackend` artık her CLI'a `--model <id>` flag'i geçiyor; default değerler kullanıcı yapılandırmasına göre: **Claude Opus 4.7** (`claude-opus-4-7`), **Codex 5.5** (`gpt-5.5`), **Gemini 3.5 Flash** (`gemini-3.5-flash`). Env var override desteği (`PIXEL_CLAUDE_MODEL` / `PIXEL_CODEX_MODEL` / `PIXEL_GEMINI_MODEL`). **418 test yeşil** (+5). Breaking change yok.

@@ -28,6 +28,18 @@ struct ChatComposer: View {
                 .lineLimit(1...5)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { if canSend { onSend() } }
+                // **v0.2.20:** Shift+Enter → newline (multi-line composer). Plain
+                // Enter zaten `.onSubmit` ile submit ediyor; bu handler sadece
+                // shift basılıyken devreye girer ve newline append eder. SwiftUI
+                // TextField cursor pozisyonuna API yok — pratik yaklaşım: draft
+                // sonuna `\n` ekle (çoğu Shift+Enter mesajın sonunda kullanılır).
+                .onKeyPress(.return, phases: [.down]) { press in
+                    if press.modifiers.contains(.shift) {
+                        draft += "\n"
+                        return .handled
+                    }
+                    return .ignored
+                }
                 .disabled(isStreaming)
                 .overlay {
                     if planMode {

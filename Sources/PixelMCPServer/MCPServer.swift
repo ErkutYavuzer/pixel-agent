@@ -14,7 +14,7 @@ public actor MCPServer {
     public init(
         registry: ToolRegistry = BuiltInTools.makeRegistry(),
         serverName: String = "pixel-agent",
-        serverVersion: String = "0.2.19"
+        serverVersion: String = "0.2.20"
     ) {
         self.registry = registry
         self.serverName = serverName
