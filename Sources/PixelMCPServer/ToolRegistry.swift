@@ -497,9 +497,12 @@ public enum BuiltInTools {
             kullanılabilir. Screen Recording izni gerekir. target: \
             "active_display" (default) | "all_displays" | "window" | "window_content". \
             window* seçilirse bundle_id zorunlu. "window_content" ile üst kenardan \
-            titlebar_offset kadar (default 28pt) kesilir — toolbar varsa daha büyük \
-            offset verin (ör. 64-72). Sonuç base64-encoded PNG + pixel boyutları + \
-            logical frame.
+            titlebar_offset kadar (default 28pt) kesilir.
+            Faz 4 Set-of-Mark (ADR-0031): `elements` dolu ise her element için \
+            numaralı badge + outline çizilir; sonuç `marks` array'inde \
+            { id, element, frame_in_image } olarak döner. Vision model "tıkla #5" \
+            diyebilir; caller marks[4].element.identifier ile ui_click yapar.
+            Sonuç: base64-encoded PNG + pixel boyutları + logical frame + marks.
             """,
         inputSchema: .object([
             "type": .string("object"),
@@ -520,6 +523,14 @@ public enum BuiltInTools {
                     "type": .string("number"),
                     "description": .string("target=window_content için üst kenardan atılan logical point (default 28). Toolbar varsa 64-72 deneyin."),
                 ]),
+                "elements": .object([
+                    "type": .string("array"),
+                    "items": .object([
+                        "type": .string("object"),
+                        "description": .string("ui_query çıktısındaki bir UIElement objesi (role, title, frame, opaque_id, ...)."),
+                    ]),
+                    "description": .string("Faz 4 Set-of-Mark: bu element'ler PNG üzerinde numaralı badge + outline ile işaretlenir. Off-screen olanlar atlanır."),
+                ]),
             ]),
         ]),
         handler: { params in
@@ -527,6 +538,7 @@ public enum BuiltInTools {
             if let target = params?["target"] { args["target"] = target }
             if let bid = params?["bundle_id"] { args["bundle_id"] = bid }
             if let off = params?["titlebar_offset"] { args["titlebar_offset"] = off }
+            if let els = params?["elements"] { args["elements"] = els }
             return await callBridge(tool: "ui_screenshot", arguments: .object(args))
         }
     )

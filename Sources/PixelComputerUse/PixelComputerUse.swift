@@ -17,7 +17,7 @@ import Foundation
 ///
 /// İlgili ADR: [`docs/adr/0026-pixel-computer-use.md`](../../../docs/adr/0026-pixel-computer-use.md)
 public actor PixelComputerUse {
-    public static let version = "0.2.15"
+    public static let version = "0.2.16"
 
     /// Permission preflight stratejisi (test için DI).
     public enum PermissionPolicy: Sendable {
@@ -77,9 +77,16 @@ public actor PixelComputerUse {
 
     /// Ekran görüntüsü alır. Hedef: tüm ekran, aktif display, veya bundleID'li
     /// uygulamanın penceresi.
-    public func screenshot(of target: ScreenshotTarget = .activeDisplay) async throws -> ScreenshotResult {
+    ///
+    /// **Faz 4 (ADR-0031):** `annotating` dolu ise Set-of-Mark overlay çizilir;
+    /// her element için numaralı badge + outline. `ScreenshotResult.marks` 1-bazlı
+    /// ID listesi döner. Off-screen element'ler atlanır.
+    public func screenshot(
+        of target: ScreenshotTarget = .activeDisplay,
+        annotating elements: [UIElement] = []
+    ) async throws -> ScreenshotResult {
         try await ensureScreenRecording()
-        return try await ScreenshotCapture.capture(target: target)
+        return try await ScreenshotCapture.capture(target: target, annotating: elements)
     }
 
     /// **Faz 3a:** Daha önce `query()` ile alınmış bir `opaqueID`'den canlı

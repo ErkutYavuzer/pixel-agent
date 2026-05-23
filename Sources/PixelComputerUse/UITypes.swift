@@ -268,6 +268,10 @@ public enum ScreenshotTarget: Sendable, Codable, Equatable {
 }
 
 /// Capture sonucu. `pngData` PNG-encoded; MCP üzerinden base64'lenir.
+///
+/// **Faz 4 (ADR-0031):** `marks` Set-of-Mark annotation sonrası dolar; boş array
+/// = annotate yapılmadı. JSON encode'da her zaman yazılır (geriye uyumlu —
+/// decode tarafında bilinmeyen alan davranışı).
 public struct ScreenshotResult: Sendable, Codable, Equatable {
     public let pngData: Data
     public let pixelWidth: Int
@@ -275,6 +279,7 @@ public struct ScreenshotResult: Sendable, Codable, Equatable {
     public let logicalFrame: CGRectBox
     public let bundleID: String?
     public let capturedAt: Date
+    public let marks: [SoMMark]
 
     public init(
         pngData: Data,
@@ -282,7 +287,8 @@ public struct ScreenshotResult: Sendable, Codable, Equatable {
         pixelHeight: Int,
         logicalFrame: CGRectBox,
         bundleID: String?,
-        capturedAt: Date = Date()
+        capturedAt: Date = Date(),
+        marks: [SoMMark] = []
     ) {
         self.pngData = pngData
         self.pixelWidth = pixelWidth
@@ -290,5 +296,45 @@ public struct ScreenshotResult: Sendable, Codable, Equatable {
         self.logicalFrame = logicalFrame
         self.bundleID = bundleID
         self.capturedAt = capturedAt
+        self.marks = marks
+    }
+
+    // Codable backward-compat: pre-Faz4 JSON'larda `marks` yok.
+    private enum CodingKeys: String, CodingKey {
+        case pngData, pixelWidth, pixelHeight, logicalFrame, bundleID, capturedAt, marks
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.pngData = try c.decode(Data.self, forKey: .pngData)
+        self.pixelWidth = try c.decode(Int.self, forKey: .pixelWidth)
+        self.pixelHeight = try c.decode(Int.self, forKey: .pixelHeight)
+        self.logicalFrame = try c.decode(CGRectBox.self, forKey: .logicalFrame)
+        self.bundleID = try c.decodeIfPresent(String.self, forKey: .bundleID)
+        self.capturedAt = try c.decode(Date.self, forKey: .capturedAt)
+        self.marks = try c.decodeIfPresent([SoMMark].self, forKey: .marks) ?? []
+    }
+}
+
+// MARK: - SoM Mark
+
+/// **Faz 4 (ADR-0031):** Set-of-Mark annotation çıktısı. Vision model "tıkla #5"
+/// dediğinde caller `id == "5"` olan `Mark.element`'i kullanarak `ui_click(query:)`
+/// veya `ui_click` opaqueID variant'ıyla ilerler.
+///
+/// `frameInImage` annotate edilmiş PNG içindeki **pixel** rect — caller debug
+/// veya manual koordinat ihtiyacı için.
+public struct SoMMark: Sendable, Codable, Equatable, Hashable {
+    /// 1-bazlı string ID (vision model'ler "1", "2", ... kolay okur).
+    public let id: String
+    /// İşaretlenen UI element snapshot'ı.
+    public let element: UIElement
+    /// Annotate edilmiş PNG içindeki pixel rect.
+    public let frameInImage: CGRectBox
+
+    public init(id: String, element: UIElement, frameInImage: CGRectBox) {
+        self.id = id
+        self.element = element
+        self.frameInImage = frameInImage
     }
 }

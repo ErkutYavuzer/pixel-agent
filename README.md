@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.15-blue)
-![tests](https://img.shields.io/badge/tests-382%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.16-blue)
+![tests](https://img.shields.io/badge/tests-401%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (14 tool, 5 `ui_*` AX-first + chained query DSL + opaqueID resolve + ⌘/⌥/⇧/⌃-click + IME-aware text + window content-area crop) · Subagent UI paneli (paralel cap=3) · LAN-first Bonjour transport (iOS) · 382 test yeşil · 30 ADR</em>
+  <em>Tek/Çift backend modu (Claude · Codex · Gemini) · ed25519 imzalı iPhone pairing · Plan Mode read-only allowlist · macOS Dock mascot · MCP server expose (14 tool, 5 `ui_*` AX-first + chained query DSL + opaqueID resolve + ⌘/⌥/⇧/⌃-click + IME-aware text + window content-area crop + **Set-of-Mark visual annotation**) · Subagent UI paneli (paralel cap=3) · LAN-first Bonjour transport (iOS) · 401 test yeşil · 31 ADR</em>
 </p>
 
 <details>
@@ -142,7 +142,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.15` (23 May 2026) · **382 test** yeşil · **30 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
+**Versiyon:** `v0.2.16` (23 May 2026) · **401 test** yeşil · **31 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
 
 ### Sürüm geçmişi
 
@@ -164,6 +164,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.13` | 23 May | PixelComputerUse Faz 3a — chained query DSL (`within` + `containsText`) + opaqueID re-resolve + `ui_resolve` MCP tool | 338 |
 | `v0.2.14` | 23 May | PixelComputerUse Faz 3b — `ModifierFlags` (⌘/⌥/⇧/⌃-click) + IME-aware text injection (grapheme cluster grouping) | 362 |
 | `v0.2.15` | 23 May | PixelComputerUse Faz 3c — window content-area screenshot crop (`.windowContent` + `titlebar_offset`) | 382 |
+| `v0.2.16` | 23 May | PixelComputerUse Faz 4 — Set-of-Mark visual annotation (`ui_screenshot(elements:...)` numbered badge + outline) | 401 |
 
 ### v0.2 yol haritası
 

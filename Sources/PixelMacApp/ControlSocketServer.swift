@@ -313,10 +313,39 @@ public actor ControlSocketServer {
         default:
             target = .activeDisplay
         }
+
+        // **Faz 4 (ADR-0031):** Set-of-Mark — caller annotated capture istiyorsa
+        // elements array'ini decode et.
+        let annotateElements: [UIElement]
+        if case .array(let arr) = args["elements"] {
+            do {
+                annotateElements = try arr.map { try Self.decodeUIElement(from: $0) }
+            } catch {
+                return .failure("elements decode başarısız: \(error.localizedDescription)")
+            }
+        } else {
+            annotateElements = []
+        }
+
         do {
-            let result = try await computer.screenshot(of: target)
+            let result = try await computer.screenshot(of: target, annotating: annotateElements)
             // PNG'i base64 olarak göm — MCP image content shape'i Faz 2 (şu an text).
             let base64 = result.pngData.base64EncodedString()
+            let marksPayload: JSONValue = .array(
+                try result.marks.map { mark in
+                    let elementJSON = try Self.encodeJSON(mark.element)
+                    return .object([
+                        "id": .string(mark.id),
+                        "element": elementJSON,
+                        "frame_in_image": .object([
+                            "x": .double(mark.frameInImage.x),
+                            "y": .double(mark.frameInImage.y),
+                            "width": .double(mark.frameInImage.width),
+                            "height": .double(mark.frameInImage.height),
+                        ]),
+                    ])
+                }
+            )
             let payload: JSONValue = .object([
                 "format": .string("png"),
                 "pixel_width": .int(result.pixelWidth),
@@ -329,6 +358,7 @@ public actor ControlSocketServer {
                 ]),
                 "bundle_id": result.bundleID.map { .string($0) } ?? .null,
                 "png_base64": .string(base64),
+                "marks": marksPayload,
             ])
             return .success(payload)
         } catch let error as ComputerUseError {
@@ -349,6 +379,16 @@ public actor ControlSocketServer {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(UIQuery.self, from: data)
+    }
+
+    /// **Faz 4 (ADR-0031):** `JSONValue` → `UIElement` decode. ui_query çıktısı
+    /// snake_case'de gelir (bundle_id, opaque_id, ...) — convertFromSnakeCase
+    /// strategy ile bundleID/opaqueID alanlarına çevrilir.
+    private static func decodeUIElement(from value: JSONValue) throws -> UIElement {
+        let data = try JSONEncoder().encode(value)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(UIElement.self, from: data)
     }
 
     private static func encodeJSON<T: Encodable>(_ value: T) throws -> JSONValue {

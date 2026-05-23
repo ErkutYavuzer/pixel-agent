@@ -23,7 +23,10 @@ import UniformTypeIdentifiers
 /// `ScreenshotResult.pngData` PNG-encoded. MCP üzerinden base64'lenir.
 enum ScreenshotCapture {
 
-    static func capture(target: ScreenshotTarget) async throws -> ScreenshotResult {
+    static func capture(
+        target: ScreenshotTarget,
+        annotating elements: [UIElement] = []
+    ) async throws -> ScreenshotResult {
         #if canImport(ScreenCaptureKit) && canImport(AppKit) && canImport(ImageIO)
         let content = try await fetchContent()
 
@@ -45,8 +48,8 @@ enum ScreenshotCapture {
         }
 
         // **Faz 3c (ADR-0030):** `.windowContent` ise titlebar'ı kes.
-        let finalImage: CGImage
-        let finalLogicalFrame: CGRect
+        let croppedImage: CGImage
+        let croppedLogicalFrame: CGRect
         if let offset = titlebarOffset, offset > 0 {
             guard let cropRect = WindowCrop.computeCropRect(
                 imageWidth: cgImage.width,
@@ -59,14 +62,31 @@ enum ScreenshotCapture {
                     reason: "Titlebar crop hesabı başarısız (offset=\(offset)pt, window=\(logicalFrame.size))"
                 )
             }
-            finalImage = cropped
-            finalLogicalFrame = WindowCrop.computeLogicalFrame(
+            croppedImage = cropped
+            croppedLogicalFrame = WindowCrop.computeLogicalFrame(
                 windowFrame: logicalFrame,
                 titlebarOffsetPoints: offset
             )
         } else {
-            finalImage = cgImage
-            finalLogicalFrame = logicalFrame
+            croppedImage = cgImage
+            croppedLogicalFrame = logicalFrame
+        }
+
+        // **Faz 4 (ADR-0031):** `elements` doluysa Set-of-Mark overlay çiz.
+        let finalImage: CGImage
+        let marks: [SoMMark]
+        if !elements.isEmpty {
+            let (annotated, generated) = try SoMRenderer.annotate(
+                image: croppedImage,
+                elements: elements,
+                imageScreenOrigin: croppedLogicalFrame.origin,
+                imageLogicalSize: croppedLogicalFrame.size
+            )
+            finalImage = annotated
+            marks = generated
+        } else {
+            finalImage = croppedImage
+            marks = []
         }
 
         let pngData = try encodePNG(finalImage)
@@ -74,8 +94,9 @@ enum ScreenshotCapture {
             pngData: pngData,
             pixelWidth: finalImage.width,
             pixelHeight: finalImage.height,
-            logicalFrame: CGRectBox(finalLogicalFrame),
-            bundleID: bundleID
+            logicalFrame: CGRectBox(croppedLogicalFrame),
+            bundleID: bundleID,
+            marks: marks
         )
         #else
         throw ComputerUseError.unsupported(reason: "ScreenCaptureKit yok (macOS 14+ gerekli)")

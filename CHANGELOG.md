@@ -8,7 +8,31 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: PixelComputerUse Faz 4 (Set-of-Mark visual annotation) + Faz 5 (AX-based otomatik titlebar/toolbar offset); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+- v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+
+## [0.2.16] — 2026-05-23
+
+**PixelComputerUse Faz 4: Set-of-Mark visual annotation.** `ui_screenshot(elements:...)` ile her UI element'i numaralı badge + outline ile işaretler. Vision model "tıkla #5" der → caller `marks[4].element.identifier` ile `ui_click`. GPT-4V/Claude vision accuracy boost'u için klasik pattern. **401 test yeşil** (+19). Breaking change yok.
+
+### Added — Faz 4 (23 May 2026)
+- **`SoMMark`** (`Sources/PixelComputerUse/UITypes.swift`) — `id: String` (1-bazlı), `element: UIElement` (caller'ın orijinal snapshot'ı), `frameInImage: CGRectBox` (annotated PNG pixel rect).
+- **`ScreenshotResult.marks: [SoMMark]`** default `[]`. Codable backward-compat — pre-Faz4 JSON'larda yok, `decodeIfPresent ?? []` ile decode edilir.
+- **`MarkLayout`** (`Sources/PixelComputerUse/MarkLayout.swift`) saf helper: `computeMarkRect(elementFrame:imageScreenOrigin:imageLogicalSize:imagePixelSize:) -> CGRect?`. Retina scale + top-left convention; off-screen → nil, kısmi overlap → full rect (CG context clip).
+- **`SoMRenderer`** (`Sources/PixelComputerUse/SoMRenderer.swift`) — `annotate(image:elements:imageScreenOrigin:imageLogicalSize:) -> (CGImage, [SoMMark])`. CGContext bitmap + CTM flip (top-left), NSGraphicsContext (flipped:true) text drawing. 5 renk palette (kırmızı/mavi/yeşil/turuncu/mor × 0.9 alpha), 4pt outline, 36px badge, beyaz bold 20pt numara. Off-screen filter sonrası 1-bazlı renumber (vision model "1,2,3" görür).
+- **`ScreenshotCapture.capture(target:annotating:)`** opsiyonel `[UIElement]` parametre — dolu ise post-crop sonrası SoMRenderer çağrılır.
+- **`PixelComputerUse.screenshot(of:annotating:)`** façade extension.
+
+### Added — MCP `ui_screenshot` schema
+- **`elements: array<UIElement>`** parametre — `ui_query` çıktısının birebir aynı shape'i; doluysa Set-of-Mark overlay.
+- Response payload'a **`marks: [{ id, element, frame_in_image }]`** eklendi.
+- `ControlSocketServer.decodeUIElement` helper — `JSONValue → UIElement` (snake_case → camelCase otomatik).
+- Description'a "tıkla #5" örnek workflow'u.
+
+### Tests
+- **`MarkLayoutTests`** — 13 yeni test: 1x/2x/3x retina, off-screen tüm yönler (sol/üst/sağ/alt), kısmi overlap, dejenere boyut (zero element/logical/pixel), windowContent + retina kombinasyon, anisotropic scale.
+- **`SoMRendererTests`** — 6 yeni smoke test: boş elements → 0 mark, 3 elements → 3 mark + sequential ID, off-screen filter + renumber, dimensions preserved, frame_in_image pixel-space, 5 element 1-bazlı sıralama.
+- Toplam test: **382 → 401** yeşil (+19). 0 regression.
+- [ADR-0031](docs/adr/0031-set-of-mark-annotation.md): SoM rasyoneli + CGContext flip + NSGraphicsContext text + renumber decision + alternatif değerlendirmeler.
 
 ## [0.2.15] — 2026-05-23
 

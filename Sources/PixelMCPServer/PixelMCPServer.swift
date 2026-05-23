@@ -1,3 +1,3 @@
 public enum PixelMCPServer {
-    public static let version = "0.2.15"
+    public static let version = "0.2.16"
 }
