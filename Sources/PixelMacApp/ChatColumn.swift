@@ -46,8 +46,15 @@ struct ChatColumn: View {
                     } else {
                         LazyVStack(alignment: .leading, spacing: 12) {
                             ForEach(viewModel.messages) { msg in
-                                MessageRow(message: msg)
-                                    .id(msg.id)
+                                MessageRow(
+                                    message: msg,
+                                    isStreaming: StreamingMessageHelper.isStreamingTail(
+                                        message: msg,
+                                        in: viewModel.messages,
+                                        isStreaming: viewModel.isStreaming
+                                    )
+                                )
+                                .id(msg.id)
                             }
                         }
                         .padding()
@@ -81,6 +88,9 @@ struct ChatColumn: View {
 
 struct MessageRow: View {
     let message: Message
+    /// `true` ise bu mesaj şu an streaming edilen mesaj. Empty + streaming
+    /// durumunda assistant body'sinde 3-dot typing indicator render edilir.
+    var isStreaming: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -103,7 +113,7 @@ struct MessageRow: View {
             // Markdown render — fenced code block'ları kopya butonlu blok'a,
             // inline formatlamayı (bold/italic/inline code/link) AttributedString'e
             // çevirir. Streaming sırasında her chunk'ta re-segment yapılır.
-            MarkdownMessageView(text: message.text)
+            MarkdownMessageView(text: message.text, isStreaming: isStreaming)
         case .user, .system:
             Text(message.text.isEmpty ? "…" : message.text)
                 .textSelection(.enabled)

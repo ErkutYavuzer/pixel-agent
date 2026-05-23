@@ -12,6 +12,9 @@ import SwiftUI
 /// segmenter idempotent olduğu için güvenli.
 struct MarkdownMessageView: View {
     let text: String
+    /// Bu mesaj şu an aktif streaming'in hedef mesajı mı? `true` ise ve text
+    /// boşsa, statik "…" yerine `TypingIndicatorView` (3 nokta pulse) gösterilir.
+    var isStreaming: Bool = false
 
     private var segments: [MessageSegment] {
         MarkdownSegmenter.segments(from: text)
@@ -19,9 +22,14 @@ struct MarkdownMessageView: View {
 
     var body: some View {
         if text.isEmpty {
-            // Streaming başladı ama henüz token yok — orijinal "…" placeholder.
-            Text("…")
-                .foregroundStyle(.secondary)
+            if isStreaming {
+                TypingIndicatorView()
+            } else {
+                // Empty assistant message + streaming değil — nadir kenar durum
+                // (ör. errored boş yanıt). Eski "…" placeholder davranışı.
+                Text("…")
+                    .foregroundStyle(.secondary)
+            }
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in

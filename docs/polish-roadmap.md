@@ -70,7 +70,7 @@ ROI = (Impact × Demo visibility) / Effort. Effort: S=1, M=2, L=3.
 | ✅ | A3 | Empty state + sample prompts |
 | ✅ | A1 | Markdown + code block copy |
 | ✅ | B5 | Keyboard shortcuts |
-| ⏳ | A2 | Typing indicator |
+| ✅ | A2 | Typing indicator |
 | ⏳ | C5 | iOS→Mac config toast |
 | ⏳ | A7 | Inline retry banner |
 | ⏳ | C9 | Actionable auth error |
