@@ -3,6 +3,7 @@ import SwiftUI
 struct AboutView: View {
     let relayURL: String
     @Environment(\.dismiss) private var dismiss
+    @State private var showingIntegration = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -52,12 +53,21 @@ struct AboutView: View {
             }
             .padding(.horizontal)
 
+            Button {
+                showingIntegration = true
+            } label: {
+                Label("MCP Entegrasyonu…", systemImage: "puzzlepiece.extension")
+            }
+            .padding(.top, 6)
+
             Button("Kapat", action: { dismiss() })
                 .keyboardShortcut(.cancelAction)
-                .padding(.top, 6)
         }
         .padding(28)
         .frame(width: 360)
+        .sheet(isPresented: $showingIntegration) {
+            IntegrationView()
+        }
     }
 
     private var version: String {

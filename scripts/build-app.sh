@@ -25,17 +25,24 @@ BUILD="25"
 echo "→ swift build -c ${CONFIG}"
 swift build -c "${CONFIG}"
 
-BINARY_PATH=".build/arm64-apple-macosx/${CONFIG}/PixelMacApp"
-if [ ! -f "${BINARY_PATH}" ]; then
-    echo "✗ Binary bulunamadı: ${BINARY_PATH}"
-    exit 1
-fi
+MAC_BINARY=".build/arm64-apple-macosx/${CONFIG}/PixelMacApp"
+MCP_BINARY=".build/arm64-apple-macosx/${CONFIG}/pixel-mcp-server"
+for bin in "${MAC_BINARY}" "${MCP_BINARY}"; do
+    if [ ! -f "$bin" ]; then
+        echo "✗ Binary bulunamadı: $bin"
+        exit 1
+    fi
+done
 
-echo "→ ${APP_BUNDLE} bundle hazırlanıyor"
+echo "→ ${APP_BUNDLE} bundle hazırlanıyor (PixelMacApp + pixel-mcp-server)"
 rm -rf "${APP_BUNDLE}"
 mkdir -p "${APP_BUNDLE}/Contents/MacOS"
 mkdir -p "${APP_BUNDLE}/Contents/Resources"
-cp "${BINARY_PATH}" "${APP_BUNDLE}/Contents/MacOS/${EXECUTABLE_NAME}"
+cp "${MAC_BINARY}" "${APP_BUNDLE}/Contents/MacOS/${EXECUTABLE_NAME}"
+# pixel-mcp-server bundle içinde — AboutView'daki "MCP Entegrasyonu" sheet'i bu
+# path'i otomatik bulur ve IDE'lere config snippet'i üretir.
+cp "${MCP_BINARY}" "${APP_BUNDLE}/Contents/MacOS/pixel-mcp-server"
+chmod +x "${APP_BUNDLE}/Contents/MacOS/pixel-mcp-server"
 
 cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
