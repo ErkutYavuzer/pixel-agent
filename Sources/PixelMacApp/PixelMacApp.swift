@@ -240,6 +240,12 @@ struct ChatHost: View {
         case .gemini: stored = geminiModel
         }
         if !stored.trimmingCharacters(in: .whitespaces).isEmpty {
+            if kind == .gemini && (stored == "gemini-3.5-flash" || stored == "gemini-3.1-pro") {
+                DispatchQueue.main.async {
+                    self.geminiModel = ""
+                }
+                return CLIBackend.defaultModelID(for: kind)
+            }
             return stored
         }
         return CLIBackend.defaultModelID(for: kind)
