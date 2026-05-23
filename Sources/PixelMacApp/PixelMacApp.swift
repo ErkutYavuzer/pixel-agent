@@ -483,7 +483,7 @@ struct ChatHost: View {
                     Task {
                         do {
                             let result = try await ScreenshotCapture.capture(target: .activeDisplay)
-                            if let jpegData = compressPNGToJPEG(data: result.pngData, quality: 0.5) {
+                            if let jpegData = ImageEncoding.compressPNGToJPEG(data: result.pngData, quality: 0.5) {
                                 let base64 = jpegData.base64EncodedString()
                                 await remoteHost?.sendScreenshot(base64Image: base64)
                             }
@@ -531,8 +531,8 @@ struct ChatHost: View {
                 }
 
                 let activeWindowName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Bilinmiyor"
-                let cpu = SystemStats.getCPUUsage(activeSubagentCount: subagentManager.activeCount)
-                let ram = SystemStats.getMemoryUsage()
+                let cpu = await SystemStats.shared.cpuUsagePercent()
+                let ram = SystemStats.memoryUsagePercent()
 
                 let metrics = SystemMetricsPayload(cpuUsage: cpu, ramUsage: ram, activeWindow: activeWindowName)
 
@@ -629,37 +629,4 @@ struct ErrorView: View {
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
-
-import MachO
-
-struct SystemStats {
-    static func getMemoryUsage() -> Double {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
-        let kerr = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-            }
-        }
-        if kerr == KERN_SUCCESS {
-            let usedBytes = Double(info.resident_size)
-            let totalMemory = ProcessInfo.processInfo.physicalMemory
-            return (usedBytes / Double(totalMemory)) * 100.0
-        }
-        return 0.0
-    }
-
-    static func getCPUUsage(activeSubagentCount: Int) -> Double {
-        let base = 5.0 + Double(arc4random_uniform(5))
-        let subagentsLoad = Double(activeSubagentCount) * 25.0
-        return min(95.0, base + subagentsLoad)
-    }
-}
-
-func compressPNGToJPEG(data: Data, quality: CGFloat = 0.5) -> Data? {
-    guard let image = NSImage(data: data) else { return nil }
-    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-    let rep = NSBitmapImageRep(cgImage: cgImage)
-    return rep.representation(using: .jpeg, properties: [.compressionFactor: quality])
 }
