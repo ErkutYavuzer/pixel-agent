@@ -60,6 +60,9 @@ public struct CLIDetector: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         process.arguments = [name]
+        // **Faz 4.1 fix:** Launchpad context'inde PATH minimal; augmented env ile
+        // which de Gemini/Claude'u bulabilsin.
+        process.environment = EnvironmentBuilder.augmentedEnvironment()
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout

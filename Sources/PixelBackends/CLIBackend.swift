@@ -31,9 +31,13 @@ public struct CLIBackend: ChatBackend {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 let stdin: String? = Self.usesStdinForPrompt(for: kind) ? prompt : nil
+                // **Faz 4.1 fix:** Launchpad'den açıldığında PATH minimal —
+                // Gemini CLI'ın `#!/usr/bin/env node` shebang'ı node'u bulamaz.
+                // EnvironmentBuilder bilinen lokasyonları PATH'e prepend eder.
                 let runner = CLIProcessRunner(
                     executablePath: executablePath,
-                    arguments: Self.arguments(for: kind, prompt: prompt, options: options)
+                    arguments: Self.arguments(for: kind, prompt: prompt, options: options),
+                    environment: EnvironmentBuilder.augmentedEnvironment()
                 )
                 let mode = Self.outputMode(for: kind)
 

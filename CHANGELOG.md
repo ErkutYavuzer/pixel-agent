@@ -10,6 +10,24 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.17] — 2026-05-23
+
+**Hotfix: Launchpad'den açılınca Gemini/Claude CLI çalışmıyordu.** `env: node: No such file or directory` (exit 127) hatası — Finder'dan açılan PixelAgent.app shell config (`.zshrc`, `.bashrc`) okumadığı için `PATH` minimal kalıyordu ve CLI'ların `#!/usr/bin/env node` shebang'ı node'u bulamıyordu. `EnvironmentBuilder` ile çözüldü. **411 test yeşil** (+10). Breaking change yok.
+
+### Fixed
+- **`EnvironmentBuilder`** yeni helper (`Sources/PixelBackends/EnvironmentBuilder.swift`) — `augmentedEnvironment()` parent env'i kopyalar; `augmentedPATH(currentPATH:home:)` PATH'e bilinen CLI dizinlerini prepend eder:
+  - `/opt/homebrew/bin` (Apple Silicon Homebrew)
+  - `/usr/local/bin` (Intel Homebrew)
+  - `~/.local/bin`, `~/bin`
+  - `~/.volta/bin`, `~/.asdf/shims`
+  - `~/.nvm/versions/node/<son>/bin` (alfabetik desc — en yeni sürüm önce)
+- **`CLIBackend.send`** spawn ederken `process.environment = EnvironmentBuilder.augmentedEnvironment()` set ediyor.
+- **`CLIDetector.whichSearch`** `/usr/bin/which` çağrısına da augmented env veriyor — Launchpad'den açılan app artık Gemini/Claude'u **detect** edebilir.
+
+### Tests
+- **`EnvironmentBuilderTests`** — 10 yeni test: PATH boşken prepend, mevcut entry'leri koruma, sıralama (homebrew > usr/bin), deduplication, home-based dirs, boş segment filter, custom home, augmentedEnvironment HOME inherit, knownBinDirectories önceliği.
+- Toplam test: **401 → 411** yeşil (+10). 0 regression.
+
 ## [0.2.16] — 2026-05-23
 
 **PixelComputerUse Faz 4: Set-of-Mark visual annotation.** `ui_screenshot(elements:...)` ile her UI element'i numaralı badge + outline ile işaretler. Vision model "tıkla #5" der → caller `marks[4].element.identifier` ile `ui_click`. GPT-4V/Claude vision accuracy boost'u için klasik pattern. **401 test yeşil** (+19). Breaking change yok.
