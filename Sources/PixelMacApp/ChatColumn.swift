@@ -30,6 +30,7 @@ struct ChatColumn: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                exportMenu
                 copyLastButton
                 if showNewButton {
                     Button(action: viewModel.newConversation) {
@@ -129,6 +130,56 @@ struct ChatColumn: View {
         didCopyLast = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             if didCopyLast { didCopyLast = false }
+        }
+    }
+
+    // MARK: - Export (B3)
+
+    @ViewBuilder
+    private var exportMenu: some View {
+        Menu {
+            ForEach(ConversationExportFormat.allCases) { format in
+                Button {
+                    export(as: format)
+                } label: {
+                    Label("\(format.displayName) olarak kaydet…",
+                          systemImage: format == .markdown ? "doc.richtext" : "curlybraces.square")
+                }
+            }
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 22)
+        .disabled(viewModel.messages.isEmpty)
+        .help(viewModel.messages.isEmpty
+              ? "Dışa aktarılacak mesaj yok"
+              : "Sohbeti dışa aktar (Markdown / JSON)")
+    }
+
+    private func export(as format: ConversationExportFormat) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = ConversationExporter.defaultFilename(for: format)
+        panel.canCreateDirectories = true
+        panel.allowsOtherFileTypes = true
+        panel.title = "\(format.displayName) olarak dışa aktar"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let content: String
+            switch format {
+            case .markdown:
+                content = ConversationExporter.markdown(messages: viewModel.messages)
+            case .json:
+                content = try ConversationExporter.json(messages: viewModel.messages)
+            }
+            try content.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            FileHandle.standardError.write(Data(
+                "[pixel-agent] Export failed (\(format.rawValue)): \(error.localizedDescription)\n".utf8
+            ))
         }
     }
 }
