@@ -68,11 +68,13 @@ struct ChatColumn: View {
             }
 
             if let streamError = viewModel.streamError {
-                Text(streamError)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
+                ErrorRetryBanner(
+                    message: streamError,
+                    canRetry: !viewModel.isStreaming
+                        && RetryHelper.candidateRetryText(messages: viewModel.messages) != nil,
+                    onRetry: viewModel.retryLastSend,
+                    onDismiss: viewModel.clearError
+                )
             }
         }
         .task { await viewModel.restoreIfNeeded() }

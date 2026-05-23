@@ -126,6 +126,23 @@ final class ChatViewModel: ObservableObject {
         mascotState = .idle
     }
 
+    /// A7: hata banner'ından "Kapat" — error mesajını gizler, mesaj listesini
+    /// olduğu gibi bırakır.
+    func clearError() {
+        streamError = nil
+    }
+
+    /// A7: hata banner'ından "Tekrar dene" — son [user, emptyAssistant] çiftini
+    /// listeden çıkartır ve user metnini yeniden gönderir. Streaming aktifken
+    /// veya retry adayı yoksa no-op.
+    func retryLastSend() {
+        guard !isStreaming else { return }
+        guard let userText = RetryHelper.candidateRetryText(messages: messages) else { return }
+        messages.removeLast(2)
+        streamError = nil
+        send(text: userText)
+    }
+
     private func startTimeoutWatchdog() {
         watchdogTask?.cancel()
         let seconds = streamTimeoutSeconds

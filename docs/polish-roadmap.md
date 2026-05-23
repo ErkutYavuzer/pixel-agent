@@ -72,7 +72,7 @@ ROI = (Impact × Demo visibility) / Effort. Effort: S=1, M=2, L=3.
 | ✅ | B5 | Keyboard shortcuts |
 | ✅ | A2 | Typing indicator |
 | ✅ | C5 | iOS→Mac config toast |
-| ⏳ | A7 | Inline retry banner |
+| ✅ | A7 | Inline retry banner |
 | ⏳ | C9 | Actionable auth error |
 | ⏳ | C1 | Subagent → chat akışı |
 
