@@ -90,6 +90,13 @@ final class EnvironmentBuilderTests: XCTestCase {
         XCTAssertNotNil(env["HOME"])
     }
 
+    // MARK: - Gemini trust workspace (v0.2.18)
+
+    func testAugmentedEnvironmentSetsGeminiTrustWorkspace() {
+        let env = EnvironmentBuilder.augmentedEnvironment()
+        XCTAssertEqual(env["GEMINI_CLI_TRUST_WORKSPACE"], "true")
+    }
+
     // MARK: - knownBinDirectories order
 
     func testKnownBinDirectoriesPrioritizesHomebrewOverUsrLocal() {

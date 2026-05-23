@@ -2,8 +2,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.17-blue)
-![tests](https://img.shields.io/badge/tests-411%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.18-blue)
+![tests](https://img.shields.io/badge/tests-413%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -142,7 +142,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.17` (23 May 2026) · **411 test** yeşil · **31 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
+**Versiyon:** `v0.2.18` (23 May 2026) · **413 test** yeşil · **31 ADR** · 10 library + 2 executable target · **end-to-end iPhone test'i** doğrulandı
 
 ### Sürüm geçmişi
 
@@ -166,6 +166,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.15` | 23 May | PixelComputerUse Faz 3c — window content-area screenshot crop (`.windowContent` + `titlebar_offset`) | 382 |
 | `v0.2.16` | 23 May | PixelComputerUse Faz 4 — Set-of-Mark visual annotation (`ui_screenshot(elements:...)` numbered badge + outline) | 401 |
 | `v0.2.17` | 23 May | Hotfix: Launchpad'den açılınca CLI exit 127 (`env: node: No such file`) — `EnvironmentBuilder` PATH augment | 411 |
+| `v0.2.18` | 23 May | Hotfix: Gemini CLI exit 55 (trusted-directory promptu) — `--skip-trust` arg + `GEMINI_CLI_TRUST_WORKSPACE=true` env | 413 |
 
 ### v0.2 yol haritası
 

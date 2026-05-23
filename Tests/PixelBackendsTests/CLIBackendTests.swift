@@ -79,4 +79,12 @@ final class CLIBackendTests: XCTestCase {
         XCTAssertEqual(off, on)
         XCTAssertFalse(on.contains("--permission-mode"))
     }
+
+    /// **v0.2.18 (hotfix):** Gemini CLI'ın "trusted directory" headless promptu
+    /// için `--skip-trust` her zaman geçer; promptun kendisi de korunur.
+    func testGeminiArgsIncludeSkipTrust() {
+        let args = CLIBackend.arguments(for: .gemini, prompt: "hello", options: ChatOptions())
+        XCTAssertTrue(args.contains("--skip-trust"))
+        XCTAssertEqual(args.last, "hello")
+    }
 }

@@ -10,6 +10,19 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.18] — 2026-05-23
+
+**Hotfix: Gemini CLI exit 55 (trusted directory promptu).** v0.2.17 PATH fix'inden sonra Gemini CLI bulunup çalıştırılabildi ama bu sefer "Gemini CLI is not running in a trusted directory" hatası geldi. Headless/automated context için `--skip-trust` argümanı + `GEMINI_CLI_TRUST_WORKSPACE=true` env var ile çözüldü. **413 test yeşil** (+2). Breaking change yok.
+
+### Fixed
+- **`CLIBackend.arguments(for: .gemini)`** artık `--skip-trust` flag'ini ilk argüman olarak geçiyor (`["--skip-trust", "-p", prompt]`). Gemini CLI'a "biz subprocess olarak headless spawn ediyoruz, trust prompt'unu atla" sinyali.
+- **`EnvironmentBuilder.augmentedEnvironment`** `GEMINI_CLI_TRUST_WORKSPACE=true` ekliyor — eski Gemini sürümlerinde `--skip-trust` flag'i yoksa env var fallback'i çalışır. Caller manuel override edebilir (`env["GEMINI_CLI_TRUST_WORKSPACE"]` set ise dokunulmaz).
+
+### Tests
+- **`EnvironmentBuilderTests`** +1 test (`testAugmentedEnvironmentSetsGeminiTrustWorkspace`).
+- **`CLIBackendTests`** +1 test (`testGeminiArgsIncludeSkipTrust`).
+- Toplam test: **411 → 413** yeşil (+2). 0 regression.
+
 ## [0.2.17] — 2026-05-23
 
 **Hotfix: Launchpad'den açılınca Gemini/Claude CLI çalışmıyordu.** `env: node: No such file or directory` (exit 127) hatası — Finder'dan açılan PixelAgent.app shell config (`.zshrc`, `.bashrc`) okumadığı için `PATH` minimal kalıyordu ve CLI'ların `#!/usr/bin/env node` shebang'ı node'u bulamıyordu. `EnvironmentBuilder` ile çözüldü. **411 test yeşil** (+10). Breaking change yok.

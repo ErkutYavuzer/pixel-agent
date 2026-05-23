@@ -131,7 +131,12 @@ public struct CLIBackend: ChatBackend {
             ]
         case .gemini:
             // Gemini CLI Plan Mode'a native destek vermiyor — bayrak yok.
-            return ["-p", prompt]
+            // `--skip-trust`: Headless/automated context (pixel-agent spawn'ı)
+            // için trusted-workspace promptunu atla. v0.2.17+ ek olarak
+            // EnvironmentBuilder GEMINI_CLI_TRUST_WORKSPACE=true set ediyor —
+            // belt & suspenders (eski Gemini CLI sürümleri flag, yeni'ler env
+            // var bekliyor olabilir).
+            return ["--skip-trust", "-p", prompt]
         }
     }
 

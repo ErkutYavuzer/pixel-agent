@@ -16,9 +16,17 @@ public enum EnvironmentBuilder {
 
     /// Parent env'i kopyalar ve PATH'e bilinen CLI dizinlerini prepend eder.
     /// Subprocess başlatılırken `process.environment`'a verilir.
+    ///
+    /// **v0.2.18:** Gemini CLI'ın "trusted workspace" headless promptunu da
+    /// atlatır (`GEMINI_CLI_TRUST_WORKSPACE=true`). Argümanlardaki
+    /// `--skip-trust` ile birlikte belt & suspenders.
     public static func augmentedEnvironment() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = augmentedPATH(currentPATH: env["PATH"], home: env["HOME"] ?? NSHomeDirectory())
+        // Caller zaten set etmediyse uygula — kullanıcı override edebilir.
+        if env["GEMINI_CLI_TRUST_WORKSPACE"] == nil {
+            env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+        }
         return env
     }
 
