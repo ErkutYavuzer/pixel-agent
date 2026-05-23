@@ -45,19 +45,18 @@ struct ChatView: View {
                     }
                     .padding(.vertical, 16)
                     .padding(.horizontal, 12)
-                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .containerRelativeFrame(.vertical, alignment: .topLeading)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .background(
-                    Color(.systemGroupedBackground)
-                        .onTapGesture {
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        }
-                )
+                .background(Color(.systemGroupedBackground))
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
                 .onChange(of: session.messages.count) {
                     if let last = session.messages.last {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {

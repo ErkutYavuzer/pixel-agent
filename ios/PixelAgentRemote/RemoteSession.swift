@@ -97,6 +97,7 @@ final class RemoteSession: ObservableObject {
         transportLabel = nil
         macPublicKey = nil
         mascotState = .idle
+        lastError = nil
     }
 
     func connect(pairing: PairingInfo) async {
