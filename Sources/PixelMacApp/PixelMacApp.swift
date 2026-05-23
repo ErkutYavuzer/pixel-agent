@@ -275,6 +275,56 @@ struct ChatHost: View {
         )
     }
 
+    /// `body`'nin chat alanı — Plan Mode panelinin yanına `HStack` ile
+    /// yerleştirilen kısım. Tek/çift mode ayrımı burada yapılır.
+    @ViewBuilder
+    private var chatContent: some View {
+        switch mode {
+        case .single:
+            if let backend = currentBackend(for: selectedKind),
+               let store = conversationStores[selectedKind] {
+                ChatView(
+                    backend: backend,
+                    backendKind: selectedKind,
+                    conversationStore: store,
+                    subagentManager: subagentManager,
+                    incomingRemoteText: $incomingFromRemote,
+                    planMode: planMode,
+                    onAssistantChunk: { chunk, messageID in
+                        Task { await remoteHost.sendAssistantChunk(chunk, messageID: messageID) }
+                    },
+                    onAssistantComplete: { text, messageID in
+                        Task { await remoteHost.sendAssistantMessage(text, messageID: messageID) }
+                    }
+                )
+                // Backend veya model değişiminde ChatViewModel @StateObject
+                // sıfırlansın diye .id'yi (kind, model) çiftine bağla.
+                .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))")
+            } else {
+                MissingBackendView(kind: selectedKind)
+            }
+
+        case .dual:
+            if let leftBackend = currentBackend(for: selectedKind),
+               let rightBackend = currentBackend(for: secondaryKind) {
+                DualChatHost(
+                    leftBackend: leftBackend,
+                    rightBackend: rightBackend,
+                    leftKind: selectedKind,
+                    leftTitle: selectedKind.displayName,
+                    rightTitle: secondaryKind.displayName,
+                    leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",
+                    rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl",
+                    subagentManager: subagentManager,
+                    planMode: planMode
+                )
+                .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))-\(secondaryKind.rawValue):\(currentModel(for: secondaryKind))")
+            } else {
+                MissingBackendView(kind: backends[selectedKind] == nil ? selectedKind : secondaryKind)
+            }
+        }
+    }
+
     @ViewBuilder
     private func modelPicker(for kind: CLIKind) -> some View {
         Menu {
@@ -395,51 +445,18 @@ struct ChatHost: View {
 
             Divider()
 
-            switch mode {
-            case .single:
-                if let backend = currentBackend(for: selectedKind),
-                   let store = conversationStores[selectedKind] {
-                    ChatView(
-                        backend: backend,
-                        backendKind: selectedKind,
-                        conversationStore: store,
-                        subagentManager: subagentManager,
-                        incomingRemoteText: $incomingFromRemote,
-                        planMode: planMode,
-                        onAssistantChunk: { chunk, messageID in
-                            Task { await remoteHost.sendAssistantChunk(chunk, messageID: messageID) }
-                        },
-                        onAssistantComplete: { text, messageID in
-                            Task { await remoteHost.sendAssistantMessage(text, messageID: messageID) }
-                        }
-                    )
-                    // Backend veya model değişiminde ChatViewModel @StateObject
-                    // sıfırlansın diye .id'yi (kind, model) çiftine bağla. v0.2.22:
-                    // model UI picker'ından da değişebildiği için id'ye eklendi.
-                    .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))")
-                } else {
-                    MissingBackendView(kind: selectedKind)
-                }
+            HStack(spacing: 0) {
+                chatContent
+                    .frame(maxWidth: .infinity)
 
-            case .dual:
-                if let leftBackend = currentBackend(for: selectedKind),
-                   let rightBackend = currentBackend(for: secondaryKind) {
-                    DualChatHost(
-                        leftBackend: leftBackend,
-                        rightBackend: rightBackend,
-                        leftKind: selectedKind,
-                        leftTitle: selectedKind.displayName,
-                        rightTitle: secondaryKind.displayName,
-                        leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",
-                        rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl",
-                        subagentManager: subagentManager,
-                        planMode: planMode
-                    )
-                    .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))-\(secondaryKind.rawValue):\(currentModel(for: secondaryKind))")
-                } else {
-                    MissingBackendView(kind: backends[selectedKind] == nil ? selectedKind : secondaryKind)
+                if planMode {
+                    Divider()
+                    PlanModeToolListView(backendKind: selectedKind)
+                        .frame(width: 240)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
+            .animation(.easeInOut(duration: 0.18), value: planMode)
         }
         .sheet(isPresented: $showPairing) {
             PairingView(remoteHost: remoteHost)

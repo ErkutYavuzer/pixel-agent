@@ -65,9 +65,9 @@ ROI = (Impact × Demo visibility) / Effort. Effort: S=1, M=2, L=3.
 
 | Status | # | Item |
 |---|---|---|
-| ⏳ | C8 | MCP entegrasyon helper |
-| ⏳ | C4 | Plan Mode tool list panel |
-| ⏳ | A3 | Empty state + sample prompts |
+| ✅ | C8 | MCP entegrasyon helper |
+| ✅ | C4 | Plan Mode tool list panel |
+| ✅ | A3 | Empty state + sample prompts |
 | ⏳ | A1 | Markdown + code block copy |
 | ⏳ | B5 | Keyboard shortcuts |
 | ⏳ | A2 | Typing indicator |
