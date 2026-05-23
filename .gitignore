@@ -63,3 +63,7 @@ ios/build-device/
 
 # Mac app bundle — scripts/build-app.sh çıktısı
 PixelAgent.app/
+
+# Release artifacts — gh release upload ile yüklenen zip/dmg dosyaları lokal kalsın istemiyoruz
+PixelAgent-*.zip
+PixelAgent-*.dmg
