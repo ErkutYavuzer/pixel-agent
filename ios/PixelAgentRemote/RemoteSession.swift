@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import UIKit
 import PixelCore
 import PixelLAN
 import PixelRemote
@@ -50,6 +51,17 @@ final class RemoteSession: ObservableObject {
     /// türetilir; aksi halde generic "Bağlı".
     @Published var transportLabel: String?
     @Published var mascotState: MascotState = .idle
+
+    @Published var activeSubagents: [SubagentStatusPayload] = []
+    @Published var cpuUsage: Double = 0.0
+    @Published var ramUsage: Double = 0.0
+    @Published var activeWindow: String = ""
+    @Published var availableBackends: [String] = []
+    @Published var availableModels: [String: [String]] = [:]
+    @Published var selectedBackend: String = ""
+    @Published var selectedModel: String = ""
+    @Published var planMode: Bool = false
+    @Published var latestScreenshot: UIImage? = nil
 
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
@@ -164,6 +176,39 @@ final class RemoteSession: ObservableObject {
         } catch {
             lastError = error.localizedDescription
             mascotState = .error
+        }
+    }
+
+    func updateConfig(backend: String, model: String, planMode: Bool) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.clientConfig(backend: backend, model: model, planMode: planMode)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Konfigürasyon güncellenemedi: \(error.localizedDescription)"
+        }
+    }
+
+    func cancelSubagent(id: String) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.clientAction(type: "cancelSubagent", targetID: id)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Subagent sonlandırılamadı: \(error.localizedDescription)"
+        }
+    }
+
+    func requestScreenshot() async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.clientAction(type: "requestScreenshot")
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Ekran resmi istenemedi: \(error.localizedDescription)"
         }
     }
 
@@ -288,6 +333,38 @@ final class RemoteSession: ObservableObject {
                     messages.append(assistantMsg)
                 }
                 mascotState = .idle
+            }
+        case .hostStatus:
+            if let payload = envelope.payload {
+                if let backend = payload.selectedBackend {
+                    self.selectedBackend = backend
+                }
+                if let model = payload.selectedModel {
+                    self.selectedModel = model
+                }
+                if let plan = payload.planMode {
+                    self.planMode = plan
+                }
+                if let backends = payload.availableBackends {
+                    self.availableBackends = backends
+                }
+                if let models = payload.availableModels {
+                    self.availableModels = models
+                }
+                if let subagents = payload.activeSubagents {
+                    self.activeSubagents = subagents
+                }
+                if let metrics = payload.systemMetrics {
+                    self.cpuUsage = metrics.cpuUsage
+                    self.ramUsage = metrics.ramUsage
+                    self.activeWindow = metrics.activeWindow
+                }
+            }
+        case .screenshotPayload:
+            if let base64 = envelope.payload?.base64Image,
+               let data = Data(base64Encoded: base64),
+               let image = UIImage(data: data) {
+                self.latestScreenshot = image
             }
         case .error:
             if let message = envelope.payload?.errorMessage {

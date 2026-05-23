@@ -10,6 +10,9 @@ public final class RemoteHost: ObservableObject {
     /// iOS tarafı hello envelope'unu gönderip public key'i bize ulaştığında `true`.
     @Published public private(set) var isPaired: Bool = false
 
+    public var onClientConfigReceived: ((_ backend: String, _ model: String, _ planMode: Bool) -> Void)?
+    public var onClientActionReceived: ((_ action: String, _ targetID: String?) -> Void)?
+
     public var relayURL: String
 
     /// QR payload'una eklenecek mac public key (base64).
@@ -207,6 +210,44 @@ public final class RemoteHost: ObservableObject {
         }
     }
 
+    public func sendHostStatus(
+        selectedBackend: String,
+        selectedModel: String,
+        planMode: Bool,
+        availableBackends: [String],
+        availableModels: [String: [String]],
+        activeSubagents: [SubagentStatusPayload],
+        systemMetrics: SystemMetricsPayload
+    ) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.hostStatus(
+            selectedBackend: selectedBackend,
+            selectedModel: selectedModel,
+            planMode: planMode,
+            availableBackends: availableBackends,
+            availableModels: availableModels,
+            activeSubagents: activeSubagents,
+            systemMetrics: systemMetrics
+        )
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Host status gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
+    public func sendScreenshot(base64Image: String) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.screenshotPayload(base64Image: base64Image)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Ekran görüntüsü gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Inbound handshake + signature verification
 
     private func handle(
@@ -237,6 +278,16 @@ public final class RemoteHost: ObservableObject {
         case .userMessage:
             if let text = envelope.payload?.text, !text.isEmpty {
                 inbound.yield(text)
+            }
+        case .clientConfig:
+            if let backend = envelope.payload?.selectedBackend,
+               let model = envelope.payload?.selectedModel,
+               let plan = envelope.payload?.planMode {
+                onClientConfigReceived?(backend, model, plan)
+            }
+        case .clientAction:
+            if let action = envelope.payload?.actionType {
+                onClientActionReceived?(action, envelope.payload?.targetID)
             }
         default:
             break

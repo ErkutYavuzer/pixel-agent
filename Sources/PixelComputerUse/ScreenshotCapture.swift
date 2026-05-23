@@ -21,9 +21,9 @@ import UniformTypeIdentifiers
 /// görüntüsü. macOS 14+ — pixel-agent platform target ile uyumlu.
 ///
 /// `ScreenshotResult.pngData` PNG-encoded. MCP üzerinden base64'lenir.
-enum ScreenshotCapture {
+public enum ScreenshotCapture {
 
-    static func capture(
+    public static func capture(
         target: ScreenshotTarget,
         annotating elements: [UIElement] = []
     ) async throws -> ScreenshotResult {

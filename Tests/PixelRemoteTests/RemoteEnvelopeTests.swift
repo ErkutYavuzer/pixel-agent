@@ -9,12 +9,16 @@ final class RemoteEnvelopeTests: XCTestCase {
         XCTAssertEqual(EnvelopeType.userMessage.rawValue, "userMessage")
         XCTAssertEqual(EnvelopeType.assistantMessage.rawValue, "assistantMessage")
         XCTAssertEqual(EnvelopeType.assistantChunk.rawValue, "assistantChunk")
+        XCTAssertEqual(EnvelopeType.clientConfig.rawValue, "clientConfig")
+        XCTAssertEqual(EnvelopeType.clientAction.rawValue, "clientAction")
+        XCTAssertEqual(EnvelopeType.hostStatus.rawValue, "hostStatus")
+        XCTAssertEqual(EnvelopeType.screenshotPayload.rawValue, "screenshotPayload")
         XCTAssertEqual(EnvelopeType.ack.rawValue, "ack")
         XCTAssertEqual(EnvelopeType.error.rawValue, "error")
     }
 
     func testEnvelopeTypeContainsAllExpectedCases() {
-        let expected: Set<String> = ["hello", "ready", "ping", "ack", "error", "userMessage", "assistantMessage", "assistantChunk"]
+        let expected: Set<String> = ["hello", "ready", "ping", "ack", "error", "userMessage", "assistantMessage", "assistantChunk", "clientConfig", "clientAction", "hostStatus", "screenshotPayload"]
         let actual = Set(EnvelopeType.allCases.map { $0.rawValue })
         XCTAssertEqual(actual, expected)
     }
@@ -111,10 +115,75 @@ final class RemoteEnvelopeTests: XCTestCase {
         let original = RemoteEnvelope.assistantChunk(text: "chunk text", messageID: "msg-123")
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
-        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.v, original.v)
+        XCTAssertEqual(decoded.id, original.id)
+        XCTAssertEqual(decoded.ts, original.ts)
         XCTAssertEqual(decoded.type, .assistantChunk)
         XCTAssertEqual(decoded.payload?.text, "chunk text")
         XCTAssertEqual(decoded.payload?.messageID, "msg-123")
         XCTAssertEqual(decoded.payload?.role, "assistant")
+    }
+
+    func testClientConfigRoundTrip() throws {
+        print("--- [debug] START testClientConfigRoundTrip ---")
+        let original = RemoteEnvelope.clientConfig(backend: "claude", model: "claude-3-5-sonnet", planMode: true)
+        print("--- [debug] Original created ---")
+        let data = try JSONEncoder().encode(original)
+        print("--- [debug] Encoded ---")
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        print("--- [debug] Decoded ---")
+        XCTAssertEqual(decoded.v, original.v)
+        print("--- [debug] v checked ---")
+        XCTAssertEqual(decoded.id, original.id)
+        print("--- [debug] id checked ---")
+        XCTAssertEqual(decoded.ts, original.ts)
+        print("--- [debug] ts checked ---")
+        XCTAssertEqual(decoded.type, .clientConfig)
+        print("--- [debug] type checked ---")
+        XCTAssertEqual(decoded.payload?.selectedBackend, "claude")
+        print("--- [debug] backend checked ---")
+        XCTAssertEqual(decoded.payload?.selectedModel, "claude-3-5-sonnet")
+        print("--- [debug] model checked ---")
+        XCTAssertEqual(decoded.payload?.planMode, true)
+        print("--- [debug] planMode checked ---")
+    }
+
+    func testClientActionRoundTrip() throws {
+        let original = RemoteEnvelope.clientAction(type: "cancelSubagent", targetID: "sub-123")
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.v, original.v)
+        XCTAssertEqual(decoded.id, original.id)
+        XCTAssertEqual(decoded.ts, original.ts)
+        XCTAssertEqual(decoded.type, .clientAction)
+        XCTAssertEqual(decoded.payload?.actionType, "cancelSubagent")
+        XCTAssertEqual(decoded.payload?.targetID, "sub-123")
+    }
+
+    func testHostStatusRoundTrip() throws {
+        let metrics = SystemMetricsPayload(cpuUsage: 12.5, ramUsage: 45.2, activeWindow: "Xcode")
+        let subagent = SubagentStatusPayload(id: "sub-1", prompt: "build app", status: "running", partialOutput: "compiling...", startedAt: 1234567.0)
+        let original = RemoteEnvelope.hostStatus(
+            selectedBackend: "gemini",
+            selectedModel: "gemini-3-flash-preview",
+            planMode: false,
+            availableBackends: ["claude", "gemini"],
+            availableModels: ["gemini": ["gemini-3-flash-preview"]],
+            activeSubagents: [subagent],
+            systemMetrics: metrics
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.v, original.v)
+        XCTAssertEqual(decoded.id, original.id)
+        XCTAssertEqual(decoded.ts, original.ts)
+        XCTAssertEqual(decoded.type, .hostStatus)
+        XCTAssertEqual(decoded.payload?.selectedBackend, "gemini")
+        XCTAssertEqual(decoded.payload?.selectedModel, "gemini-3-flash-preview")
+        XCTAssertEqual(decoded.payload?.planMode, false)
+        XCTAssertEqual(decoded.payload?.availableBackends, ["claude", "gemini"])
+        XCTAssertEqual(decoded.payload?.availableModels?["gemini"], ["gemini-3-flash-preview"])
+        XCTAssertEqual(decoded.payload?.systemMetrics?.activeWindow, "Xcode")
+        XCTAssertEqual(decoded.payload?.activeSubagents?.first?.prompt, "build app")
     }
 }

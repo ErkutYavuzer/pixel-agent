@@ -42,6 +42,19 @@ Bu dosya projenin tek gerçek kaynağıdır (source of truth). Kronolojik oturum
   - **Klavye Kapatma Gestures (Keyboard Dismissal):** Sohbet arayüzündeki boşluğa/arka plana tıklandığında klavyeyi otomatik kapatan `onTapGesture` ve kaydırma yapıldığında klavyeyi kapatan `.scrollDismissesKeyboard(.interactively)` modifikatörleri eklenerek iOS mesajlaşma deneyimi iyileştirildi.
   - Birim testleri güncellenerek tüm SPM paket testlerinin (`swift test`) ve iOS simulator/cihaz hedefinin (`xcodebuild`) başarıyla derlendiği doğrulandı.
 
+### 23 Mayıs 2026 - iOS Premium Kontrol & Ayarlar Entegrasyonu ve Bug Düzeltmeleri
+- **Gerçekleştirilen İş:**
+  - Mac ile iOS remote arasındaki durum ve ekran paylaşımı (`.hostStatus`, `.screenshotPayload`) ile kontrol akışları (`.clientConfig`, `.clientAction`) `RemoteEnvelope` ve `RemoteHost`/`RemoteSession` katmanlarında tamamlandı.
+  - iOS remote uygulaması (`PixelAgentRemote`) premium bir kontrol panel dashboard'una (`TabView`) dönüştürüldü:
+    - **1. Sohbet Tabı:** Mesaj geçmişi ve touch-dismiss keyboard düzeltmeleri (boşluğa tıklayınca klavyenin kapanmaması sorunu `.contentShape(Rectangle())` ve `onTapGesture` ile çözüldü).
+    - **2. Subagent'lar Tabı:** Mac'te paralel çalışan subagent'ları canlı izleyen prompt, durum rozetleri, dark monospaced console çıktı kartları ve asenkron "Durdur" (Cancel) butonları eklendi.
+    - **3. Mac Paneli Tabı:** CPU/RAM kullanım dairesel Gauge'ları, aktif pencere adı rozeti, arka uç (CLIKind) & model dinamik picker'ları, Plan Modu switch'i ve pinch-to-zoom (ZoomableImageView) destekli canlı Mac ekran görüntüsü alma paneli entegre edildi.
+  - **Derleme ve Test Düzeltmeleri:**
+    - Mach task memory sorgusunda `mach_task_self()` makrosunun Swift 6 altındaki uyumsuzluğu `mach_task_self_` global değişkenine geçilerek giderildi.
+    - `ScreenshotCapture` ve `capture` metodları `PixelMacApp` tarafından erişilebilmesi için `public` yapıldı.
+    - Swift 6 derleyicisinin karmaşık `Codable`/`Equatable` struct'larda (sözlük/dizi içeren) ürettiği synthesized equatable kod optimizasyon hatası (segfault/instruction trap) `EnvelopePayload` ve `RemoteEnvelope` için manuel `Equatable` (`==`) implementasyonu yazılarak ve test assertions'ları property-level karşılaştırmaya çekilerek tamamen çözüldü.
+    - Tüm birim testlerinin (`swift test`) ve iOS remote hedefinin (`xcodebuild`) başarıyla derlendiği ve sıfır hata ile tamamlandığı doğrulandı.
+
 ---
 
 ## 2. Aktif Durum ve Proje Yapısı
