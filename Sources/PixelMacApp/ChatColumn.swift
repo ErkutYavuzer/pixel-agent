@@ -84,9 +84,22 @@ struct MessageRow: View {
                 .padding(.vertical, 4)
                 .background(badgeColor, in: .capsule)
 
+            messageBody
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var messageBody: some View {
+        switch message.role {
+        case .assistant:
+            // Markdown render — fenced code block'ları kopya butonlu blok'a,
+            // inline formatlamayı (bold/italic/inline code/link) AttributedString'e
+            // çevirir. Streaming sırasında her chunk'ta re-segment yapılır.
+            MarkdownMessageView(text: message.text)
+        case .user, .system:
             Text(message.text.isEmpty ? "…" : message.text)
                 .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
