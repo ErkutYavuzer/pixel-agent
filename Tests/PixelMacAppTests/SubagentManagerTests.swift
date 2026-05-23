@@ -136,6 +136,9 @@ final class SubagentManagerTests: XCTestCase {
             }
         }
 
+        // C10: Cap'e takıldığında lastCapReachedAt set olmalı (önce nil idi).
+        XCTAssertNil(manager.lastCapReachedAt, "İlk 3 dispatch öncesi nil olmalı")
+
         let fourth = manager.dispatch(prompt: "x", backend: .claude)
         guard case .failure(let err) = fourth else {
             return XCTFail("4. dispatch reddedilmeliydi, got \(fourth)")
@@ -143,10 +146,33 @@ final class SubagentManagerTests: XCTestCase {
         XCTAssertEqual(err, .capReached(maxConcurrent: 3))
         XCTAssertEqual(manager.sessions.count, 3)
         XCTAssertTrue(manager.isCapReached)
+        XCTAssertNotNil(manager.lastCapReachedAt, "Cap-reach event publisher set etmedi")
+
+        // C10: Tekrar cap'e takılınca yeni Date set edilmeli (.onChange tetiklensin).
+        let firstStamp = manager.lastCapReachedAt!
+        try? await Task.sleep(nanoseconds: 50_000_000) // 50ms — date diff için
+        let fifth = manager.dispatch(prompt: "x", backend: .claude)
+        guard case .failure = fifth else {
+            return XCTFail("5. dispatch da cap-reached olmalı, got \(fifth)")
+        }
+        XCTAssertNotNil(manager.lastCapReachedAt)
+        XCTAssertGreaterThan(manager.lastCapReachedAt!, firstStamp,
+                             "İkinci cap-reach yeni timestamp üretmeli")
 
         // Cleanup — başka türlü bekleyen Task'ler test sonrası leak olur
         manager.sessions.forEach { manager.cancel($0.id) }
         try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+
+    // MARK: - C10: lastCapReachedAt initially nil, untouched on success
+
+    func testLastCapReachedAtRemainsNilOnSuccessfulDispatch() async {
+        let manager = makeManager()
+        XCTAssertNil(manager.lastCapReachedAt)
+
+        _ = await manager.dispatchAndWait(prompt: "x", backend: .claude)
+        XCTAssertNil(manager.lastCapReachedAt,
+                     "Başarılı dispatch lastCapReachedAt'i tetiklememeli")
     }
 
     // MARK: - 5. Cap frees after completion

@@ -588,6 +588,13 @@ struct ChatHost: View {
         .onReceive(NotificationCenter.default.publisher(for: AppCommand.toggleChatMode.notificationName)) { _ in
             mode = (mode == .single) ? .dual : .single
         }
+        // C10: Subagent cap'e takıldığında transient banner — config toast
+        // ile aynı overlay slot'unu paylaşır (en son fire eden kazanır).
+        .onChange(of: subagentManager.lastCapReachedAt) { _, newValue in
+            guard newValue != nil else { return }
+            let max = subagentManager.maxConcurrent
+            showConfigToast(message: "⚠️ Subagent havuzu dolu (\(max)/\(max) aktif). Bir tanesi bitince tekrar deneyin.")
+        }
         .task {
             while !Task.isCancelled {
                 do {

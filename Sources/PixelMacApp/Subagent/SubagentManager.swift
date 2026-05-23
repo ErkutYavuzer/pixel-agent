@@ -27,6 +27,11 @@ final class SubagentManager: ObservableObject {
     /// eder; ChatHost aynı anda yalnızca birini render ettiği için yarış yok.
     var onSessionCompleted: (@MainActor (SubagentSession) -> Void)?
 
+    /// C10: Dispatch denenip cap'e takıldığında her seferinde yeni `Date()`
+    /// set edilir. ChatHost `.onChange(of:)` ile dinleyip transient banner
+    /// gösterir. nil değer "henüz cap-reach yaşanmadı" demek.
+    @Published private(set) var lastCapReachedAt: Date?
+
     /// Aktif çalışan subagent task'leri — cancel için referans.
     private var runners: [SubagentID: Task<Void, Never>] = [:]
 
@@ -55,6 +60,8 @@ final class SubagentManager: ObservableObject {
         budget: Budget = .default
     ) -> Result<SubagentID, DispatchError> {
         guard activeCount < maxConcurrent else {
+            // C10: UI / MCP bridge dinlesin ve transient banner göstersin.
+            lastCapReachedAt = Date()
             return .failure(.capReached(maxConcurrent: maxConcurrent))
         }
         guard let backend = backendResolver(kind) else {
