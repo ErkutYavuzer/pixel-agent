@@ -84,6 +84,15 @@ Bitince **demo-ready milestone açılır** + demo GIF kaydı + Show HN hazırlı
 
 C7, B6, B3, A8, C10, C2/C3 + sprint 1 follow-up'lar.
 
+| Status | # | Item |
+|---|---|---|
+| ✅ | C7 | Daimi connection pill |
+| ⏳ | B6 | Quick-actions menu (copy last) |
+| ⏳ | B3 | Conversation export (markdown/JSON) |
+| ⏳ | A8 | Composer focus halo + haptic |
+| ⏳ | C10 | Subagent cap-reached banner |
+| ⏳ | C2/C3 | Screenshot in-chat + SoM overlay UI |
+
 ## Sprint 3 — "Persistent State + iOS Parity" (Sprint 2 sonrası)
 
 B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS settings tab), C12 (tool-call envelope events).

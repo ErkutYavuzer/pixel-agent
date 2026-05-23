@@ -452,11 +452,13 @@ struct ChatHost: View {
                         : "Plan modu yalnızca Claude için aktif; \(selectedKind.displayName) bu bayrağı yoksayar"
                 )
 
-                if remoteHost.isConnected {
-                    Image(systemName: "iphone.gen3.radiowaves.left.and.right")
-                        .foregroundStyle(.green)
-                        .help("iOS bağlı")
-                }
+                ConnectionPillView(
+                    state: ConnectionPillState.from(
+                        isPaired: remoteHost.isPaired,
+                        isConnected: remoteHost.isConnected
+                    ),
+                    onTap: { showPairing = true }
+                )
 
                 Button { showPermissions = true } label: {
                     Image(systemName: permissionsStatus.allGranted ? "lock.shield.fill" : "lock.shield")
