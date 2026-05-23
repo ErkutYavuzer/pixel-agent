@@ -74,7 +74,20 @@ pixel-agent uses your local CLI binaries — no API keys to configure inside the
 
 Make sure `claude`, `codex`, or `gemini` is on your `PATH` (or in `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/bin`) and that you've logged in to that CLI.
 
-### 2. Build and launch
+### 2. Install
+
+**Option A — Homebrew (recommended, ~30 seconds)**
+
+```bash
+HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask ErkutYavuzer/tap/pixel-agent
+open /Applications/PixelAgent.app
+```
+
+> The `HOMEBREW_CASK_OPTS` env var bypasses macOS Gatekeeper for this install. pixel-agent is currently ad-hoc signed (Apple Developer ID + notarization is on the roadmap). Without it you'd need to manually `xattr -d com.apple.quarantine /Applications/PixelAgent.app` or right-click → "Open Anyway" in System Settings → Privacy & Security.
+
+Tap source: [ErkutYavuzer/homebrew-tap](https://github.com/ErkutYavuzer/homebrew-tap).
+
+**Option B — Build from source**
 
 ```bash
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
@@ -84,9 +97,7 @@ swift test                              # 443 passing
 ./scripts/build-app.sh release && open PixelAgent.app
 ```
 
-> A Homebrew tap (`brew install ErkutYavuzer/tap/pixel-agent`) and a notarized DMG are on the roadmap. Track [#issue](https://github.com/ErkutYavuzer/pixel-agent/issues) or open one.
-
-Requirements: macOS 14+, Swift 6.0+.
+Requirements: macOS 14+ (Sonoma), Apple Silicon (arm64). Swift 6.0+ only for build-from-source. Intel universal2 build is on the roadmap.
 
 ### 3. (Optional) Pair with iPhone
 

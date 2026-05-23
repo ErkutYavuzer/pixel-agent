@@ -110,17 +110,30 @@ Ayrıca: [docs/architecture-decisions-from-v2.md](docs/architecture-decisions-fr
 
 ## Kurulum
 
+**Seçenek A — Homebrew (önerilen, ~30 saniye)**
+
+```bash
+HOMEBREW_CASK_OPTS="--no-quarantine" brew install --cask ErkutYavuzer/tap/pixel-agent
+open /Applications/PixelAgent.app
+```
+
+> `HOMEBREW_CASK_OPTS` env var'ı macOS Gatekeeper'ı bu kurulum için bypass eder. pixel-agent şu an ad-hoc signed (Apple Developer ID + notarization yol haritasında). Bu env var olmadan `xattr -d com.apple.quarantine /Applications/PixelAgent.app` veya sağ tık → "Yine de Aç" gerekir.
+
+Tap kaynağı: [ErkutYavuzer/homebrew-tap](https://github.com/ErkutYavuzer/homebrew-tap).
+
+**Seçenek B — Kaynaktan derleme**
+
 ```bash
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
 cd pixel-agent
 swift build -c release
-swift test                              # 250 yeşil
+swift test                              # 443 yeşil
 ./scripts/build-app.sh release && open PixelAgent.app
 ```
 
 Gereksinimler:
-- macOS 14+
-- Swift 6.0+
+- macOS 14+ (Sonoma), Apple Silicon (arm64); Intel universal2 build yol haritasında.
+- Swift 6.0+ (yalnızca kaynaktan derleme için).
 - Aşağıdaki CLI'lardan **en az biri** yüklü ve login olmalı:
   - [Claude Code CLI](https://github.com/anthropics/claude-code)
   - [OpenAI Codex CLI](https://github.com/openai/codex)
