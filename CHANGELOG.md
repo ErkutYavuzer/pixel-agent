@@ -9,6 +9,64 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+- v0.2.25 follow-up adayları: `EnvelopeType` `unknown` fallback case (forward-compat); `EnvelopePayload` sum-type refactor (16 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
+
+## [0.2.25] — 2026-05-23
+
+**iOS dashboard tam yetenek + gerçek CPU metric + protokol ADR'si.** v0.2.24'ten bu yana biriken 8 commit'in (3 iOS dashboard + 3 iOS fix + 3 Gemini fix + 1 per-backend store + 1 docs) üstüne, sahte CPU hesabı Mach `HOST_CPU_LOAD_INFO` ile değiştirildi, namespace temizliği yapıldı ve ADR-0032 yazıldı. **443 test yeşil** (+11). Breaking change yok (bkz. notlar).
+
+### Added — iOS Remote Dashboard (commit `8cd547e`)
+- **3 sekmeli `TabView`** ([`ios/PixelAgentRemote/ChatView.swift`](ios/PixelAgentRemote/ChatView.swift)):
+  - **Sohbet** — mevcut chat.
+  - **Subagent'lar** — `SubagentsListSection` kartları, cancel butonu.
+  - **Mac Paneli** — `MacPanelDashboardSection`: CPU + RAM `MetricGauge`, aktif uygulama capsule'ü, Backend/Model `Picker`, Plan Mode `Toggle`, "Resim Al" + `ZoomableImageView` (UIScrollView wrapper).
+- **`RemoteEnvelope` protokol genişlemesi** ([`Sources/PixelRemote/RemoteEnvelope.swift`](Sources/PixelRemote/RemoteEnvelope.swift)):
+  - 4 yeni `EnvelopeType` case: `clientConfig`, `clientAction`, `hostStatus`, `screenshotPayload`.
+  - 2 yeni payload struct: `SubagentStatusPayload` (id/prompt/status/partialOutput/startedAt), `SystemMetricsPayload` (cpuUsage/ramUsage/activeWindow).
+  - `EnvelopePayload`'a 10 yeni opsiyonel alan: `selectedBackend`, `selectedModel`, `planMode`, `actionType`, `targetID`, `base64Image`, `availableBackends`, `availableModels`, `activeSubagents`, `systemMetrics`.
+  - 4 factory metodu: `clientConfig(...)`, `clientAction(...)`, `hostStatus(...)`, `screenshotPayload(...)`.
+- **`RemoteHost` callback'ler ve push**:
+  - `onClientConfigReceived` — iOS'tan gelen backend/model/plan değişikliklerini Mac state'ine yansıtır.
+  - `onClientActionReceived` — `cancelSubagent` ve `requestScreenshot` action'larını dispatch eder.
+  - `sendHostStatus(...)` ve `sendScreenshot(base64Image:)` API'leri.
+- **Mac 3 saniye periyodik push** ([`Sources/PixelMacApp/PixelMacApp.swift`](Sources/PixelMacApp/PixelMacApp.swift)): aktif uygulama + CPU + RAM + subagent snapshot + available backends/models.
+- **ADR-0032** ([`docs/adr/0032-ios-dashboard-control-protocol.md`](docs/adr/0032-ios-dashboard-control-protocol.md)) — protokol gerekçesi, alternatives, consequences, Faz 2 plan.
+
+### Added — iOS UX (commit `d1ebf1c`)
+- **Streaming + backoff reconnect** ([`ios/PixelAgentRemote/RemoteSession.swift`](ios/PixelAgentRemote/RemoteSession.swift)): bağlantı kopması durumunda exponential backoff ile yeniden bağlanma.
+- **Premium mascot UI** + streaming partial output render.
+
+### Added — Backends ve veri ayrımı
+- **Per-backend `ConversationStore` izolasyonu** (commit `a941eac`): `conversation-{kind}.jsonl` (örn. `conversation-claude.jsonl`, `conversation-gemini.jsonl`). Her CLI artık kendi history dosyasında — backend değiştirince geçmiş karışmaz.
+- **`SystemStats` actor** ([`Sources/PixelMacApp/SystemStats.swift`](Sources/PixelMacApp/SystemStats.swift)) — gerçek CPU + RAM:
+  - `cpuUsagePercent()` async — Mach `HOST_CPU_LOAD_INFO` iki snapshot tick delta'sından hesaplanır. İlk çağrı baseline kaydı için 0. `&-` overflow-safe.
+  - `memoryUsagePercent()` nonisolated static — `mach_task_basic_info` resident size / `physicalMemory`.
+  - Saf helper `computePercent(previous:current:)` — 7 unit test ile kapsanmış.
+- **`ImageEncoding`** ([`Sources/PixelMacApp/ImageEncoding.swift`](Sources/PixelMacApp/ImageEncoding.swift)) — `compressPNGToJPEG(data:quality:)` namespace'li enum (eski free function silindi).
+
+### Changed
+- **Gemini default model** — birden çok kez güncellendi:
+  - `gemini-3.5-flash` → `gemini-2.5-flash` (commit `a941eac`) — 3.5 ID API'de yoktu.
+  - **`ModelCatalog.knownModels(.gemini)`** sıralaması gerçek API isimleriyle düzenlendi (commit `c94a965`).
+- **`PixelMacApp.SystemStats` ve `compressPNGToJPEG`** — `PixelMacApp.swift` dosyasının altına eklenmişti, ayrı dosyalara çıkarıldı (`SystemStats.swift` + `ImageEncoding.swift`). 36 satır silindi, namespace temizliği.
+- **Sahte CPU hesabı kaldırıldı** — eski `SystemStats.getCPUUsage(activeSubagentCount:)` `5–10% baz + 25% × subagent count` formülü kullanıyordu; gerçek Mach syscall ile değiştirildi.
+
+### Fixed
+- **iOS touch interception + stale error state** (commit `43a498d`) — reconnect sırasında.
+- **iOS reconnection loop self-cancellation** + boş alana tıklama ile klavye dismiss (commit `2490cca`).
+- **UserDefaults'taki eski Gemini modelleri auto-clear** (commit `6569eef`) — obsolete kayıt varsa default'a fallback.
+
+### Tests
+- **`SystemStatsTests`** — 7 yeni test (`computePercent` 5 saf case + `cpuUsagePercent` baseline + `memoryUsagePercent` range).
+- **`RemoteEnvelopeTests`** — yeni envelope tipleri için round-trip testleri (commit `8cd547e` ve `d1ebf1c`).
+- **`CLIBackendTests`** + **`ModelCatalogTests`** — Gemini ID değişiklikleri yansıtıldı.
+- Toplam test: **432 → 443** yeşil (+11). 0 regression.
+
+### Notes
+- **Forward-compat:** `EnvelopeType` strict enum — bilinmeyen tip decode hatası verir. v0.2.25 öncesi cihaz yok pratikte; v0.3'e geçerken `unknown` fallback case eklenecek.
+- **`EnvelopePayload`** artık 16 opsiyonel field içeriyor (god struct eğilimi). Faz 2 sum-type refactor adayı (`enum EnvelopePayload { case clientConfig(...); case hostStatus(...); ... }`).
+- **`SubagentStatus`** payload'da `String` (enum yerine) — relay protokolünde semver-friendly: yeni status'lar eski iOS sürümlerinde "Bilinmiyor" render edilir.
+- **Periyodik push trafiği:** 3sn snapshot ~700 B/s relay üzerinden. LAN'da ihmal, Cloudflare free-tier kullanımı izlenmeli.
 
 ## [0.2.24] — 2026-05-23
 
