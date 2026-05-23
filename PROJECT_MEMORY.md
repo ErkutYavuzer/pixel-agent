@@ -54,6 +54,7 @@ Bu dosya projenin tek gerçek kaynağıdır (source of truth). Kronolojik oturum
     - `ScreenshotCapture` ve `capture` metodları `PixelMacApp` tarafından erişilebilmesi için `public` yapıldı.
     - Swift 6 derleyicisinin karmaşık `Codable`/`Equatable` struct'larda (sözlük/dizi içeren) ürettiği synthesized equatable kod optimizasyon hatası (segfault/instruction trap) `EnvelopePayload` ve `RemoteEnvelope` için manuel `Equatable` (`==`) implementasyonu yazılarak ve test assertions'ları property-level karşılaştırmaya çekilerek tamamen çözüldü.
     - Tüm birim testlerinin (`swift test`) ve iOS remote hedefinin (`xcodebuild`) başarıyla derlendiği ve sıfır hata ile tamamlandığı doğrulandı.
+    - Yapılan değişiklikler ve testlerin ardından iOS remote uygulaması, bağlı olan fiziksel "Erkut Yavuzer iPhone’u" (iPhone 15, D0650E67-8F60-522B-B6A4-0DAA67700151) cihazına `xcrun devicectl` ile başarıyla kuruldu ve başlatıldı.
 
 ---
 
