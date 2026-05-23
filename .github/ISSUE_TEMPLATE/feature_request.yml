@@ -1,0 +1,40 @@
+name: ✨ Feature request
+description: Suggest a new capability or improvement
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! For open-ended brainstorming or "would this fit the project" questions, consider starting a [Discussion](https://github.com/ErkutYavuzer/pixel-agent/discussions/categories/ideas) first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What pain point does this solve? Who benefits?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work? Sketch the UX, API, or CLI surface if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve this; trade-offs.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Related [ADRs](https://github.com/ErkutYavuzer/pixel-agent/tree/main/docs/adr), prior art (Aider / Cline / Continue / Claude Code), screenshots, links.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I've reviewed the [CHANGELOG Unreleased](https://github.com/ErkutYavuzer/pixel-agent/blob/main/CHANGELOG.md#unreleased) for similar planned work.
+        - label: I'm aware this is a personal/portfolio project and proposals may be deferred to keep scope manageable.

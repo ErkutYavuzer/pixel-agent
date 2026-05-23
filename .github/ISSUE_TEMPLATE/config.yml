@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions and ideas
+    url: https://github.com/ErkutYavuzer/pixel-agent/discussions
+    about: Open-ended discussion, support questions, and brainstorming go here.
+  - name: 🔒 Security vulnerabilities
+    url: https://github.com/ErkutYavuzer/pixel-agent/blob/main/SECURITY.md
+    about: Please follow SECURITY.md for responsible disclosure (do not file a public issue).
+  - name: 📚 Documentation
+    url: https://github.com/ErkutYavuzer/pixel-agent/tree/main/docs
+    about: Architecture, ADRs, and module-level docs.

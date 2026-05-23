@@ -1,0 +1,75 @@
+name: 🐛 Bug report
+description: Report a defect or unexpected behavior
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Before continuing, please search [existing issues](https://github.com/ErkutYavuzer/pixel-agent/issues?q=is%3Aissue) and [discussions](https://github.com/ErkutYavuzer/pixel-agent/discussions) — your problem may already be tracked.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What's broken, in one sentence?
+      placeholder: e.g. "iOS dashboard CPU gauge shows 0% on first launch"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open PixelAgent.app
+        2. Pair with iPhone
+        3. Switch to "Mac Paneli" tab
+        4. Observe …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: pixel-agent version
+      placeholder: e.g. v0.2.25
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. 14.5
+    validations:
+      required: true
+  - type: input
+    id: swift
+    attributes:
+      label: Swift toolchain (`swift --version`)
+    validations:
+      required: false
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Active CLI backend(s)
+      multiple: true
+      options:
+        - Claude
+        - Codex
+        - Gemini
+        - N/A
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots / stack trace
+      render: shell

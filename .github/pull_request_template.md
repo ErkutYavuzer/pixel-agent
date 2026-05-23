@@ -1,23 +1,29 @@
-## Özet
-<!-- Bu PR ne değiştiriyor? 1-2 cümle -->
+## Summary
+<!-- 1–2 sentences: what does this PR change? -->
 
-## Motivasyon
-<!-- Neden? Hangi issue/ADR ile ilgili? -->
-<!-- Closes #... veya References ADR-XXXX -->
+## Motivation
+<!-- Why? Linked issue or ADR? -->
+<!-- Closes #… or References ADR-XXXX -->
 
-## Değişiklikler
-<!-- Ana değişiklikler maddeleyerek -->
+## Changes
+<!-- Bullet the main changes -->
 -
 -
 
-## Test
-- [ ] `swift build` geçer
-- [ ] `swift test` geçer (eklenen testler dahil)
-- [ ] `scripts/lint.sh` temiz
-- [ ] Manuel test edildi (varsa)
+## Testing
+- [ ] `swift build` passes
+- [ ] `swift test` passes (with added tests)
+- [ ] `scripts/lint.sh` clean
+- [ ] Manually verified on macOS (when UI/runtime-relevant)
+- [ ] Manually verified on iOS (when remote/pairing-relevant)
 
-## Geriye uyumluluk
-<!-- Breaking change var mı? CHANGELOG'a uygun bölüme eklendi mi? -->
+## Backward compatibility
+<!-- Any breaking changes? Logged under CHANGELOG → Unreleased? -->
 
 ## ADR
-<!-- Bu PR yeni bir mimari karar getiriyorsa: ADR yazıldı mı? Hangisi? -->
+<!-- Does this PR introduce a new architectural decision? -->
+<!-- If yes: which ADR file was added under docs/adr/? -->
+
+## Screenshots / demo
+<!-- Optional but appreciated for UI changes -->
+
