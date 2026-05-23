@@ -16,6 +16,23 @@ struct PixelMacApp: App {
             RootView()
                 .frame(minWidth: 520, minHeight: 400)
         }
+        .commands {
+            // ⌘N standart "New Window" yerine yeni sohbet açar — pencere
+            // çoğaltma desteklemiyoruz, single-window-multi-document mantığı
+            // yerine aktif sütun(lar)ın conversationStore'unu sıfırlar.
+            CommandGroup(replacing: .newItem) {
+                Button("Yeni Sohbet") { AppCommand.newConversation.post() }
+                    .keyboardShortcut("n", modifiers: .command)
+            }
+
+            CommandMenu("Sohbet") {
+                Button("Plan Modunu Aç/Kapat") { AppCommand.togglePlanMode.post() }
+                    .keyboardShortcut("p", modifiers: [.command, .shift])
+
+                Button("Tek/Çift Mod Değiştir") { AppCommand.toggleChatMode.post() }
+                    .keyboardShortcut("m", modifiers: [.command, .shift])
+            }
+        }
     }
 }
 
@@ -515,6 +532,14 @@ struct ChatHost: View {
             for await text in remoteHost.inboundTexts {
                 incomingFromRemote = text
             }
+        }
+        // B5: menü çubuğundan ⌘⇧P / ⌘⇧M — toolbar'daki Toggle/Picker ile aynı
+        // state'i değiştirir, böylece UI senkron kalır.
+        .onReceive(NotificationCenter.default.publisher(for: AppCommand.togglePlanMode.notificationName)) { _ in
+            planMode.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppCommand.toggleChatMode.notificationName)) { _ in
+            mode = (mode == .single) ? .dual : .single
         }
         .task {
             while !Task.isCancelled {

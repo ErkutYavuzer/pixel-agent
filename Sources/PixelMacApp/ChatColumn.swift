@@ -69,6 +69,13 @@ struct ChatColumn: View {
             }
         }
         .task { await viewModel.restoreIfNeeded() }
+        // B5: menü çubuğundan ⌘N geldiğinde — single mode'da tek sütun, dual
+        // mode'da her iki sütun da dinler ve kendi store'unu sıfırlar.
+        // Streaming aktifken sessiz yutulur ("Yeni sohbet" butonu da disabled).
+        .onReceive(NotificationCenter.default.publisher(for: AppCommand.newConversation.notificationName)) { _ in
+            guard !viewModel.isStreaming else { return }
+            viewModel.newConversation()
+        }
     }
 }
 
