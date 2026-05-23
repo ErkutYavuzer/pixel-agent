@@ -91,7 +91,9 @@ C7, B6, B3, A8, C10, C2/C3 + sprint 1 follow-up'lar.
 | ✅ | B3 | Conversation export (markdown/JSON) |
 | ✅ | A8 | Composer focus halo + haptic |
 | ✅ | C10 | Subagent cap-reached banner |
-| ⏳ | C2/C3 | Screenshot in-chat + SoM overlay UI |
+| ✅ | C2/C3 | Screenshot in-chat + SoM overlay UI |
+
+**24 May 2026: Sprint 2 tamamlandı — Power-User Touches paketi.** 6 commit (c876e1e, 23317d7, e161fbc, 2d720d8, df96f3e, ve C2/C3 commit'i). Test sayısı: 529 → 574 (+45). PixelAgent.app rebuild edildi. Sonraki adım: v0.2.27 release tag (Sprint 2 bundle) + demo GIF kaydı + Sprint 3 (B2, B1, B8, C12).
 
 ## Sprint 3 — "Persistent State + iOS Parity" (Sprint 2 sonrası)
 

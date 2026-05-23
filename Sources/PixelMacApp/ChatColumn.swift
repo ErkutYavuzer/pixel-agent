@@ -30,6 +30,7 @@ struct ChatColumn: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                screenshotButton
                 exportMenu
                 copyLastButton
                 if showNewButton {
@@ -63,7 +64,8 @@ struct ChatColumn: View {
                                         message: msg,
                                         in: viewModel.messages,
                                         isStreaming: viewModel.isStreaming
-                                    )
+                                    ),
+                                    attachment: viewModel.screenshotAttachments[msg.id]
                                 )
                                 .id(msg.id)
                             }
@@ -133,6 +135,25 @@ struct ChatColumn: View {
         }
     }
 
+    // MARK: - Screenshot (C2/C3)
+
+    /// Aktif display'in ekran görüntüsünü alıp chat akışına system mesajı +
+    /// ephemeral attachment olarak ekler. Streaming sırasında disabled —
+    /// kullanıcı yanıt sırasında screenshot eklemek için biraz beklemek
+    /// zorunda kalır (race önler).
+    @ViewBuilder
+    private var screenshotButton: some View {
+        Button(action: viewModel.captureScreenshotIntoChat) {
+            Image(systemName: "camera.viewfinder")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .disabled(viewModel.isStreaming)
+        .help(viewModel.isStreaming
+              ? "Streaming bitince tekrar dene"
+              : "Aktif ekranı görüntüle ve chat'e ekle")
+    }
+
     // MARK: - Export (B3)
 
     @ViewBuilder
@@ -189,6 +210,9 @@ struct MessageRow: View {
     /// `true` ise bu mesaj şu an streaming edilen mesaj. Empty + streaming
     /// durumunda assistant body'sinde 3-dot typing indicator render edilir.
     var isStreaming: Bool = false
+    /// C2/C3: Varsa bu mesaja ait ekran görüntüsü. system role + attachment
+    /// kombosu InlineScreenshotView render eder.
+    var attachment: ScreenshotAttachment? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -225,8 +249,21 @@ struct MessageRow: View {
             // çevirir. Streaming sırasında her chunk'ta re-segment yapılır.
             MarkdownMessageView(text: message.text, isStreaming: isStreaming)
         case .user, .system:
-            Text(message.text.isEmpty ? "…" : message.text)
-                .textSelection(.enabled)
+            if let attachment {
+                // C2/C3: system + screenshot → inline image render.
+                VStack(alignment: .leading, spacing: 6) {
+                    InlineScreenshotView(attachment: attachment)
+                    if !message.text.isEmpty {
+                        Text(message.text)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            } else {
+                Text(message.text.isEmpty ? "…" : message.text)
+                    .textSelection(.enabled)
+            }
         }
     }
 

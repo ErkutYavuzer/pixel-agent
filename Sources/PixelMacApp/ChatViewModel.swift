@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import PixelComputerUse
 import PixelCore
 import PixelMascot
 import PixelMemory
@@ -16,6 +17,10 @@ final class ChatViewModel: ObservableObject {
     /// Claude için `--permission-mode plan` flag'ine dönüşür (read-only tool allowlist).
     /// Codex/Gemini'de no-op (CLI'lar native desteklemiyor).
     @Published var planMode: Bool = false
+    /// C2/C3: Ephemeral screenshot attachment'ları. Message id → ScreenshotAttachment.
+    /// JSONL store'a yazılmaz (büyük binary data) — app restart'ta kaybolur.
+    /// MessageRow render sırasında dict'i sorgular; varsa inline image render.
+    @Published var screenshotAttachments: [UUID: ScreenshotAttachment] = [:]
 
     let backend: any ChatBackend
     let conversationStore: ConversationStore
@@ -156,6 +161,31 @@ final class ChatViewModel: ObservableObject {
         Task { try? await store.append(msg) }
     }
 
+    /// C2/C3: Aktif display'in ekran görüntüsünü alır, chat akışına `.system`
+    /// mesajı + ephemeral attachment olarak ekler. Hata olursa streamError'a
+    /// düşer (banner UI zaten var).
+    func captureScreenshotIntoChat() {
+        Task {
+            do {
+                let result = try await ScreenshotCapture.capture(target: .activeDisplay)
+                let placeholder = "[ekran görüntüsü · \(result.pixelWidth)×\(result.pixelHeight) px]"
+                let msg = Message(role: .system, text: placeholder)
+                let attachment = ScreenshotAttachment(
+                    pngData: result.pngData,
+                    pixelSize: CGSize(width: result.pixelWidth, height: result.pixelHeight),
+                    marks: result.marks,
+                    capturedAt: result.capturedAt
+                )
+                messages.append(msg)
+                screenshotAttachments[msg.id] = attachment
+                let store = conversationStore
+                Task { try? await store.append(msg) }
+            } catch {
+                streamError = "Ekran görüntüsü alınamadı: \(error.localizedDescription)"
+            }
+        }
+    }
+
     private func startTimeoutWatchdog() {
         watchdogTask?.cancel()
         let seconds = streamTimeoutSeconds
@@ -213,5 +243,29 @@ final class ChatViewModel: ObservableObject {
     private func updateAssistantText(id: UUID, appending chunk: String) {
         guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
         messages[idx].text += chunk
+    }
+}
+
+/// C2/C3: Ephemeral screenshot bilgisi. PNG bytes + boyut + marks + capture
+/// zamanı. ConversationStore'a yazılmaz — chat aktif olduğu sürece RAM'de.
+struct ScreenshotAttachment: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let pngData: Data
+    let pixelSize: CGSize
+    let marks: [SoMMark]
+    let capturedAt: Date
+
+    init(
+        id: UUID = UUID(),
+        pngData: Data,
+        pixelSize: CGSize,
+        marks: [SoMMark] = [],
+        capturedAt: Date = Date()
+    ) {
+        self.id = id
+        self.pngData = pngData
+        self.pixelSize = pixelSize
+        self.marks = marks
+        self.capturedAt = capturedAt
     }
 }
