@@ -1,6 +1,6 @@
 import Foundation
 
-public enum CLIKind: String, CaseIterable, Codable, Sendable {
+public enum CLIKind: String, CaseIterable, Codable, Sendable, Identifiable {
     case claude
     case codex
     case gemini
@@ -14,6 +14,9 @@ public enum CLIKind: String, CaseIterable, Codable, Sendable {
         case .gemini: return "Gemini"
         }
     }
+
+    /// **v0.2.22:** `Identifiable` — SwiftUI `sheet(item:)`, `ForEach`, vs.
+    public var id: String { rawValue }
 }
 
 public struct CLIDetector: Sendable {

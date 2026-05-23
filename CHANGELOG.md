@@ -10,6 +10,24 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 
+## [0.2.22] — 2026-05-23
+
+**Per-backend model picker UI.** Toolbar'da her backend için Menu (catalog + Özel ID… + Varsayılana sıfırla); seçim UserDefaults'ta persiste edilir. Tek mode aktif backend için, Çift mode hem sol hem sağ için ayrı picker. **430 test yeşil** (+10). Breaking change yok.
+
+### Added — Faz 4.2 model picker (23 May 2026)
+- **`ModelCatalog`** (`Sources/PixelBackends/ModelCatalog.swift`) — her CLI için bilinen model ID'leri kataloğu (Claude family 5 alias, Codex 6 model, Gemini 6 model) + UserDefaults key helper (`pixel.model.<kind>`).
+- **`CLIBackend.defaultModelID` öncelik sırası güncellendi**: UserDefaults > env (`PIXEL_<KIND>_MODEL`) > hardcoded. UI picker en yüksek öncelik.
+- **`CLIKind: Identifiable`** — SwiftUI `sheet(item:)` desteği için (`id == rawValue`).
+- **`ChatHost.modelPicker(for:)`** — SwiftUI `Menu`: catalog modelleri (aktif olan check işaretli), Divider, "Özel ID…" sheet açar, "Varsayılana sıfırla" UserDefaults key'i temizler.
+- **`CustomModelSheet`** — özel model ID için modal (TextField + Kaydet/İptal). Doğrulama yok; yanlış ID "not found" döner.
+- **`ChatHost.currentBackend(for:)`** — backends dict'inden executable path alır, `CLIBackend(modelID: currentModel(for:))` ile fresh instance üretir. `.id()` (kind, model) çifti — model değişince ChatView/DualChatHost recreate, `ChatViewModel` fresh backend ile yenilenir.
+- **`@AppStorage("pixel.model.<kind>")`** ile per-kind state — empty string = "default'a düş" semantiği.
+
+### Tests
+- **`ModelCatalogTests`** — 10 yeni test: UserDefaults key format/prefix, catalog non-empty + family check (Opus 4.7 Claude'da, GPT-5 Codex'te, Flash family Gemini'de), UserDefaults override (Claude+Gemini), boş/whitespace UserDefaults fallback davranışı.
+- setUp/tearDown her test arasında `pixel.model.<kind>` key'lerini temizler.
+- Toplam test: **420 → 430** yeşil (+10). 0 regression.
+
 ## [0.2.21] — 2026-05-23
 
 **Hotfix: Launchpad cwd "root directory" + Gemini ModelNotFound.** İki ayrı kullanıcı raporu birleşti. `CLIBackend` artık subprocess'i app-specific bir workspace dizinde çalıştırıyor; Gemini default modeli `gemini-2.5-flash`'a düşürüldü. **420 test yeşil** (+2). Breaking change yok.

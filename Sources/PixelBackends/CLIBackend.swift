@@ -19,16 +19,24 @@ public struct CLIBackend: ChatBackend {
         self.init(kind: kind, executablePath: path)
     }
 
-    /// **v0.2.19:** Her CLI için varsayılan model ID. `PIXEL_CLAUDE_MODEL`,
-    /// `PIXEL_CODEX_MODEL`, `PIXEL_GEMINI_MODEL` env var'ları override eder
-    /// (boş veya set değilse hardcoded fallback). Caller `CLIBackend.init(...,
-    /// modelID:)` ile de override edebilir — env > explicit param > default.
+    /// Her CLI için varsayılan model ID. Öncelik sırası (v0.2.22):
+    /// 1. **UserDefaults** (`pixel.model.<kind>`) — UI picker yazıyor; en yüksek öncelik.
+    /// 2. **Env var** (`PIXEL_CLAUDE_MODEL` / `PIXEL_CODEX_MODEL` / `PIXEL_GEMINI_MODEL`).
+    /// 3. **Hardcoded fallback** (23 May 2026):
+    ///    - Claude: `claude-opus-4-7`
+    ///    - Codex: `gpt-5.5`
+    ///    - Gemini: `gemini-2.5-flash` (3.5 Flash henüz Google API'de yok, v0.2.21'de doğrulandı)
     ///
-    /// Hardcoded değerler (23 May 2026 itibarıyla):
-    /// - Claude: `claude-opus-4-7` (latest 4.7 patch resolve eder)
-    /// - Codex: `gpt-5.5`
-    /// - Gemini: `gemini-3.5-flash`
+    /// Caller `CLIBackend.init(..., modelID:)` ile her zaman explicit override edebilir
+    /// (bu fonksiyon çağrılmaz). UI/env katmanı default'u set ediyorsa burası seçer.
     public static func defaultModelID(for kind: CLIKind) -> String {
+        // 1. UserDefaults (UI model picker)
+        if let stored = UserDefaults.standard.string(forKey: ModelCatalog.userDefaultsKey(for: kind)),
+           !stored.trimmingCharacters(in: .whitespaces).isEmpty {
+            return stored
+        }
+
+        // 2. Env var
         let envKey: String
         let hardcoded: String
         switch kind {
@@ -40,16 +48,14 @@ public struct CLIBackend: ChatBackend {
             hardcoded = "gpt-5.5"
         case .gemini:
             envKey = "PIXEL_GEMINI_MODEL"
-            // v0.2.19'da `gemini-3.5-flash` denendi ama Google API "not found"
-            // döndü (CLI sürümü tanımıyor olabilir veya model adı farklı).
-            // v0.2.21 itibarıyla daha güvenli `gemini-2.5-flash` default;
-            // doğru ID bilinirse `PIXEL_GEMINI_MODEL` ile override edilir.
             hardcoded = "gemini-2.5-flash"
         }
         if let override = ProcessInfo.processInfo.environment[envKey],
            !override.trimmingCharacters(in: .whitespaces).isEmpty {
             return override
         }
+
+        // 3. Hardcoded
         return hardcoded
     }
 

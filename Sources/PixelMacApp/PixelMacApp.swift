@@ -136,6 +136,16 @@ struct ChatHost: View {
     @StateObject private var remoteHost: RemoteHost
     @StateObject private var subagentManager: SubagentManager
 
+    /// **v0.2.22:** Model seçimi UserDefaults'a yazılır; boş ise
+    /// `CLIBackend.defaultModelID` (env > hardcoded) devreye girer.
+    @AppStorage("pixel.model.claude") private var claudeModel: String = ""
+    @AppStorage("pixel.model.codex") private var codexModel: String = ""
+    @AppStorage("pixel.model.gemini") private var geminiModel: String = ""
+
+    /// Custom model giriş sheet'i için aktif kind. Identifiable → `.sheet(item:)`.
+    @State private var customModelKind: CLIKind?
+    @State private var customModelDraft: String = ""
+
     /// `PIXEL_RELAY_URL` env var varsa onu kullan; yoksa LAN IP (en0/en1) ile WebSocket URL üret;
     /// hiçbiri yoksa `ws://localhost:8787` (sadece Mac-local test için).
     static var defaultRelayURL: String {
@@ -210,6 +220,83 @@ struct ChatHost: View {
         )
     }
 
+    // MARK: - Model selection (v0.2.22)
+
+    /// Verilen kind için aktif model ID. UserDefaults'tan okunan custom değer
+    /// varsa onu döner; yoksa `CLIBackend.defaultModelID` zincirine (env >
+    /// hardcoded) düşer.
+    private func currentModel(for kind: CLIKind) -> String {
+        let stored: String
+        switch kind {
+        case .claude: stored = claudeModel
+        case .codex: stored = codexModel
+        case .gemini: stored = geminiModel
+        }
+        if !stored.trimmingCharacters(in: .whitespaces).isEmpty {
+            return stored
+        }
+        return CLIBackend.defaultModelID(for: kind)
+    }
+
+    /// UserDefaults'a yeni model yazar. Boş string → varsayılana sıfırla
+    /// (CLIBackend.defaultModelID env/hardcoded'a düşer).
+    private func setModel(_ value: String, for kind: CLIKind) {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        switch kind {
+        case .claude: claudeModel = trimmed
+        case .codex: codexModel = trimmed
+        case .gemini: geminiModel = trimmed
+        }
+    }
+
+    /// ChatView/DualChatHost'a geçilecek dinamik backend — kind için executable
+    /// path mevcut backends dict'inden, modelID UserDefaults/env/hardcoded
+    /// zincirinden gelir. Model değişikliği `.id()` üzerinden ChatView'ı
+    /// recreate eder, böylece `ChatViewModel` fresh backend ile yenilenir.
+    private func currentBackend(for kind: CLIKind) -> CLIBackend? {
+        guard let existing = backends[kind] else { return nil }
+        return CLIBackend(
+            kind: kind,
+            executablePath: existing.executablePath,
+            modelID: currentModel(for: kind)
+        )
+    }
+
+    @ViewBuilder
+    private func modelPicker(for kind: CLIKind) -> some View {
+        Menu {
+            ForEach(ModelCatalog.knownModels(for: kind), id: \.self) { model in
+                Button {
+                    setModel(model, for: kind)
+                } label: {
+                    HStack {
+                        Text(model)
+                        if currentModel(for: kind) == model {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button("Özel ID…") {
+                customModelDraft = currentModel(for: kind)
+                customModelKind = kind
+            }
+            Button("Varsayılana sıfırla") {
+                setModel("", for: kind)
+            }
+        } label: {
+            Label(currentModel(for: kind), systemImage: "cpu")
+                .labelStyle(.titleAndIcon)
+                .font(.caption)
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .frame(minWidth: 120, maxWidth: 220)
+        .help("Model — \(kind.displayName)")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -231,6 +318,9 @@ struct ChatHost: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 240)
 
+                // v0.2.22: aktif (sol) backend için model picker.
+                modelPicker(for: selectedKind)
+
                 if mode == .dual {
                     Picker("Sağ", selection: $secondaryKind) {
                         ForEach(CLIKind.allCases, id: \.self) { kind in
@@ -240,6 +330,9 @@ struct ChatHost: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(maxWidth: 240)
+
+                    // v0.2.22: sağ backend için model picker.
+                    modelPicker(for: secondaryKind)
                 }
 
                 Spacer()
@@ -291,7 +384,7 @@ struct ChatHost: View {
 
             switch mode {
             case .single:
-                if let backend = backends[selectedKind] {
+                if let backend = currentBackend(for: selectedKind) {
                     ChatView(
                         backend: backend,
                         backendKind: selectedKind,
@@ -303,16 +396,17 @@ struct ChatHost: View {
                             Task { await remoteHost.sendAssistantMessage(text) }
                         }
                     )
-                    // Backend değişiminde ChatViewModel @StateObject sıfırlansın diye
-                    // .id'yi backend kind'ına bağla. Aksi halde picker değiştiğinde
-                    // view yeniden init olur ama ViewModel eski backend'i tutar.
-                    .id(selectedKind)
+                    // Backend veya model değişiminde ChatViewModel @StateObject
+                    // sıfırlansın diye .id'yi (kind, model) çiftine bağla. v0.2.22:
+                    // model UI picker'ından da değişebildiği için id'ye eklendi.
+                    .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))")
                 } else {
                     MissingBackendView(kind: selectedKind)
                 }
 
             case .dual:
-                if let leftBackend = backends[selectedKind], let rightBackend = backends[secondaryKind] {
+                if let leftBackend = currentBackend(for: selectedKind),
+                   let rightBackend = currentBackend(for: secondaryKind) {
                     DualChatHost(
                         leftBackend: leftBackend,
                         rightBackend: rightBackend,
@@ -324,7 +418,7 @@ struct ChatHost: View {
                         subagentManager: subagentManager,
                         planMode: planMode
                     )
-                    .id("\(selectedKind.rawValue)-\(secondaryKind.rawValue)")
+                    .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))-\(secondaryKind.rawValue):\(currentModel(for: secondaryKind))")
                 } else {
                     MissingBackendView(kind: backends[selectedKind] == nil ? selectedKind : secondaryKind)
                 }
@@ -341,6 +435,14 @@ struct ChatHost: View {
             permissionsStatus = ComputerUsePermissions.status()
         }) {
             PermissionsView()
+        }
+        // v0.2.22: Özel model ID giriş sheet'i.
+        .sheet(item: $customModelKind) { kind in
+            CustomModelSheet(
+                kind: kind,
+                draft: $customModelDraft,
+                onSave: { setModel(customModelDraft, for: kind) }
+            )
         }
         .task {
             // MCP bridge'in dispatch_subagent çağrılarını UI havuzuna yönlendir.
@@ -373,6 +475,44 @@ struct MissingBackendView: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// **v0.2.22:** Listede olmayan bir model ID'yi elle girmek için modal.
+/// Kullanıcı catalog dışında bir model isterse (örn. nightly bir Gemini sürümü)
+/// buradan yazıp kaydeder; sonraki gönderilerde geçerli olur.
+struct CustomModelSheet: View {
+    let kind: CLIKind
+    @Binding var draft: String
+    let onSave: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("\(kind.displayName) için özel model ID")
+                .font(.headline)
+            Text("CLI'a `--model <id>` olarak geçirilir. Doğrulama yok — yanlış ID 'not found' döner.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("ör. claude-opus-4-7-20251101", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { commit() }
+            HStack {
+                Button("İptal", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Kaydet") { commit() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 360)
+    }
+
+    private func commit() {
+        onSave()
+        dismiss()
     }
 }
 
