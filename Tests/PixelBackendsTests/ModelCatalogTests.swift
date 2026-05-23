@@ -64,9 +64,9 @@ final class ModelCatalogTests: XCTestCase {
 
     func testKnownModelsGeminiIncludesFlashFamily() {
         let models = ModelCatalog.knownModels(for: .gemini)
-        // v0.2.23 kullanıcı tercihi: 3.5-flash + 3.1-pro öncelikli
-        XCTAssertTrue(models.contains("gemini-3.5-flash"))
-        XCTAssertTrue(models.contains("gemini-3.1-pro"))
+        // v0.2.25 kullanıcı tercihi: 3.x modelleri öncelikli
+        XCTAssertTrue(models.contains("gemini-3-flash-preview"))
+        XCTAssertTrue(models.contains("gemini-3.1-pro-preview"))
         // Eski sürümler hâlâ catalog'da (fallback)
         XCTAssertTrue(models.contains("gemini-2.5-flash"))
         XCTAssertTrue(models.contains("gemini-2.0-flash"))
@@ -74,12 +74,12 @@ final class ModelCatalogTests: XCTestCase {
 
     func testGeminiCatalogPrioritizes3xVersions() {
         let models = ModelCatalog.knownModels(for: .gemini)
-        guard let flashIdx = models.firstIndex(of: "gemini-3.5-flash"),
-              let proIdx = models.firstIndex(of: "gemini-3.1-pro"),
+        guard let flashIdx = models.firstIndex(of: "gemini-3-flash-preview"),
+              let proIdx = models.firstIndex(of: "gemini-3.1-pro-preview"),
               let oldFlashIdx = models.firstIndex(of: "gemini-2.5-flash") else {
             return XCTFail("3.x veya 2.x model eksik")
         }
-        XCTAssertLessThan(flashIdx, oldFlashIdx, "3.5-flash 2.5-flash'tan önce olmalı")
+        XCTAssertLessThan(flashIdx, oldFlashIdx, "gemini-3-flash-preview 2.5-flash'tan önce olmalı")
         XCTAssertLessThan(proIdx, oldFlashIdx)
     }
 

@@ -53,11 +53,11 @@ public enum ModelCatalog {
                 "o1-mini",
             ]
         case .gemini:
-            // Google Gemini family — kullanıcı tercihi: 3.5 Flash + 3.1 Pro ilk
-            // sırada. Pro variants > Flash same version (kalite > hız).
+            // Google Gemini family — Pro variants > Flash same version (kalite > hız).
             return [
-                "gemini-3.5-flash",
-                "gemini-3.1-pro",
+                "gemini-3.1-pro-preview",
+                "gemini-3-pro-preview",
+                "gemini-3-flash-preview",
                 "gemini-2.5-pro",
                 "gemini-2.5-flash",
                 "gemini-2.0-flash",
