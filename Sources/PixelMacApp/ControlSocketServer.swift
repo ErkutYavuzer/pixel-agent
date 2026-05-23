@@ -190,6 +190,9 @@ public actor ControlSocketServer {
         case "ui_screenshot":
             return await uiScreenshot(request.arguments)
 
+        case "ui_resolve":
+            return await uiResolve(request.arguments)
+
         default:
             return .failure("Bilinmeyen bridge tool: \(request.tool)")
         }
@@ -254,6 +257,26 @@ public actor ControlSocketServer {
             return .failure(error.errorDescription ?? "\(error)")
         } catch {
             return .failure("ui_type: \(error.localizedDescription)")
+        }
+    }
+
+    /// **Faz 3a (ADR-0028):** opaqueID re-resolve. Element artık yoksa
+    /// `{ "found": false }` döner; varsa element snapshot'ını payload olarak verir.
+    private func uiResolve(_ args: JSONValue) async -> BridgeResponse {
+        guard let oid = args["opaque_id"]?.stringValue else {
+            return .failure("`opaque_id` parametresi zorunlu.")
+        }
+        do {
+            if let element = try await computer.resolve(opaqueID: oid) {
+                let payload = try Self.encodeJSON(element)
+                return .success(payload)
+            } else {
+                return .success(.object(["found": .bool(false), "opaque_id": .string(oid)]))
+            }
+        } catch let error as ComputerUseError {
+            return .failure(error.errorDescription ?? "\(error)")
+        } catch {
+            return .failure("ui_resolve: \(error.localizedDescription)")
         }
     }
 

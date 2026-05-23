@@ -33,6 +33,9 @@ public enum ComputerUseError: Error, LocalizedError, Sendable {
     /// CGEvent enjeksiyonu başarısız.
     case eventInjectionFailed(reason: String)
 
+    /// **Faz 3a:** `resolve(opaqueID:)` çağrısında format parse edilemedi.
+    case invalidOpaqueID(raw: String)
+
     public var errorDescription: String? {
         switch self {
         case .accessibilityNotAuthorized:
@@ -53,6 +56,8 @@ public enum ComputerUseError: Error, LocalizedError, Sendable {
             return "Ekran görüntüsü alınamadı: \(reason)"
         case .eventInjectionFailed(let reason):
             return "Olay enjeksiyonu başarısız: \(reason)"
+        case .invalidOpaqueID(let raw):
+            return "Geçersiz opaqueID formatı: \(raw)"
         }
     }
 }

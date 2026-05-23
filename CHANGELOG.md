@@ -8,7 +8,36 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: PixelComputerUse Faz 3 (fuzzy/chained query DSL, IME-aware text injection) + Faz 4 (Set-of-Mark visual annotation); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+- v0.2 kalan: PixelComputerUse Faz 3b (modifier flags + IME injection verification + window content-area crop) + Faz 4 (Set-of-Mark visual annotation); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+
+## [0.2.13] — 2026-05-23
+
+**PixelComputerUse Faz 3a: chained query DSL + opaqueID re-resolve.** AX katmanı artık "Sidebar grubu içindeki Save butonu" gibi ancestor-constrained query'leri kabul ediyor; daha önce alınmış element handle'ları `ui_resolve` ile canlı tekrar bulunabiliyor. Schema geriye uyumlu — eski JSON'lar parse edilebilir. **338 test yeşil** (+23). Breaking change yok.
+
+### Added — PixelComputerUse Faz 3a (23 May 2026)
+- **`UIQuery.within: [UIQuery]`** — ancestor constraints (AND semantik). Her constraint için en az bir ancestor uymalı; recursive (nested `within` desteklenir).
+- **`UIQuery.containsText: String?`** — title VEYA label substring (case-insensitive). `matchMode`'a tabi değil. Diğer alanlarla AND'lenir.
+- **`OpaqueID`** (`Sources/PixelComputerUse/OpaqueID.swift`) — `<bundleID>|<role>[:<discriminator>]|...` formatı, AX-bağımsız encoder/decoder. `|` ve `:` `\u{1}` ve `\u{2}` ile escape edilir.
+- **`AXBridge.resolve(opaqueID:)`** — daha önce alınmış handle'dan canlı snapshot. Cache YOK; her resolve fresh path-walk. Element artık yoksa `nil`.
+- **`AXBridge.checkAncestorConstraints`** — `kAXParentAttribute` üzerinden 32-seviye walk (loop guard); her `within` constraint için en az bir ancestor uymalı.
+- **`PixelComputerUse.resolve(opaqueID:) async throws -> UIElement?`** — actor façade.
+- **`ComputerUseError.invalidOpaqueID(raw:)`** yeni case.
+
+### Added — MCP `ui_resolve` tool
+- **`ui_resolve`** — `{ "opaque_id": "..." }` → element JSON veya `{ "found": false }`. Read-only, Plan modunda çalışır. Accessibility izni gerekir.
+- **`ui_query` schema** `contains_text` + `within` parametreleri eklendi (geriye uyumlu — JSON'da yoksa default).
+- `BuiltInTools.makeRegistry()` artık **14 tool** döner (5 saf-data + 4 bridge + 5 ui_*).
+- `ControlSocketServer.uiResolve` bridge handler.
+
+### Changed
+- **`UIQuery` Codable artık manuel** (`init(from:)` + `encode(to:)`). Tüm alanlar `decodeIfPresent` — v0.2.12 ve öncesi JSON'lar parse edilebilir. `within` boş array iken encode edilmez (clean wire format).
+- **`UIElement.opaqueID` formatı değişti** (path-slash → bundle-pipe). Faz 1'de sadece debug string'di; v0.2.13'te resolve API'sinin girdisi olacak şekilde stable.
+
+### Tests
+- **`ChainedQueryTests`** — 13 yeni test: `containsText` title/label match, case-insensitive, role + containsText kompoziti, identifier short-circuit, Codable backward-compat, round-trip, debug summary.
+- **`OpaqueIDTests`** — 10 yeni test: bundle prefix, frontmost (empty bundle), no discriminator, pipe/colon escape, round-trip with special chars, bundle-only no path, empty discriminator.
+- Toplam test: **315 → 338** yeşil (+23). 0 regression.
+- [ADR-0028](docs/adr/0028-chained-query-and-opaque-id.md): chained query DSL + opaqueID format + resolve API + path-walk re-resolve tasarımı.
 
 ## [0.2.12] — 2026-05-23
 

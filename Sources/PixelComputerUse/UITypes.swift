@@ -25,6 +25,27 @@ public struct UIQuery: Sendable, Codable, Equatable, Hashable {
     /// En güvenilir match; varsa diğer alanları override eder.
     public var identifier: String?
 
+    /// **Faz 3a:** title VEYA label'a karşı **case-insensitive substring** match.
+    /// `title` ve `label` alanlarından bağımsız çalışır (parallel constraint).
+    /// Caller "Sign In" yazarsa hem `title="Sign In"` hem `label="Sign In Button"`
+    /// element'ini bulur. `matchMode`'a tabi değil — her zaman `caseInsensitive`
+    /// contains.
+    public var containsText: String?
+
+    /// **Faz 3a:** Element'in herhangi bir ancestor'unun bu query'lerden HER BİRİNE
+    /// uyması gerekir. Dizi boş = constraint yok. Birden fazla constraint = AND
+    /// (her biri farklı veya aynı ancestor'a uyabilir).
+    ///
+    /// Örnek: "Sidebar grubu içindeki Save butonu"
+    /// ```swift
+    /// UIQuery(role: .button, title: "Save",
+    ///         within: [UIQuery(role: .group, title: "Sidebar")])
+    /// ```
+    ///
+    /// Recursive — `within` içindeki UIQuery'lerin de kendi `within` constraint'i
+    /// olabilir (root'a kadar zincir).
+    public var within: [UIQuery]
+
     /// Match stratejisi. Default: `.exact`.
     public var matchMode: MatchMode
 
@@ -40,6 +61,8 @@ public struct UIQuery: Sendable, Codable, Equatable, Hashable {
         title: String? = nil,
         label: String? = nil,
         identifier: String? = nil,
+        containsText: String? = nil,
+        within: [UIQuery] = [],
         matchMode: MatchMode = .exact,
         maxDepth: Int = 12,
         timeout: TimeInterval = 3.0
@@ -49,6 +72,8 @@ public struct UIQuery: Sendable, Codable, Equatable, Hashable {
         self.title = title
         self.label = label
         self.identifier = identifier
+        self.containsText = containsText
+        self.within = within
         self.matchMode = matchMode
         self.maxDepth = maxDepth
         self.timeout = timeout
@@ -62,8 +87,48 @@ public struct UIQuery: Sendable, Codable, Equatable, Hashable {
         if let t = title { parts.append("title=\"\(t)\"") }
         if let l = label { parts.append("label=\"\(l)\"") }
         if let i = identifier { parts.append("id=\(i)") }
+        if let c = containsText { parts.append("contains=\"\(c)\"") }
         if matchMode != .exact { parts.append("mode=\(matchMode.rawValue)") }
+        if !within.isEmpty { parts.append("within=[\(within.count)]") }
         return parts.isEmpty ? "(boş)" : parts.joined(separator: " ")
+    }
+
+    // MARK: - Codable
+
+    /// `within` ve `containsText` Faz 3a'da eklendi; v0.2.12 ve öncesi JSON'lar
+    /// bu alanlar olmadan gelir. `decodeIfPresent` ile geriye uyumlu.
+    private enum CodingKeys: String, CodingKey {
+        case bundleID, role, title, label, identifier
+        case containsText, within
+        case matchMode, maxDepth, timeout
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.bundleID = try c.decodeIfPresent(String.self, forKey: .bundleID)
+        self.role = try c.decodeIfPresent(AXRole.self, forKey: .role)
+        self.title = try c.decodeIfPresent(String.self, forKey: .title)
+        self.label = try c.decodeIfPresent(String.self, forKey: .label)
+        self.identifier = try c.decodeIfPresent(String.self, forKey: .identifier)
+        self.containsText = try c.decodeIfPresent(String.self, forKey: .containsText)
+        self.within = try c.decodeIfPresent([UIQuery].self, forKey: .within) ?? []
+        self.matchMode = try c.decodeIfPresent(MatchMode.self, forKey: .matchMode) ?? .exact
+        self.maxDepth = try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 12
+        self.timeout = try c.decodeIfPresent(TimeInterval.self, forKey: .timeout) ?? 3.0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(bundleID, forKey: .bundleID)
+        try c.encodeIfPresent(role, forKey: .role)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(label, forKey: .label)
+        try c.encodeIfPresent(identifier, forKey: .identifier)
+        try c.encodeIfPresent(containsText, forKey: .containsText)
+        if !within.isEmpty { try c.encode(within, forKey: .within) }
+        try c.encode(matchMode, forKey: .matchMode)
+        try c.encode(maxDepth, forKey: .maxDepth)
+        try c.encode(timeout, forKey: .timeout)
     }
 }
 

@@ -96,11 +96,12 @@ public enum BuiltInTools {
         registry.register(notify)
         registry.register(playSound)
         registry.register(dispatchSubagent)
-        // Computer use (ADR-0026) — bridge tool'lar.
+        // Computer use (ADR-0026 + ADR-0028) — bridge tool'lar.
         registry.register(uiQuery)
         registry.register(uiClick)
         registry.register(uiType)
         registry.register(uiScreenshot)
+        registry.register(uiResolve)
         return registry
     }
 
@@ -325,6 +326,8 @@ public enum BuiltInTools {
     // MARK: - Computer use (ADR-0026)
 
     /// `UIQuery` JSON schema — `ui_query/ui_click/ui_type` tarafından paylaşılır.
+    ///
+    /// Faz 3a (v0.2.13): `contains_text` + `within` parametreleri eklendi.
     static let uiQuerySchema: JSONValue = .object([
         "type": .string("object"),
         "properties": .object([
@@ -347,6 +350,18 @@ public enum BuiltInTools {
             "identifier": .object([
                 "type": .string("string"),
                 "description": .string("AXIdentifier (Accessibility Inspector). Set ise diğer alanlar override edilir."),
+            ]),
+            "contains_text": .object([
+                "type": .string("string"),
+                "description": .string("title VEYA label içinde case-insensitive substring. match_mode'a tabi değil."),
+            ]),
+            "within": .object([
+                "type": .string("array"),
+                "items": .object([
+                    "type": .string("object"),
+                    "description": .string("Ancestor constraint — kendisi de bir UIQuery (recursive)."),
+                ]),
+                "description": .string("Element'in her constraint için uyan en az bir ancestor'a sahip olması gerekir (AND)."),
             ]),
             "match_mode": .object([
                 "type": .string("string"),
@@ -433,6 +448,32 @@ public enum BuiltInTools {
             var args: [String: JSONValue] = ["text": .string(text)]
             if let into = params?["into"] { args["into"] = into }
             return await callBridge(tool: "ui_type", arguments: .object(args))
+        }
+    )
+
+    static let uiResolve = ToolDefinition(
+        name: "ui_resolve",
+        description: """
+            Daha önce ui_query ile alınmış bir `opaque_id`'den canlı element snapshot'ı \
+            döndürür. Cache yok — her çağrı AX path'i tekrar yürür. Element artık yoksa \
+            (UI değişmiş, app kapanmış vs.) sonuç boş gelir. Read-only — Plan modunda \
+            kullanılabilir. Accessibility izni gerekir.
+            """,
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "opaque_id": .object([
+                    "type": .string("string"),
+                    "description": .string("ui_query sonucundaki opaque_id alanı."),
+                ]),
+            ]),
+            "required": .array([.string("opaque_id")]),
+        ]),
+        handler: { params in
+            guard let oid = params?["opaque_id"]?.stringValue else {
+                return ToolResultBuilder.error("`opaque_id` parametresi zorunlu.")
+            }
+            return await callBridge(tool: "ui_resolve", arguments: .object(["opaque_id": .string(oid)]))
         }
     )
 

@@ -17,7 +17,7 @@ import Foundation
 ///
 /// İlgili ADR: [`docs/adr/0026-pixel-computer-use.md`](../../../docs/adr/0026-pixel-computer-use.md)
 public actor PixelComputerUse {
-    public static let version = "0.1.0"
+    public static let version = "0.2.0"
 
     /// Permission preflight stratejisi (test için DI).
     public enum PermissionPolicy: Sendable {
@@ -77,6 +77,16 @@ public actor PixelComputerUse {
     public func screenshot(of target: ScreenshotTarget = .activeDisplay) async throws -> ScreenshotResult {
         try await ensureScreenRecording()
         return try await ScreenshotCapture.capture(target: target)
+    }
+
+    /// **Faz 3a:** Daha önce `query()` ile alınmış bir `opaqueID`'den canlı
+    /// element snapshot'ı üretir. Element artık yoksa (UI değişmiş, app kapanmış,
+    /// vs.) `nil` döner. Cache yok — her resolve fresh path-walk yapar.
+    ///
+    /// Tipik kullanım: query → ekran/UI değişimi → re-resolve → click.
+    public func resolve(opaqueID: String) async throws -> UIElement? {
+        try await ensureAccessibility()
+        return try await axBridge.resolve(opaqueID: opaqueID)
     }
 
     // MARK: - Permission preflight
