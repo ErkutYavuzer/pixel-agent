@@ -191,7 +191,8 @@ final class ChatViewModel: ObservableObject {
     /// C2/C3: Aktif display'in ekran görüntüsünü alır, chat akışına `.system`
     /// mesajı + ephemeral attachment olarak ekler. **Sprint 4:** PNG bytes'ı
     /// `ScreenshotStore.save` ile diske persist eder — app restart'ından
-    /// sonra `restoreIfNeeded` hidrate eder. Hata olursa streamError'a.
+    /// sonra `restoreIfNeeded` hidrate eder. **C11:** Composer boşsa LLM'e
+    /// "bu ekranda ne görüyorsun" sorusunu prefill eder.
     func captureScreenshotIntoChat() {
         Task {
             do {
@@ -212,11 +213,22 @@ final class ChatViewModel: ObservableObject {
                 // Hata best-effort yutar — placeholder text JSONL'de var,
                 // sonraki restart'ta sadece görsel kaybolur (mesaj kalır).
                 try? ScreenshotStore.save(pngData: result.pngData, for: msg.id)
+                // **Sprint 4 (C11 "screenshot → soruna sor"):** Composer boşsa
+                // varsayılan soruyu prefill et — kullanıcı eklemeyi tetikleyici
+                // bir cümleye bakar, düzenleyip Enter'a basabilir. Composer
+                // doluysa kullanıcının taslağına dokunmuyoruz.
+                if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    draft = Self.defaultScreenshotPrompt
+                }
             } catch {
                 streamError = "Ekran görüntüsü alınamadı: \(error.localizedDescription)"
             }
         }
     }
+
+    /// **Sprint 4 (C11):** Screenshot sonrası composer'a düşürülen varsayılan
+    /// metin. Statik — testten erişim için public.
+    static let defaultScreenshotPrompt = "Bu ekran görüntüsünde ne görüyorsun?"
 
     private func startTimeoutWatchdog() {
         watchdogTask?.cancel()
