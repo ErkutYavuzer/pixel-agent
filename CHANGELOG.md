@@ -10,7 +10,124 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): `EnvelopeType` `unknown` fallback case (forward-compat); `EnvelopePayload` sum-type refactor (16 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- Sprint 2 ("Power-User Touches") hazır: C7 daimi connection pill, B6 quick-actions menu, B3 conversation export, A8 composer focus halo, C10 subagent cap-reached banner, C2/C3 screenshot in-chat + SoM overlay UI.
+- Sprint 3 ("Persistent State + iOS Parity") hazır: B2 conversation history sidebar (Large), B1 Settings scene (Large), B8 iOS settings tab (Medium), C12 tool-call envelope events (Medium).
+- Screenshot attachment'ları RAM-only (Sprint 2 / C2-C3); app restart'ında kaybolur. Asset directory persistence Sprint 3 follow-up adayı.
+
+## [0.2.27] — 2026-05-24
+
+**Sprint 2 "Power-User Touches" tamamlandı — 6 polish item, demo'dan daha derin etkileşimler.** Sprint 1'in zemininde kullanıcıyı uzun süre tutacak ergonomik dokunuşlar: daimi durum göstergesi, hızlı kopya akışları, conversation arşivleme, fokus geri bildirimi, transient uyarılar ve inline ekran görüntüsü + SoM mark görsel overlay'i. **574 test yeşil** (+45 bu release'te). Breaking change yok.
+
+Mimari deseni Sprint 1'le aynı: her item için saf helper / enum + minimal SwiftUI view. View'lar `@FocusState` ve `GeometryReader` gibi runtime affordances'lara dayanırken iş mantığı ve hesaplamalar saf testable kısımda kalıyor.
+
+### Added — Sprint 2 / Power-User Touches
+
+#### C7 Persistent connection pill (commit `c876e1e`, ROI 9)
+- `Sources/PixelMacApp/ConnectionPillView.swift` (yeni) — `ConnectionPillState`
+  saf enum (.notPaired / .connecting / .disconnected / .connected) + `from(
+  isPaired:isConnected:)` derivation; `label`, `systemImage`, `helpText`,
+  `tint` (`ConnectionPillTint` ham enum) computed properties. View kapsül +
+  icon + label + colored fill/stroke.
+- Toolbar'daki conditional `if remoteHost.isConnected { iphone icon }`
+  yerine daimi pill; tıklayınca pairing sheet açılır. QR ikonu ayrı kaldı
+  (explicit "yeni QR" affordance'ı).
+- 8 test: 4 derivation kombinasyonu, non-empty metadata, label uniqueness,
+  tint mapping, connected state radiowaves icon regression.
+
+#### B6 Quick-actions menu (commit `23317d7`, ROI 9)
+- `Sources/PixelMacApp/MessageActionsHelper.swift` (yeni, saf) —
+  `lastCopyableAssistantText(in:)` listeyi sondan tarar, ilk non-empty
+  asistan metnini döner. System mesajları (subagent çıktısı vs.) atlanır.
+- ChatColumn header'a `copyLastButton` — `doc.on.doc` ikonu; helper nil
+  dönerse disabled. Tıklayınca NSPasteboard'a yazar, 1.5s "✓ Kopyalandı"
+  feedback (IntegrationView / CodeBlockView paterni).
+- MessageRow `.contextMenu` — "Mesajı Kopyala" sağ-tık her mesaj için
+  (user/assistant/system); whitespace-only ise disabled.
+- 9 test: empty list, sadece user/system, çoklu turlarda son, trailing
+  empty assistant skip, whitespace-only skip, system mesajları sayılmaz,
+  original text trimlenmemiş (kod paste fidelity).
+
+#### B3 Conversation export (commit `e161fbc`, ROI 9)
+- `Sources/PixelMacApp/ConversationExporter.swift` (yeni, saf) —
+  `ConversationExportFormat: String, CaseIterable, Identifiable` (.markdown
+  + .json) + `markdown(messages:title:now:)` (`# Title` + ISO8601 export
+  date + her mesaj `## Role` başlığı, trailing newline auto-add) +
+  `json(messages:)` (pretty + sorted + iso8601 dates) + `defaultFilename(
+  for:now:)` (`pixel-agent-yyyy-MM-dd-HHmm.md/.json`).
+- ChatColumn header'a `exportMenu` — `square.and.arrow.up` borderless Menu;
+  iki seçenek `.menuIndicator(.hidden)`. NSSavePanel modal aç, format'a
+  göre içerik üret + URL'ye yaz.
+- Formatter'lar method-local (Swift 6 strict concurrency).
+- 12 test: empty placeholder, custom title, user+assistant order, system
+  section, trailing newline auto-add + preservation, JSON round-trip
+  lossless (saniye precision), pretty-printed, ISO8601 dates, filename
+  pattern, enum allCases.
+
+#### A8 Composer focus halo + haptic (commit `2d720d8`, ROI 8)
+- `Sources/PixelMacApp/ComposerHaloStyle.swift` (yeni, saf) —
+  `ComposerHaloStyle: Equatable, Sendable` (.none / .plan / .focused) +
+  `resolve(planMode:isFocused:isStreaming:)` priority logic: streaming →
+  none (disabled görsel zaten anlatır), aksi halde plan > focused > none.
+  `strokeColor` / `lineWidth` / `isVisible` view-side metadata.
+- ChatComposer: `@FocusState private var isComposerFocused: Bool` +
+  `.focused(...)`. Tek overlay conditional helper sonucunu kullanır.
+  `.animation(.easeInOut(0.18s), value: haloStyle)` fokus geçişlerinde
+  yumuşak fade.
+- `performSend()` + `performHaptic()` helper —
+  `NSHapticFeedbackManager.defaultPerformer.perform(.alignment, .now)`.
+  Plain Enter, Gönder butonu ve subagent dispatch'ten hepsi geçer.
+- 7 test: streaming overrides her şey (4 kombinasyon), plan > focused, plan
+  alone, focused alone, hiçbiri yok, none invisible, plan/focused visible.
+
+#### C10 Subagent cap-reached banner (commit `df96f3e`, ROI 6)
+- `SubagentManager` `@Published private(set) var lastCapReachedAt: Date?`
+  — başlangıçta nil, dispatch cap'e takıldığında her seferinde `Date()` set
+  edilir (yeni timestamp → `.onChange` her event'i yakalar).
+- ChatHost `.onChange(of: subagentManager.lastCapReachedAt)` →
+  `subagentManager.maxConcurrent`'ı kullanıp mesaj formatla, mevcut
+  `showConfigToast(message:)` helper'ına gönder. Aynı overlay slot'unu
+  config-change toast ile paylaşır.
+- 2 test: var olan `testCapReachedRejectsFourthDispatch` genişletildi
+  (nil → non-nil → yeni timestamp); yeni `testLastCapReachedAtRemainsNilOnSuccessfulDispatch`.
+
+#### C2/C3 Inline screenshot + SoM overlay UI (commit `2dfedee`, ROI 6.7, Large)
+- `Sources/PixelMacApp/ScreenshotMarkLayout.swift` (yeni, saf) —
+  `viewRect(forImageRect:imagePixelSize:viewSize:)` pixel→point ölçekleme
+  + `fittedSize(imagePixelSize:containerSize:)` aspect-fit hesaplaması.
+  Zero image size guard, edge case'ler.
+- `Sources/PixelMacApp/InlineScreenshotView.swift` (yeni) — `NSImage(data:)`
+  ile PNG yükle → `Image(nsImage:).resizable().aspectRatio(.fit)`.
+  GeometryReader içinde fitted size hesapla, her mark için pixel→point rect
+  üret; renkli outline + sol-üst sayı badge (capsule). 8-renk palette
+  modulo. MaxWidth 520pt. Footer'da boyut + mark sayısı.
+- `ChatViewModel`: `@Published var screenshotAttachments: [UUID:
+  ScreenshotAttachment]` ephemeral RAM dict (PNG bytes ConversationStore'a
+  yazılmaz — JSONL bloat, app restart'ında kaybolur, placeholder text
+  kalır). `ScreenshotAttachment` struct (id, pngData, pixelSize, marks,
+  capturedAt). `captureScreenshotIntoChat()` async helper —
+  `ScreenshotCapture.capture(target: .activeDisplay)` → placeholder
+  `[ekran görüntüsü · W×H px]` `.system` mesajı + attachment dict'e ekle.
+- ChatColumn: header'a `screenshotButton` (`camera.viewfinder`); MessageRow
+  yeni `attachment: ScreenshotAttachment?` parametresi, `.user`/`.system`
+  branch'inde attachment varsa InlineScreenshotView render.
+- 8 test: viewRect proportional scaling, unit-scale no-op, zero image guard,
+  fittedSize 4-case (wider/taller image, same aspect, zero), end-to-end
+  mark center preservation.
+
+### Changed
+- **MessageRow** — yeni `attachment: ScreenshotAttachment?` opsiyonel parametresi (default nil → eski davranış).
+- **SubagentManager** — yeni `lastCapReachedAt: Date?` published property; `dispatch()` failure path'i bu state'i set ediyor.
+- **ChatViewModel** — `import PixelComputerUse` eklendi; yeni `screenshotAttachments` dict + `captureScreenshotIntoChat()` metodu.
+- **ChatColumn** — header'a 3 yeni quick-action butonu eklendi (screenshot/export/copy-last); `@State didCopyLast` feedback toggle.
+
+### Tests
+- **Sprint 2 toplam:** 6 yeni test dosyası, 45 yeni test (**529 → 574**). 0 regression.
+- `ConnectionPillStateTests` (8), `MessageActionsHelperTests` (9), `ConversationExporterTests` (12), `ComposerHaloStyleTests` (7), `ScreenshotMarkLayoutTests` (8), `SubagentManagerTests` (+1 + 1 genişletildi).
+
+### Notes
+- **Persistence ayrımı:** Sprint 1'in tüm transient state'leri (planMode, toast'lar) RAM-only iken Sprint 2'de ekran görüntüleri de RAM-only — yalnız placeholder text JSONL'e persist edilir. Sprint 3 (B2 history sidebar) ekran görüntüsü asset directory'sini açabilir.
+- **Quick-action density:** ChatColumn header artık `[status] [spacer] [📷 screenshot] [↑ export] [📋 copy-last] [+ new] [mascot]` — 3 yeni buton düzenli yerleşim için sabit aralıklı borderless. Dual mode'da her iki sütun da bu butonlara bağımsız sahip.
+- **Composer haptic** trackpad olmayan mouse-only kullanıcılarda no-op; varsa `.alignment` titreşim trackpad'de hafiftir.
+- **Screenshot capture** Screen Recording izni gerektirir; `PermissionsView` zaten mevcut. İzin yoksa `streamError` set edilir, `ErrorRetryBanner` gösterir.
 
 ## [0.2.26] — 2026-05-24
 

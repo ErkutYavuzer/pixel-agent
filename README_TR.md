@@ -6,8 +6,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.26-blue)
-![tests](https://img.shields.io/badge/tests-529%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.27-blue)
+![tests](https://img.shields.io/badge/tests-574%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -127,7 +127,7 @@ Tap kaynağı: [ErkutYavuzer/homebrew-tap](https://github.com/ErkutYavuzer/homeb
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
 cd pixel-agent
 swift build -c release
-swift test                              # 529 yeşil
+swift test                              # 574 yeşil
 ./scripts/build-app.sh release && open PixelAgent.app
 ```
 
@@ -159,7 +159,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.26` (24 May 2026) · **529 test** yeşil · **32 ADR** · 10 library + 2 executable target · **Sprint 1 demo-ready milestone** kapandı
+**Versiyon:** `v0.2.27` (24 May 2026) · **574 test** yeşil · **32 ADR** · 10 library + 2 executable target · **Sprint 2 power-user touches** paketi shipped
 
 ### Sürüm geçmişi
 
@@ -192,6 +192,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.24` | 23 May | Claude catalog'a alias'lar (`opus`/`sonnet`/`haiku` = her zaman güncel); default `opus`. Fabrikasyon dated suffix'ler silindi | 432 |
 | `v0.2.25` | 23 May | iOS dashboard + per-backend store + real CPU metric (Mach `HOST_CPU_LOAD_INFO`) + ADR-0032 | 443 |
 | `v0.2.26` | 24 May | **Sprint 1 demo-ready milestone** — MCP entegrasyon yardımcısı, empty-state chip'leri, Plan Mode tool list paneli, markdown + kod copy, ⌘N/⌘⇧P/⌘⇧M kısayolları, typing indicator, iOS→Mac config toast, retry banner, auth login launcher, subagent → chat akışı | 529 |
+| `v0.2.27` | 24 May | **Sprint 2 power-user touches** — daimi connection pill, copy-last + per-message context menu, markdown/JSON export, composer focus halo + haptic, cap-reached banner, inline screenshots + SoM mark overlay | 574 |
 
 ### v0.2 yol haritası
 
