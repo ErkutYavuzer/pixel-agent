@@ -12,6 +12,8 @@ import SwiftUI
 struct IntegrationView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var copiedClientID: ClientID?
+    /// Sprint 6: MCP otomatik kurulum sihirbazı sheet'i.
+    @State private var showWizard: Bool = false
 
     enum ClientID: String, CaseIterable, Identifiable {
         case claudeDesktop = "claude-desktop"
@@ -56,6 +58,17 @@ struct IntegrationView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                // Sprint 6: Otomatik kurulum sihirbazı erişimi.
+                Button {
+                    showWizard = true
+                } label: {
+                    Label("🪄 Otomatik Kurulum…",
+                          systemImage: "wand.and.stars")
+                        .font(.callout.bold())
+                }
+                .buttonStyle(.borderedProminent)
+                .help("Config dosyalarını otomatik düzenle — kopya-yapıştır gerek yok")
+
                 Divider()
 
                 binaryPathSection
@@ -86,6 +99,9 @@ struct IntegrationView: View {
             .padding(24)
         }
         .frame(minWidth: 520, idealWidth: 580, minHeight: 560, idealHeight: 640)
+        .sheet(isPresented: $showWizard) {
+            MCPSetupWizardView()
+        }
     }
 
     private var binaryPathSection: some View {
