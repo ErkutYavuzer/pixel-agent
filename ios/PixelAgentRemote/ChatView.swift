@@ -8,15 +8,26 @@ struct ChatView: View {
     @EnvironmentObject var session: RemoteSession
     @State private var draft: String = ""
     @State private var showAbout: Bool = false
+    /// **Sprint 5 (iOS connection-lost pulse):** Bağlantı düştüğünde set
+    /// edilir; banner'a iletilir → ripple animasyonu tetiklenir. Mac
+    /// `ConnectionPillView.pulseTrigger` ile aynı pattern.
+    @State private var lastDisconnectAt: Date? = nil
 
     var body: some View {
         TabView {
             // Tab 1: Sohbet
             VStack(spacing: 0) {
                 header
-                
+
                 if !session.isConnected {
-                    connectionLostBanner
+                    ConnectionLostBanner(
+                        pulseTrigger: lastDisconnectAt,
+                        onRetry: {
+                            if let pairing = session.pairing {
+                                Task { await session.connect(pairing: pairing) }
+                            }
+                        }
+                    )
                 }
 
                 ScrollViewReader { proxy in
@@ -90,35 +101,21 @@ struct ChatView: View {
             AboutView()
                 .environmentObject(session)
         }
+        // Sprint 5: isConnected geçişlerini dinleyip loss event'te
+        // lastDisconnectAt'ı yenile — banner pulse'lar.
+        .onChange(of: session.isConnected) { wasConnected, isConnected in
+            if ConnectionLossDetector.isLossEvent(
+                wasConnected: wasConnected, isConnected: isConnected
+            ) {
+                lastDisconnectAt = Date()
+            }
+        }
     }
 
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
-    private var connectionLostBanner: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-                .tint(.orange)
-            Text("Bağlantı koptu. Yeniden bağlanılıyor...")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button(action: {
-                if let pairing = session.pairing {
-                    Task { await session.connect(pairing: pairing) }
-                }
-            }) {
-                Text("Tekrar Dene")
-                    .font(.footnote.bold())
-                    .foregroundStyle(.orange)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color.orange.opacity(0.12))
-        .transition(.move(edge: .top).combined(with: .opacity))
-    }
 
     private func errorBanner(_ error: String) -> some View {
         HStack {
