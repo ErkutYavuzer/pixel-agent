@@ -166,6 +166,11 @@ struct ChatHost: View {
     /// nonce değişince ChatViewModel @StateObject re-init olur ve
     /// `restoreIfNeeded()` JSONL'den yeni içeriği okur.
     @State private var archiveLoadNonce: Int = 0
+    /// **Sprint 4 (connection-lost pulse):** Bağlantı düştüğünde set edilir.
+    /// `ConnectionPillView.pulseTrigger`'a iletilir → ripple animasyonu.
+    @State private var lastDisconnectAt: Date? = nil
+    /// Önceki ConnectionPillState — transition detection için.
+    @State private var previousPillState: ConnectionPillState = .notPaired
     @State private var permissionsStatus: ComputerUsePermissions.Status = ComputerUsePermissions.status()
     @State private var incomingFromRemote: String?
     @State private var planMode: Bool = false
@@ -306,6 +311,15 @@ struct ChatHost: View {
             kind: kind,
             executablePath: existing.executablePath,
             modelID: currentModel(for: kind)
+        )
+    }
+
+    /// **Sprint 4 (connection-lost pulse):** Toolbar'daki pill'in current state'i.
+    /// Hem render hem onChange(of:) için single source of truth.
+    private var currentPillState: ConnectionPillState {
+        ConnectionPillState.from(
+            isPaired: remoteHost.isPaired,
+            isConnected: remoteHost.isConnected
         )
     }
 
@@ -486,12 +500,17 @@ struct ChatHost: View {
                 )
 
                 ConnectionPillView(
-                    state: ConnectionPillState.from(
-                        isPaired: remoteHost.isPaired,
-                        isConnected: remoteHost.isConnected
-                    ),
+                    state: currentPillState,
+                    pulseTrigger: lastDisconnectAt,
                     onTap: { showPairing = true }
                 )
+                .onChange(of: currentPillState) { oldState, newState in
+                    // Sprint 4: .connected → .disconnected geçişinde pulse tetikle.
+                    if ConnectionTransitionDetector.isLossEvent(from: oldState, to: newState) {
+                        lastDisconnectAt = Date()
+                    }
+                    previousPillState = newState
+                }
 
                 Button { showPermissions = true } label: {
                     Image(systemName: permissionsStatus.allGranted ? "lock.shield.fill" : "lock.shield")

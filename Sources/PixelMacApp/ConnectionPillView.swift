@@ -11,7 +11,14 @@ import SwiftUI
 /// renkli kapsül; tıklayınca pairing sheet açılır.
 struct ConnectionPillView: View {
     let state: ConnectionPillState
+    /// **Sprint 4 (connection-lost pulse):** Caller bunu yeni bir Date'e set
+    /// edince ripple animasyonu tetiklenir (scale 1→1.7 + opacity 0.8→0).
+    /// nil veya değişmemiş Date → animasyon yok.
+    var pulseTrigger: Date? = nil
     let onTap: () -> Void
+
+    @State private var pulseScale: CGFloat = 1.0
+    @State private var pulseOpacity: Double = 0
 
     var body: some View {
         Button(action: onTap) {
@@ -32,10 +39,29 @@ struct ConnectionPillView: View {
                 Capsule()
                     .stroke(state.tint.color.opacity(0.45), lineWidth: 1)
             )
+            .background(
+                // Ripple — pill'in arkasında genişleyen halka.
+                Capsule()
+                    .stroke(state.tint.color, lineWidth: 2)
+                    .scaleEffect(pulseScale)
+                    .opacity(pulseOpacity)
+                    .allowsHitTesting(false)
+            )
         }
         .buttonStyle(.plain)
         .help(state.helpText)
         .accessibilityLabel(state.label)
+        .onChange(of: pulseTrigger) { _, newValue in
+            guard newValue != nil else { return }
+            // Reset → animate. SwiftUI animasyonun başlamasını garantilemek
+            // için state değişiminin sonrasında withAnimation çağrılır.
+            pulseScale = 1.0
+            pulseOpacity = 0.85
+            withAnimation(.easeOut(duration: 1.6)) {
+                pulseScale = 1.7
+                pulseOpacity = 0
+            }
+        }
     }
 }
 
@@ -100,6 +126,20 @@ enum ConnectionPillState: Equatable, Sendable {
         case .disconnected: return .orange
         case .connected: return .green
         }
+    }
+}
+
+/// **Sprint 4:** Bağlantı state geçişlerinden hangilerinin "kayıp event"
+/// olarak işaretleneceğini hesaplayan saf yardımcı. Yalnızca .connected'tan
+/// .disconnected'a düşüş "kullanıcı dikkati gerektirir" sayılır; aktif
+/// disconnect (kullanıcının "Bağlantıyı kapat" tıklaması) ya da pair
+/// reset (notPaired) bunun dışında kalır.
+enum ConnectionTransitionDetector {
+    static func isLossEvent(
+        from oldState: ConnectionPillState,
+        to newState: ConnectionPillState
+    ) -> Bool {
+        oldState == .connected && newState == .disconnected
     }
 }
 
