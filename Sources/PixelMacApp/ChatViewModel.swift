@@ -53,9 +53,36 @@ final class ChatViewModel: ObservableObject {
         do {
             let restored = try await conversationStore.loadAll(limit: 200)
             messages = restored
+            // **Sprint 4 (C2/C3 follow-up):** Restart sonrası screenshot
+            // attachment'larını disk'ten hidrate et. `.system` + placeholder
+            // prefix sentinel'i ile filtre — boşuna dosya lookup'ı yok.
+            for msg in restored where shouldHydrateScreenshot(message: msg) {
+                guard let pngData = try? ScreenshotStore.load(for: msg.id) else {
+                    continue
+                }
+                guard let image = NSImage(data: pngData),
+                      let rep = image.representations.first else {
+                    continue
+                }
+                let pixelSize = CGSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                let attachment = ScreenshotAttachment(
+                    pngData: pngData,
+                    pixelSize: pixelSize,
+                    marks: [],  // marks JSONL'e yazılmıyor — restart'ta kaybolur (kabul edildi)
+                    capturedAt: msg.createdAt
+                )
+                screenshotAttachments[msg.id] = attachment
+            }
         } catch {
             streamError = "Mesaj geçmişi yüklenemedi: \(error.localizedDescription)"
         }
+    }
+
+    /// **Sprint 4:** `.system` mesajının screenshot placeholder olup olmadığını
+    /// belirler. captureScreenshotIntoChat'in ürettiği text format'iyla
+    /// senkron.
+    private func shouldHydrateScreenshot(message: Message) -> Bool {
+        message.role == .system && message.text.hasPrefix("[ekran görüntüsü")
     }
 
     func newConversation() {
@@ -162,8 +189,9 @@ final class ChatViewModel: ObservableObject {
     }
 
     /// C2/C3: Aktif display'in ekran görüntüsünü alır, chat akışına `.system`
-    /// mesajı + ephemeral attachment olarak ekler. Hata olursa streamError'a
-    /// düşer (banner UI zaten var).
+    /// mesajı + ephemeral attachment olarak ekler. **Sprint 4:** PNG bytes'ı
+    /// `ScreenshotStore.save` ile diske persist eder — app restart'ından
+    /// sonra `restoreIfNeeded` hidrate eder. Hata olursa streamError'a.
     func captureScreenshotIntoChat() {
         Task {
             do {
@@ -180,6 +208,10 @@ final class ChatViewModel: ObservableObject {
                 screenshotAttachments[msg.id] = attachment
                 let store = conversationStore
                 Task { try? await store.append(msg) }
+                // **Sprint 4 (C2/C3 follow-up):** PNG bytes'ı diske yaz.
+                // Hata best-effort yutar — placeholder text JSONL'de var,
+                // sonraki restart'ta sadece görsel kaybolur (mesaj kalır).
+                try? ScreenshotStore.save(pngData: result.pngData, for: msg.id)
             } catch {
                 streamError = "Ekran görüntüsü alınamadı: \(error.localizedDescription)"
             }
