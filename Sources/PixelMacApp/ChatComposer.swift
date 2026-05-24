@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ChatComposer: View {
     @Binding var draft: String
@@ -19,6 +20,10 @@ struct ChatComposer: View {
     /// takibi — animate ile birlikte halo'yu yumuşatır.
     @FocusState private var isComposerFocused: Bool
 
+    /// **Sprint 5:** Drag-drop drop targeted state — `.onDrop` `isTargeted`
+    /// binding'i. Halo yeşile döner, kullanıcı dosyayı bırakabileceğini bilir.
+    @State private var isDropTargeted: Bool = false
+
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -32,7 +37,8 @@ struct ChatComposer: View {
         ComposerHaloStyle.resolve(
             planMode: planMode,
             isFocused: isComposerFocused,
-            isStreaming: isStreaming
+            isStreaming: isStreaming,
+            isDropTargeted: isDropTargeted
         )
     }
 
@@ -64,6 +70,12 @@ struct ChatComposer: View {
                     }
                 }
                 .animation(.easeInOut(duration: 0.18), value: haloStyle)
+                // **Sprint 5:** Drag-drop — file URL(s) bırakıldığında her biri
+                // için FileDropFormatter.snippet çağırıp draft sonuna append.
+                .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+                    handleDrop(providers: providers)
+                    return true
+                }
 
             if isStreaming {
                 Button("Durdur", action: onCancel)
@@ -99,5 +111,34 @@ struct ChatComposer: View {
 
     private func performHaptic() {
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+
+    /// **Sprint 5:** `.onDrop` callback. Her provider'dan file URL'i yükle,
+    /// FileDropFormatter.snippet'e ver, draft sonuna append. Async — drop
+    /// callback'i true döner (kabul edildi), gerçek append main actor'da.
+    private func handleDrop(providers: [NSItemProvider]) {
+        for provider in providers {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                let resolvedURL: URL?
+                if let url = item as? URL {
+                    resolvedURL = url
+                } else if let data = item as? Data {
+                    resolvedURL = URL(dataRepresentation: data, relativeTo: nil)
+                } else {
+                    resolvedURL = nil
+                }
+                guard let url = resolvedURL,
+                      let snippet = FileDropFormatter.snippet(forFileURL: url) else { return }
+                Task { @MainActor in
+                    if !draft.isEmpty, !draft.hasSuffix("\n") {
+                        draft += "\n"
+                    }
+                    draft += snippet
+                    if !draft.hasSuffix("\n") {
+                        draft += "\n"
+                    }
+                }
+            }
+        }
     }
 }

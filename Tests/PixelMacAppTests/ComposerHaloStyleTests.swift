@@ -73,4 +73,38 @@ final class ComposerHaloStyleTests: XCTestCase {
         XCTAssertEqual(ComposerHaloStyle.plan.lineWidth, 1.5)
         XCTAssertEqual(ComposerHaloStyle.focused.lineWidth, 1.5)
     }
+
+    // MARK: - Sprint 5: dropTargeted
+
+    func testDropTargetedHasHighestPriority() {
+        // dropTargeted plan ve focused'tan üstün.
+        for planMode in [false, true] {
+            for isFocused in [false, true] {
+                let style = ComposerHaloStyle.resolve(
+                    planMode: planMode,
+                    isFocused: isFocused,
+                    isStreaming: false,
+                    isDropTargeted: true
+                )
+                XCTAssertEqual(style, .dropTargeted,
+                    "dropTargeted plan'dan da focused'tan da öncelikli (plan=\(planMode), focused=\(isFocused))")
+            }
+        }
+    }
+
+    func testStreamingStillOverridesDropTargeted() {
+        // Streaming hâlâ en yüksek öncelik (UI disabled görsel anlatı).
+        let style = ComposerHaloStyle.resolve(
+            planMode: false,
+            isFocused: false,
+            isStreaming: true,
+            isDropTargeted: true
+        )
+        XCTAssertEqual(style, .none)
+    }
+
+    func testDropTargetedVisualMetadata() {
+        XCTAssertTrue(ComposerHaloStyle.dropTargeted.isVisible)
+        XCTAssertEqual(ComposerHaloStyle.dropTargeted.lineWidth, 2.5)
+    }
 }
