@@ -113,4 +113,60 @@ final class ConversationStoreTests: XCTestCase {
         let c2 = try await store.messageCount()
         XCTAssertEqual(c2, 2)
     }
+
+    // MARK: - Sprint 4 (B2 follow-up): replaceWithArchive
+
+    func testReplaceWithArchiveSwapsActiveJSONL() async throws {
+        let store = try ConversationStore(
+            directory: testDir,
+            fileName: "conversation-claude.jsonl"
+        )
+
+        // 1. Bir konuşma yap ve arşivle (newConversation tetikler).
+        try await store.append(Message(role: .user, text: "ilk soru"))
+        try await store.append(Message(role: .assistant, text: "ilk cevap"))
+        try await store.newConversation()
+
+        // 2. Yeni aktif konuşma — farklı içerik.
+        try await store.append(Message(role: .user, text: "ikinci soru"))
+        let beforeReplace = try await store.loadAll()
+        XCTAssertEqual(beforeReplace.map(\.text), ["ikinci soru"])
+
+        // 3. Arşivi listele, ilkini yükle.
+        let archives = try ConversationStore.listAllArchives(directory: testDir)
+        guard let first = archives.first else {
+            return XCTFail("Beklenen: en az bir arşiv var")
+        }
+        try await store.replaceWithArchive(first)
+
+        // 4. Aktif store artık ilk konuşmanın mesajlarını içermeli.
+        let afterReplace = try await store.loadAll()
+        XCTAssertEqual(afterReplace.map(\.text), ["ilk soru", "ilk cevap"])
+
+        // 5. "ikinci soru" da yeni archive girişine taşınmış olmalı.
+        let archivesAfter = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(archivesAfter.count, 2)
+    }
+
+    func testReplaceWithArchiveOnEmptyActiveJSONL() async throws {
+        // Aktif store boşken replace çalışmalı — newConversation boş dosyada
+        // no-op (rename yapmaz), sonra archive içeriği aktif'e yazılır.
+        let store = try ConversationStore(
+            directory: testDir,
+            fileName: "conversation-claude.jsonl"
+        )
+
+        // Boş bir arşiv yaratmak için: önce bir konuşma, arşivle, sonra
+        // yeni aktif boş bırak.
+        try await store.append(Message(role: .user, text: "x"))
+        try await store.newConversation()
+        // Şu an active boş, archive dolu.
+
+        let archives = try ConversationStore.listAllArchives(directory: testDir)
+        guard let first = archives.first else { return XCTFail("Arşiv yok") }
+
+        try await store.replaceWithArchive(first)
+        let loaded = try await store.loadAll()
+        XCTAssertEqual(loaded.map(\.text), ["x"])
+    }
 }

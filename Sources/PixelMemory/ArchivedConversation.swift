@@ -40,17 +40,14 @@ public enum ArchivedConversationParser {
 
     /// Filename'i `(kind, date)` çiftine parse eder; format uymuyorsa nil.
     ///
-    /// Beklenen pattern:
-    ///   `conversation-<kind>-<YYYY-MM-DDTHH-MM-SSZ>.jsonl`
-    /// `<stamp>` `ConversationStore`'un ürettiği — orijinal ISO8601'in
-    /// ':'leri '-' ile değiştirilmiş hali, **20 char sabit uzunluk**.
+    /// İki desteklenen stamp formatı:
+    /// - **Sprint 4+ (ms precision):** `YYYY-MM-DDTHH-MM-SS.sssZ` — 24 char
+    /// - **Eski (sec precision):** `YYYY-MM-DDTHH-MM-SSZ` — 20 char (geriye uyum)
     ///
     /// Naïve "ilk T'den geri ilk -" yaklaşımı işe yaramıyor çünkü tarih
     /// kısmının kendi içinde '-' var (`YYYY-MM-DD`). Bu yüzden sabit
-    /// uzunluk yaklaşımı: stamp tam 20 char, hemen öncesinde bir '-' var,
-    /// öncesi `conversation-<kind>`.
+    /// uzunluk yaklaşımı: her iki uzunluğu sırayla dene.
     public static func parseFilename(_ filename: String) -> (kind: String, date: Date)? {
-        // Strip extension
         guard let dotRange = filename.range(of: ".jsonl", options: .backwards) else {
             return nil
         }
@@ -59,27 +56,37 @@ public enum ArchivedConversationParser {
         let prefix = "conversation-"
         guard base.hasPrefix(prefix) else { return nil }
 
-        let stampLength = 20  // "2026-05-24T10-30-15Z" = 20 char
-        // Yeterli uzunluk: prefix + en az 1 char kind + 1 '-' + 20 char stamp
-        guard base.count >= prefix.count + 1 + 1 + stampLength else { return nil }
+        // ms precision önce dene (yeni format); olmazsa sec precision'a düş.
+        for stampLength in [24, 20] {
+            guard base.count >= prefix.count + 1 + 1 + stampLength else { continue }
+            let stampStart = base.index(base.endIndex, offsetBy: -stampLength)
+            let stampPart = String(base[stampStart...])
 
-        let stampStart = base.index(base.endIndex, offsetBy: -stampLength)
-        let stampPart = String(base[stampStart...])
+            let dashIdx = base.index(before: stampStart)
+            guard base[dashIdx] == "-" else { continue }
 
-        // Stamp'ten hemen önce '-' olmalı (kind ile ayraç).
-        let dashIdx = base.index(before: stampStart)
-        guard base[dashIdx] == "-" else { return nil }
+            let kindStart = base.index(base.startIndex, offsetBy: prefix.count)
+            let kind = String(base[kindStart..<dashIdx])
+            guard !kind.isEmpty else { continue }
 
-        let kindStart = base.index(base.startIndex, offsetBy: prefix.count)
-        let kind = String(base[kindStart..<dashIdx])
-        guard !kind.isEmpty else { return nil }
-
-        let restored = restoreColons(in: stampPart)
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTime]
-        guard let date = formatter.date(from: restored) else { return nil }
-
-        return (kind, date)
+            let restored = restoreColons(in: stampPart)
+            let formatter = ISO8601DateFormatter()
+            // Hem ms hem sec precision'ı kabul edebilecek format set.
+            formatter.formatOptions = [
+                .withInternetDateTime,
+                .withColonSeparatorInTime,
+                .withFractionalSeconds,
+            ]
+            if let date = formatter.date(from: restored) {
+                return (kind, date)
+            }
+            // Fractional seconds opsiyonel — sec precision için de dene.
+            formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTime]
+            if let date = formatter.date(from: restored) {
+                return (kind, date)
+            }
+        }
+        return nil
     }
 
     /// Stamp'teki T sonrası 3 `-` karakterini `:` ile değiştir (tarih kısmı

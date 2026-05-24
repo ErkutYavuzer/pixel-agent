@@ -161,6 +161,11 @@ struct ChatHost: View {
     @State private var showPermissions: Bool = false
     /// B2: Conversation history sidebar sheet.
     @State private var showHistory: Bool = false
+    /// **Sprint 4 (B2 follow-up):** Archive yüklendiğinde aktif ChatView'ı
+    /// force-recreate etmek için .id nonce'u. selectedKind aynı kalsa bile
+    /// nonce değişince ChatViewModel @StateObject re-init olur ve
+    /// `restoreIfNeeded()` JSONL'den yeni içeriği okur.
+    @State private var archiveLoadNonce: Int = 0
     @State private var permissionsStatus: ComputerUsePermissions.Status = ComputerUsePermissions.status()
     @State private var incomingFromRemote: String?
     @State private var planMode: Bool = false
@@ -304,6 +309,27 @@ struct ChatHost: View {
         )
     }
 
+    /// **Sprint 4 (B2 follow-up):** ConversationHistoryView'dan "Yükle" çağrısı
+    /// gelince çalışır. Mevcut backend'in store'unu archive ile değiştirir;
+    /// gerekirse backend'i de switch eder. `archiveLoadNonce` artırılır →
+    /// ChatView .id() değişir → ChatViewModel re-init → restoreIfNeeded()
+    /// archive mesajlarını JSONL'den okur.
+    private func loadArchive(_ entry: ArchivedConversationEntry) async {
+        guard let kind = CLIKind(rawValue: entry.backendKind),
+              let store = conversationStores[kind] else { return }
+        do {
+            try await store.replaceWithArchive(entry)
+            await MainActor.run {
+                selectedKind = kind
+                archiveLoadNonce += 1
+            }
+        } catch {
+            await MainActor.run {
+                showConfigToast(message: "⚠️ Arşiv yüklenemedi: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// iOS clientConfig değişimlerinde 3.5s görünen banner. Yeni mesaj
     /// gelirse mevcut dismiss timer'ı iptal edilir → toast yenilenir.
     private func showConfigToast(message: String) {
@@ -346,7 +372,7 @@ struct ChatHost: View {
                 )
                 // Backend veya model değişiminde ChatViewModel @StateObject
                 // sıfırlansın diye .id'yi (kind, model) çiftine bağla.
-                .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))")
+                .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind)):n\(archiveLoadNonce)")
             } else {
                 MissingBackendView(kind: selectedKind)
             }
@@ -366,7 +392,7 @@ struct ChatHost: View {
                     subagentManager: subagentManager,
                     planMode: planMode
                 )
-                .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))-\(secondaryKind.rawValue):\(currentModel(for: secondaryKind))")
+                .id("\(selectedKind.rawValue):\(currentModel(for: selectedKind))-\(secondaryKind.rawValue):\(currentModel(for: secondaryKind)):n\(archiveLoadNonce)")
             } else {
                 MissingBackendView(kind: backends[selectedKind] == nil ? selectedKind : secondaryKind)
             }
@@ -525,7 +551,9 @@ struct ChatHost: View {
         }
         .animation(.easeInOut(duration: 0.22), value: configToast)
         .sheet(isPresented: $showHistory) {
-            ConversationHistoryView()
+            ConversationHistoryView(onLoadArchive: { entry in
+                Task { await loadArchive(entry) }
+            })
         }
         .sheet(isPresented: $showPairing) {
             PairingView(remoteHost: remoteHost)

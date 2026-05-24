@@ -12,6 +12,10 @@ import SwiftUI
 struct ConversationHistoryView: View {
     @Environment(\.dismiss) private var dismiss
 
+    /// **Sprint 4 (B2 follow-up):** "Bu sohbete devam et" butonu için
+    /// callback. nil ise buton gizli (eski davranış — read-only viewer).
+    var onLoadArchive: ((ArchivedConversationEntry) -> Void)? = nil
+
     @State private var entries: [ArchivedConversationEntry] = []
     @State private var selectedID: ArchivedConversationEntry.ID?
     @State private var selectedMessages: [Message] = []
@@ -114,7 +118,8 @@ struct ConversationHistoryView: View {
 
     private var detail: some View {
         Group {
-            if let id = selectedID, entries.contains(where: { $0.id == id }) {
+            if let id = selectedID,
+               let entry = entries.first(where: { $0.id == id }) {
                 if isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -131,13 +136,21 @@ struct ConversationHistoryView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(selectedMessages) { msg in
-                                MessageRow(message: msg)
-                            }
+                    VStack(spacing: 0) {
+                        // Sprint 4 (B2 follow-up): yükle butonu — onLoadArchive
+                        // bağlıysa görünür. Mevcut sohbet arşivlenir, archive
+                        // mesajlar aktif backend'e taşınır.
+                        if let onLoadArchive {
+                            loadActionBar(for: entry, onLoad: onLoadArchive)
                         }
-                        .padding()
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 12) {
+                                ForEach(selectedMessages) { msg in
+                                    MessageRow(message: msg)
+                                }
+                            }
+                            .padding()
+                        }
                     }
                 }
             } else {
@@ -153,6 +166,40 @@ struct ConversationHistoryView: View {
             }
         }
         .frame(minWidth: 400)
+    }
+
+    @ViewBuilder
+    private func loadActionBar(
+        for entry: ArchivedConversationEntry,
+        onLoad: @escaping (ArchivedConversationEntry) -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.uturn.forward.circle")
+                .foregroundStyle(.purple)
+            Text("Bu sohbete devam et")
+                .font(.callout)
+                .foregroundStyle(.primary)
+            Spacer()
+            Button {
+                onLoad(entry)
+                dismiss()
+            } label: {
+                Label("Yükle", systemImage: "arrow.down.doc")
+                    .font(.caption.bold())
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .help("Mevcut sohbet arşivlenir, bu konuşma \(kindDisplayName(entry.backendKind)) için aktif olur")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.thinMaterial)
+        .overlay(
+            Rectangle()
+                .fill(.secondary.opacity(0.12))
+                .frame(height: 1),
+            alignment: .bottom
+        )
     }
 
     // MARK: - Data

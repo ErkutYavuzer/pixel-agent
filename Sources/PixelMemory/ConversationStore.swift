@@ -59,8 +59,16 @@ public actor ConversationStore {
         let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
         let size = (attributes[.size] as? Int) ?? 0
         if size > 0 {
+            // **Sprint 4:** Millisecond precision — saniye precision'da hızlı
+            // ardışık `newConversation()` çağrıları (test hız + UI bouncing)
+            // dosya çakışmasına yol açıyordu. Format:
+            //   `YYYY-MM-DDTHH:MM:SS.sssZ` → `:` → `-` → 24 char stamp.
             let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTime]
+            formatter.formatOptions = [
+                .withInternetDateTime,
+                .withColonSeparatorInTime,
+                .withFractionalSeconds,
+            ]
             let stamp = formatter.string(from: Date())
                 .replacingOccurrences(of: ":", with: "-")
             let baseName = fileURL.deletingPathExtension().lastPathComponent
@@ -77,6 +85,22 @@ public actor ConversationStore {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return 0 }
         let data = try Data(contentsOf: fileURL)
         return data.split(separator: 0x0A).filter { !$0.isEmpty }.count
+    }
+
+    /// **Sprint 4 (B2 follow-up):** Aktif JSONL'i arşivler, sonra verilen
+    /// archived dosyanın içeriğini aktif JSONL'e kopyalar. Kullanıcı
+    /// "Bu sohbete devam et" tıkladığında çağrılır. ChatView re-init olunca
+    /// `restoreIfNeeded()` artık archived mesajları görür.
+    ///
+    /// `entry.id` URL'i archive dizininden olmalı (defensive sınır değil;
+    /// caller sorumluluğu — Sidebar'dan zaten geliyor).
+    public func replaceWithArchive(_ entry: ArchivedConversationEntry) throws {
+        // 1. Mevcut JSONL'i (boş değilse) archive'a taşı.
+        try newConversation()
+        // 2. Archive dosyasının içeriğini aktif JSONL'e kopyala.
+        let data = try Data(contentsOf: entry.id)
+        guard !data.isEmpty else { return }
+        try data.write(to: fileURL)
     }
 
     /// B2: Belirli bir archived dosyadan mesajları oku. URL store'un kendi
