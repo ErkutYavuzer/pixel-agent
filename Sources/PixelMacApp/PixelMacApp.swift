@@ -344,6 +344,35 @@ struct ChatHost: View {
         }
     }
 
+    /// **Sprint 6 (iOS → Mac archive load):** iOS'tan gelen "loadArchive"
+    /// clientAction handler. URL string'i parse edip backend kind'ı çözer,
+    /// mevcut `loadArchive(_:)` helper'ına delege eder. Persistence layer
+    /// `replaceWithArchive` URL-only çağrı için sadece `entry.id` ve
+    /// `entry.backendKind` kullanır; diğer field'lar dummy verilir.
+    private func loadArchiveByURLString(_ urlString: String) async {
+        guard let url = URL(string: urlString) else { return }
+        let filename = url.lastPathComponent
+        guard let parsed = ArchivedConversationParser.parseFilename(filename) else {
+            await MainActor.run {
+                showConfigToast(message: "⚠️ Arşiv adı parse edilemedi: \(filename)")
+            }
+            return
+        }
+        let entry = ArchivedConversationEntry(
+            id: url,
+            backendKind: parsed.kind,
+            archivedAt: parsed.date,
+            messageCount: 0,         // replaceWithArchive bu field'ı kullanmıyor
+            firstUserSnippet: nil
+        )
+        await loadArchive(entry)
+        // Kullanıcı bilgilendirmesi: iOS'tan tetiklenen yükleme görsel
+        // olarak Mac top bar'da banner gösterir.
+        await MainActor.run {
+            showConfigToast(message: "📱 Telefon: bu sohbet aktif edildi (\(parsed.kind))")
+        }
+    }
+
     /// iOS clientConfig değişimlerinde 3.5s görünen banner. Yeni mesaj
     /// gelirse mevcut dismiss timer'ı iptal edilir → toast yenilenir.
     private func showConfigToast(message: String) {
@@ -670,6 +699,11 @@ struct ChatHost: View {
                             // Ignored / Logged in Faz 2
                         }
                     }
+                } else if action == "loadArchive", let urlString = targetID {
+                    // Sprint 6 (iOS → Mac archive load): iOS'tan "Bu sohbete
+                    // devam et" tetiklendi. URL'i parse et, mevcut Mac
+                    // loadArchive(_:) helper'ını çağır.
+                    Task { await self.loadArchiveByURLString(urlString) }
                 }
             }
         }

@@ -251,6 +251,24 @@ final class RemoteSession: ObservableObject {
         }
     }
 
+    /// **Sprint 6 (iOS → Mac archive load):** iOS'tan tetiklenen "Bu sohbete
+    /// Mac'te devam et" eylemi. Mac arşivi aktif backend'e yükler (mevcut
+    /// aktif sohbet arşivlenir, hedef arşiv yeni aktif olur).
+    ///
+    /// `clientAction` envelope'unu reuse — yeni envelope type'a gerek yok.
+    /// `actionType: "loadArchive"`, `targetID:` arşivin URL string'i.
+    /// Mac side `onClientActionReceived` handler'da branch eklendi.
+    func requestArchiveLoadIntoActive(id: String) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.clientAction(type: "loadArchive", targetID: id)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Arşiv yükleme isteği gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     func disconnect(forget: Bool = true) async {
         reconnectTask?.cancel()
         reconnectTask = nil

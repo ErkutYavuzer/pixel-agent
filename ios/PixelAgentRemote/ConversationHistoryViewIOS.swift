@@ -141,30 +141,80 @@ struct ConversationHistoryViewIOS: View {
 }
 
 /// Seçilen arşivin mesajlarını gösterir — Mac'ten yükle, read-only render.
+/// **Sprint 6:** Üstte "Bu sohbete Mac'te devam et" butonu — Mac'te aktif
+/// backend'e arşivi yükler (mevcut sohbet arşivlenir).
 private struct ArchiveDetailView: View {
     @EnvironmentObject var session: RemoteSession
+    @Environment(\.dismiss) private var dismiss
     let entry: ArchiveEntryPayload
+    @State private var didRequestLoad: Bool = false
 
     var body: some View {
-        Group {
-            if session.loadedArchiveMessages.isEmpty {
-                ProgressView("Yükleniyor…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(session.loadedArchiveMessages) { msg in
-                            MessageRow(message: msg)
-                        }
-                    }
-                    .padding(16)
-                }
-            }
+        VStack(spacing: 0) {
+            loadActionBar
+            Divider()
+            content
         }
         .navigationTitle("Sohbet")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await session.requestArchive(id: entry.id)
+        }
+    }
+
+    private var loadActionBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.uturn.forward.circle")
+                .foregroundStyle(.purple)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Bu sohbete Mac'te devam et")
+                    .font(.callout)
+                if didRequestLoad {
+                    Text("İstek Mac'e gönderildi ✓")
+                        .font(.caption2)
+                        .foregroundStyle(.green)
+                }
+            }
+            Spacer()
+            Button {
+                Task {
+                    await session.requestArchiveLoadIntoActive(id: entry.id)
+                    didRequestLoad = true
+                    // 1s'lik feedback'ten sonra sheet'i kapat — kullanıcı
+                    // Mac chat tabına dönsün.
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    dismiss()
+                }
+            } label: {
+                Label("Yükle", systemImage: "arrow.down.doc")
+                    .font(.caption.bold())
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(didRequestLoad || !session.isConnected)
+            .help(session.isConnected
+                  ? "Mac'te bu konuşma aktif olur"
+                  : "Mac bağlı değil")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color(.secondarySystemGroupedBackground))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if session.loadedArchiveMessages.isEmpty {
+            ProgressView("Yükleniyor…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    ForEach(session.loadedArchiveMessages) { msg in
+                        MessageRow(message: msg)
+                    }
+                }
+                .padding(16)
+            }
         }
     }
 }
