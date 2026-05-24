@@ -6,8 +6,8 @@
 
 > **Personal AI agent for macOS** — chat with Claude/Codex/Gemini side by side, dispatch subagents in parallel, see and control your screen via Set-of-Mark, run your tools as an MCP server, and steer everything from your iPhone.
 
-![version](https://img.shields.io/badge/version-0.2.29-blue)
-![tests](https://img.shields.io/badge/tests-631%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.30-blue)
+![tests](https://img.shields.io/badge/tests-675%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <em>Native Swift · Multi-LLM · iOS remote dashboard · MCP server (14 tools) · Subagent UI · Computer use with Set-of-Mark · 631 tests · 32 ADRs</em>
+  <em>Native Swift · Multi-LLM · iOS remote dashboard · MCP server (14 tools) · Subagent UI · Computer use with Set-of-Mark · 675 tests · 32 ADRs</em>
 </p>
 
 <details>
@@ -255,12 +255,13 @@ Plus a retrospective: [v2 lessons](docs/architecture-decisions-from-v2.md) — 1
 
 ## Status
 
-**v0.2.29** (2026-05-24) · **631 tests** passing · **32 ADRs** · 10 libraries + 2 executables · Sprint 4 polish + persistence shipped.
+**v0.2.30** (2026-05-25) · **675 tests** passing · **32 ADRs** · 10 libraries + 2 executables · Sprint 5 cross-platform parity shipped.
 
 Recent highlights ([full changelog](CHANGELOG.md)):
 
 | Version | Date | Highlight | Tests |
 |---|---|---|---|
+| `v0.2.30` | 25 May | **Sprint 5 cross-platform parity** — iOS connection-lost pulse, mascot subtle animations (bob/wobble/mouth-cycle/shake), drag-drop file context with halo, iOS conversation history viewer (4 new envelope types) | 675 |
 | `v0.2.29` | 24 May | **Sprint 4 polish + persistence** — EnvelopeType.unknown forward-compat, "Bu sohbete devam et" archive load, screenshot persistence (~/Library/Application Support/.../screenshots), connection-lost pulse animation, screenshot prompt prefill | 631 |
 | `v0.2.28` | 24 May | **Sprint 3 persistent state + iOS parity** — conversation history sidebar (NavigationSplitView), ⌘, Settings scene (4 tabs), iOS Ayarlar tab (4th), tool-call envelope events broadcast to iOS Mac Paneli | 606 |
 | `v0.2.27` | 24 May | **Sprint 2 power-user touches** — persistent connection pill, copy-last + per-message context menu, markdown/JSON export, composer focus halo + haptic, cap-reached banner, inline screenshots with SoM mark overlays | 574 |

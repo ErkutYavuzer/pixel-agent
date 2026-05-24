@@ -9,8 +9,143 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
-- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopePayload` sum-type refactor (17 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- Sprint 4+ adayları: SoM marks JSONL sidecar (Sprint 4 / C2-C3 follow-up'ı tamamlar); iOS-side connection-lost pulse (paralel); Apple Developer ID + notarization; demo GIF recording.
+- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopePayload` sum-type refactor (20 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
+- Sprint 6 adayları: SoM marks JSONL sidecar (Sprint 4 / C2-C3 follow-up); Conversation rename/tag (B2 power-feature); Mac MCP setup wizard (B kategorisi); Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.30] — 2026-05-25
+
+**Sprint 5 "Cross-Platform Parity" — 4 atomic item, Mac ↔ iOS UX simetrisi + protokol genişlemesi.** Sprint 4'ün polish katmanı üzerine: iOS'a Mac'in connection-lost pulse'ı, mascot'a ince animasyon davranışları, composer'a drag-drop file context, ve iOS'a Mac'in geçmiş sidebar'ının karşılığı (4 yeni envelope ile relay/LAN üzerinden). **675 test yeşil** (+44 bu release'te). Breaking change yok pratikte (new enum cases additive — Sprint 4'ün `EnvelopeType.unknown` forward-compat'i bu envelope eklemelerini sorunsuz karşılar).
+
+### Added — Sprint 5 / Cross-Platform Parity
+
+#### iOS connection-lost pulse parallel to Mac (commit `dfa49b5`)
+- `Sources/PixelRemote/ConnectionLossDetector.swift` (yeni, saf, public):
+  `isLossEvent(wasConnected:isConnected:)` — yalnızca `true → false`
+  geçişi true döner; diğer 3 Bool kombinasyonu false (idempotent re-render
+  güvenli). Mac'in `ConnectionTransitionDetector` (state-based) ile
+  semantik paralel; iOS basit Bool için ayrı imza.
+- `ios/PixelAgentRemote/ConnectionLostBanner.swift` (yeni): önceki private
+  inline view extract edildi. `pulseTrigger: Date?` param + `.onChange`
+  ile reset + withAnimation easeOut(1.6s) scale 1.0→1.06 + opacity
+  0.85→0. Overlay: orange stroke Rectangle, hit-testing kapalı.
+  `.onAppear` da pulse'lar (tab dönüş / initial loss fark edilir).
+- `ios/PixelAgentRemote/ChatView.swift`: `@State lastDisconnectAt` +
+  `.onChange(of: session.isConnected)` listener.
+- 5 yeni test (truth table coverage).
+
+#### Mascot subtle animations (commit `d0f57e6`)
+- `Sources/PixelMascot/MascotAnimationClock.swift` (yeni, saf, public):
+  Foundation + CoreGraphics only — SwiftUI bağımsız, testable math.
+  * `idleOffset(time:)` — `sin(t × 2π × 0.25) × 1.5pt` dikey (4s periyot
+    nefes alma).
+  * `thinkingOffset(time:)` — `sin(t × 2π × 0.5) × 0.8pt` yatay (2s periyot
+    hafif wobble).
+  * `speakingFrameIndex(time:)` — `Int(t × 5) % 2` (5Hz cycle, 0/1 alternates).
+  * `errorShakeOffset(elapsed:)` — 0...0.5s decaying:
+    `3.0 × sin(elapsed × 2π × 15) × (1 - elapsed/0.5)` yatay; out-of-range
+    `.zero`.
+- `Sources/PixelMascot/PixelMascot.swift`: yeni `speakingFrameClosed`
+  ASCII frame (`__` kapalı ağız); `frame(for:atFrameIndex:)` overload —
+  speaking için 0/1 index'e göre dön, diğer state'ler tek frame.
+- `Sources/PixelMascot/MascotView.swift`: Canvas artık
+  `TimelineView(.animation(minimumInterval: 1/30))` wrapper içinde — 30 FPS.
+  State'e göre offset (idle bob / thinking wobble / error shake) + frame
+  index (speaking için 0/1). `@State errorEnteredAt` ile shake elapsed
+  hesabı.
+- 14 yeni test (4 idle + 2 thinking + 3 speaking + 5 error).
+
+#### Drag-drop file context to composer (commit `d0756fa`)
+- `Sources/PixelMacApp/FileDropFormatter.swift` (yeni, saf enum):
+  * `snippet(forFileURL:fileManager:)` — URL'i klasör/dosya'ya göre
+    branch'lar, format'lı string döner.
+  * Text dosyası (whitelist ext + <100KB) → ```\(lang)\n// <filename>\n
+    <content>\n``` fenced code block.
+  * Diğer dosyalar → `📎 \`<path>\`` mention.
+  * Klasör → `📁 <name>/ —` + indented listeleme (max 20 entry).
+  * 40+ ext text whitelist + `codeFenceLanguage` aliases (yml→yaml,
+    js→javascript, py→python, rs→rust, vb.).
+- `Sources/PixelMacApp/ComposerHaloStyle.swift`: yeni case `.dropTargeted`
+  — yeşil halo (0.65 alpha), 2.5pt line width. `resolve` `isDropTargeted`
+  yeni parametre (default false). Öncelik: streaming > dropTargeted >
+  plan > focused > none.
+- `Sources/PixelMacApp/ChatComposer.swift`: `import UniformTypeIdentifiers`,
+  `@State isDropTargeted`. TextField'a `.onDrop(of: [.fileURL])` +
+  `handleDrop(providers:)` callback — providers'tan URL yükle, snippet
+  üret, draft'a append (önce \n).
+- 16 yeni test (13 FileDropFormatter + 3 ComposerHaloStyle dropTargeted).
+
+#### iOS conversation history viewer (commit `804e10d`)
+- `Sources/PixelRemote/RemoteEnvelope.swift`:
+  * `import PixelCore` eklendi.
+  * 4 yeni `EnvelopeType` case: `archiveListRequest`, `archiveListResponse`,
+    `archiveLoadRequest`, `archiveLoadResponse`.
+  * `ArchiveEntryPayload` public struct (id String, backendKind, archivedAt
+    Double, messageCount, firstUserSnippet?) — Mac
+    `ArchivedConversationEntry`'nin wire-suitable versiyonu.
+  * `EnvelopePayload`'a 3 yeni opsiyonel field: `archiveEntries`,
+    `archiveLoadID`, `archiveMessages`. 17 → 20 opsiyonel field; sum-type
+    refactor adayı hâlâ açık.
+  * 4 yeni factory metodu.
+- `Sources/PixelRemote/RemoteHost.swift`:
+  * `import PixelCore`.
+  * 2 yeni callback: `onArchiveListRequested` + `onArchiveLoadRequested` —
+    caller ConversationStore'a delegate eder.
+  * Inbound handler'a `case .archiveListRequest`/`.archiveLoadRequest`
+    eklendi — callback çağırır + response envelope gönderir.
+  * `sendArchiveListResponse(entries:)` + `sendArchiveLoadResponse(messages:)`
+    public async — sign + transport.send pattern.
+- `Sources/PixelMacApp/PixelMacApp.swift`: ChatHost wire-up — handler'lar
+  `ConversationStore.listAllArchives()` + inline JSONL decode'a delegate.
+- `ios/PixelAgentRemote/RemoteSession.swift`: 3 yeni @Published
+  (`archiveEntries`, `loadedArchiveMessages`, `isLoadingArchives`) +
+  `requestArchiveList()`/`requestArchive(id:)` async methodları + inbound
+  case'leri.
+- `ios/PixelAgentRemote/ChatView.swift`: Sohbet header'a 🕒
+  (clock.arrow.circlepath) buton + `.sheet`; `MessageRow` private → internal
+  (archive detail view'ı reuse eder).
+- `ios/PixelAgentRemote/ConversationHistoryViewIOS.swift` (yeni, ~160 satır):
+  NavigationStack sheet. Backend'lere göre gruplu Section'lar (Claude/Codex/
+  Gemini öncelikli + diğerleri alfabetik), her grup tarih descending.
+  `NavigationLink` → `ArchiveDetailView` private (ProgressView → LazyVStack +
+  MessageRow). Loading + empty state'ler ayrı.
+- 9 yeni test (8 ArchiveEnvelopeTests — payload Codable round-trip,
+  envelope types in allCases, 4 factory; 1 existing test güncellendi).
+
+### Changed
+- **`EnvelopeType.allCases`** 14 → 18 case (`archiveListRequest`/`Response`/
+  `archiveLoadRequest`/`Response` eklendi). v0.2.29'daki forward-compat
+  sentinel sayesinde eski client'lar bu yeni tipleri `.unknown`'a düşürür.
+- **`EnvelopePayload`** 20 opsiyonel field (3 yeni archive field eklendi);
+  sum-type refactor hâlâ Sprint 6+ adayı.
+- **iOS `MessageRow`** private → internal — ConversationHistoryViewIOS
+  archive detail view'ı reuse eder.
+- **`PixelRemote`** artık `PixelCore`'a import dependency (Message tipinin
+  envelope payload'da geçebilmesi için). Existing dependency graph
+  zaten içeriyordu, sadece import statement eklendi.
+
+### Tests
+- **Sprint 5 toplam:** 5 yeni test dosyası, 44 yeni test (**631 → 675**). 0 regression.
+- `ConnectionLossDetectorTests` (5), `MascotAnimationClockTests` (14),
+  `FileDropFormatterTests` (13), `ComposerHaloStyleTests` (+3 dropTargeted),
+  `ArchiveEnvelopeTests` (8), `RemoteEnvelopeTests` (+1 expected cases updated).
+
+### Notes
+- **iOS pulse** Mac'le simetrik UX — banner appear'da ve her connection-lost
+  event'inde pulse'lar. Stable disconnected state'te (kalıcı kopuk) tekrar
+  tetiklenmez.
+- **Mascot animations** subtle by design — kullanıcıyı bunaltmasın. 30 FPS
+  TimelineView CPU yükü ihmal edilebilir (mascot 48pt kare küçük view).
+- **Drag-drop** LLM CLI'larının (Claude/Codex/Gemini) ek dosya kabul
+  etmediği için içerik prompt'a embed edilir. 100KB üzeri text dosyalar
+  path referansına düşer (composer'ı boğmamak için).
+- **iOS history viewer** lokal storage yok — Mac'in arşivlerini relay/LAN
+  üzerinden alır. Read-only viewer; Mac'in "Bu sohbete devam et" özelliği
+  (Sprint 4) iOS'a bu sürümde port edilmedi (Sprint 6+ adayı: iOS'tan
+  Mac'e archive load request).
+- **EnvelopePayload field sayısı** 20'ye ulaştı. Sum-type refactor (god
+  struct → enum cases per envelope type) Sprint 6+'da değerlendirilecek.
+
+**Sprint 1+2+3+4+5 birikim:** 29 audit item kapandı (10 demo-ready + 6 power-user + 4 persistent-state + 5 polish + 4 cross-platform). 443 → 675 test (+232). 22 saf helper + 14 view + 26 test dosyası. 5 GitHub release shipped.
 
 ## [0.2.29] — 2026-05-24
 

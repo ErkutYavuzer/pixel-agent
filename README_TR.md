@@ -6,8 +6,8 @@
 
 > Pixel-art mascot kılığında, macOS için kişisel bir AI ajanı — sohbet eder, iPhone'la eşleşir, kendi tool'larını başka LLM client'larına MCP ile sunar.
 
-![version](https://img.shields.io/badge/version-0.2.29-blue)
-![tests](https://img.shields.io/badge/tests-631%20passing-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.30-blue)
+![tests](https://img.shields.io/badge/tests-675%20passing-brightgreen)
 ![swift](https://img.shields.io/badge/swift-6.0-orange)
 ![platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![iOS](https://img.shields.io/badge/iOS-17%2B-blue)
@@ -127,7 +127,7 @@ Tap kaynağı: [ErkutYavuzer/homebrew-tap](https://github.com/ErkutYavuzer/homeb
 git clone https://github.com/ErkutYavuzer/pixel-agent.git
 cd pixel-agent
 swift build -c release
-swift test                              # 631 yeşil
+swift test                              # 675 yeşil
 ./scripts/build-app.sh release && open PixelAgent.app
 ```
 
@@ -159,7 +159,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 
 ## Durum
 
-**Versiyon:** `v0.2.29` (24 May 2026) · **631 test** yeşil · **32 ADR** · 10 library + 2 executable target · **Sprint 4 polish + persistence** paketi shipped
+**Versiyon:** `v0.2.30` (25 May 2026) · **675 test** yeşil · **32 ADR** · 10 library + 2 executable target · **Sprint 5 cross-platform parity** paketi shipped
 
 ### Sürüm geçmişi
 
@@ -195,6 +195,7 @@ Uygulama açılışta `claude`, `codex`, `gemini` binary'lerini PATH'te ve bilin
 | `v0.2.27` | 24 May | **Sprint 2 power-user touches** — daimi connection pill, copy-last + per-message context menu, markdown/JSON export, composer focus halo + haptic, cap-reached banner, inline screenshots + SoM mark overlay | 574 |
 | `v0.2.28` | 24 May | **Sprint 3 persistent state + iOS parity** — sohbet geçmişi sidebar (NavigationSplitView), ⌘, Settings scene (4 tab), iOS Ayarlar tab (4. tab), tool-call envelope events iOS Mac Paneli'ne broadcast | 606 |
 | `v0.2.29` | 24 May | **Sprint 4 polish + persistence** — EnvelopeType.unknown forward-compat, "Bu sohbete devam et" arşiv yükle, screenshot persistence (disk), connection-lost pulse, screenshot prompt prefill | 631 |
+| `v0.2.30` | 25 May | **Sprint 5 cross-platform parity** — iOS connection-lost pulse, mascot ince animasyonları (bob/wobble/mouth-cycle/shake), drag-drop file context + halo, iOS conversation history viewer (4 yeni envelope) | 675 |
 
 ### v0.2 yol haritası
 
