@@ -16,6 +16,11 @@ struct PixelMacApp: App {
             RootView()
                 .frame(minWidth: 520, minHeight: 400)
         }
+        // B1: ⌘, ile açılan standart macOS Preferences penceresi.
+        // 4 tab: Genel / Modeller / Bağlantı / İzinler.
+        Settings {
+            SettingsView()
+        }
         .commands {
             // ⌘N standart "New Window" yerine yeni sohbet açar — pencere
             // çoğaltma desteklemiyoruz, single-window-multi-document mantığı

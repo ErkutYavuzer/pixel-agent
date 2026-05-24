@@ -102,7 +102,7 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 | Status | # | Item |
 |---|---|---|
 | ✅ | B2 | Conversation history sidebar |
-| ⏳ | B1 | Settings scene (tab'lı) |
+| ✅ | B1 | Settings scene (tab'lı) |
 | ⏳ | B8 | iOS settings tab |
 | ⏳ | C12 | Tool-call envelope events |
 
