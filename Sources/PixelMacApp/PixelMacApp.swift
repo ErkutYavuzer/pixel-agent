@@ -604,6 +604,37 @@ struct ChatHost: View {
                 Task { await remoteHost?.sendToolCallEvent(toolName: tool, status: status, summary: summary) }
             }
 
+            // Sprint 5: iOS archive viewer — handler'lar Mac arşivlerini
+            // listele / yükle, response envelope ile dön.
+            remoteHost.onArchiveListRequested = {
+                guard let entries = try? ConversationStore.listAllArchives() else {
+                    return []
+                }
+                return entries.map { entry in
+                    ArchiveEntryPayload(
+                        id: entry.id.absoluteString,
+                        backendKind: entry.backendKind,
+                        archivedAt: entry.archivedAt.timeIntervalSince1970,
+                        messageCount: entry.messageCount,
+                        firstUserSnippet: entry.firstUserSnippet
+                    )
+                }
+            }
+            remoteHost.onArchiveLoadRequested = { idString in
+                guard let url = URL(string: idString) else { return [] }
+                // Inline okuma — store actor'a gerek yok, sadece dosya read.
+                let decoder = JSONDecoder()
+                let data = (try? Data(contentsOf: url)) ?? Data()
+                let lines = data.split(separator: 0x0A).filter { !$0.isEmpty }
+                var messages: [Message] = []
+                for line in lines {
+                    if let m = try? decoder.decode(Message.self, from: Data(line)) {
+                        messages.append(m)
+                    }
+                }
+                return messages
+            }
+
             remoteHost.onClientConfigReceived = { backend, model, plan in
                 guard let kind = CLIKind(rawValue: backend) else { return }
                 let oldBackend = self.selectedKind.rawValue

@@ -1,4 +1,5 @@
 import Foundation
+import PixelCore
 
 public enum EnvelopeType: String, Sendable, CaseIterable {
     case hello
@@ -16,12 +17,53 @@ public enum EnvelopeType: String, Sendable, CaseIterable {
     /// C12 (Sprint 3): Mac MCP bridge'inde bir tool çağrısı gerçekleştiğinde
     /// iOS dashboard'a duyuru. `EnvelopePayload.toolCallEvent` taşır.
     case toolCallEvent
+    /// **Sprint 5 (iOS history viewer):** iOS → Mac, arşiv listesini iste.
+    /// Payload boş.
+    case archiveListRequest
+    /// **Sprint 5:** Mac → iOS, arşiv listesi. `payload.archiveEntries` dolu.
+    case archiveListResponse
+    /// **Sprint 5:** iOS → Mac, belirli bir arşivi yükle. `payload.archiveLoadID`
+    /// dolu (Mac tarafındaki URL string).
+    case archiveLoadRequest
+    /// **Sprint 5:** Mac → iOS, arşiv mesajları. `payload.archiveMessages` dolu.
+    case archiveLoadResponse
     /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
     /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
     /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
     /// `allCases` bu sentinel'i de içerir ama production'da encode edilmez —
     /// yalnızca decode fallback'i.
     case unknown
+}
+
+/// **Sprint 5:** iOS history viewer için arşiv listesi envelope payload'u.
+/// `ArchivedConversationEntry`'nin wire-suitable versiyonu — URL yerine
+/// String, Date yerine Unix epoch.
+public struct ArchiveEntryPayload: Codable, Sendable, Equatable, Identifiable {
+    /// Mac tarafındaki URL string (file:// URL) — `archiveLoadRequest`'te
+    /// kullanılır.
+    public let id: String
+    /// Backend kind raw value (`"claude"`, `"codex"`, `"gemini"`).
+    public let backendKind: String
+    /// Arşivleme zamanı — Unix epoch saniye.
+    public let archivedAt: Double
+    /// Dosyadaki mesaj sayısı.
+    public let messageCount: Int
+    /// İlk user mesajının kısa preview'ı (60 char). nil olabilir.
+    public let firstUserSnippet: String?
+
+    public init(
+        id: String,
+        backendKind: String,
+        archivedAt: Double,
+        messageCount: Int,
+        firstUserSnippet: String?
+    ) {
+        self.id = id
+        self.backendKind = backendKind
+        self.archivedAt = archivedAt
+        self.messageCount = messageCount
+        self.firstUserSnippet = firstUserSnippet
+    }
 }
 
 extension EnvelopeType: Codable {
@@ -125,6 +167,14 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
     /// C12 (Sprint 3): Tool call event payload — `.toolCallEvent` type'ında dolu.
     public var toolCallEvent: ToolCallEventPayload?
 
+    // Sprint 5 (iOS history viewer): archive flow payload fields.
+    /// `.archiveListResponse` type için arşiv listesi.
+    public var archiveEntries: [ArchiveEntryPayload]?
+    /// `.archiveLoadRequest` type için yüklenecek arşivin id'si (Mac URL string).
+    public var archiveLoadID: String?
+    /// `.archiveLoadResponse` type için yüklenmiş arşiv mesajları.
+    public var archiveMessages: [Message]?
+
     public init(
         text: String? = nil,
         role: String? = nil,
@@ -143,7 +193,10 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
         availableModels: [String: [String]]? = nil,
         activeSubagents: [SubagentStatusPayload]? = nil,
         systemMetrics: SystemMetricsPayload? = nil,
-        toolCallEvent: ToolCallEventPayload? = nil
+        toolCallEvent: ToolCallEventPayload? = nil,
+        archiveEntries: [ArchiveEntryPayload]? = nil,
+        archiveLoadID: String? = nil,
+        archiveMessages: [Message]? = nil
     ) {
         self.text = text
         self.role = role
@@ -163,6 +216,9 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
         self.activeSubagents = activeSubagents
         self.systemMetrics = systemMetrics
         self.toolCallEvent = toolCallEvent
+        self.archiveEntries = archiveEntries
+        self.archiveLoadID = archiveLoadID
+        self.archiveMessages = archiveMessages
     }
 }
 
@@ -232,6 +288,37 @@ extension RemoteEnvelope {
         return RemoteEnvelope(
             type: .toolCallEvent,
             payload: EnvelopePayload(toolCallEvent: event)
+        )
+    }
+
+    // MARK: - Sprint 5 (iOS history viewer) archive flow
+
+    /// iOS → Mac: arşiv listesini iste. Payload null (boş).
+    public static func archiveListRequest() -> RemoteEnvelope {
+        RemoteEnvelope(type: .archiveListRequest)
+    }
+
+    /// Mac → iOS: arşiv listesi cevabı.
+    public static func archiveListResponse(entries: [ArchiveEntryPayload]) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .archiveListResponse,
+            payload: EnvelopePayload(archiveEntries: entries)
+        )
+    }
+
+    /// iOS → Mac: belirli arşivi yükle.
+    public static func archiveLoadRequest(id: String) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .archiveLoadRequest,
+            payload: EnvelopePayload(archiveLoadID: id)
+        )
+    }
+
+    /// Mac → iOS: yüklenmiş arşivin mesajları.
+    public static func archiveLoadResponse(messages: [Message]) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .archiveLoadResponse,
+            payload: EnvelopePayload(archiveMessages: messages)
         )
     }
 

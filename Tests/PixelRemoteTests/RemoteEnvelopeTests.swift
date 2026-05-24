@@ -24,6 +24,10 @@ final class RemoteEnvelopeTests: XCTestCase {
             "clientConfig", "clientAction", "hostStatus", "screenshotPayload",
             "toolCallEvent",  // C12 (Sprint 3) — Mac MCP bridge tool aktivitesi
             "unknown",        // Sprint 4 — forward-compat decode fallback
+            "archiveListRequest",   // Sprint 5 — iOS history viewer
+            "archiveListResponse",
+            "archiveLoadRequest",
+            "archiveLoadResponse",
         ]
         let actual = Set(EnvelopeType.allCases.map { $0.rawValue })
         XCTAssertEqual(actual, expected)

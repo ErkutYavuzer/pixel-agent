@@ -64,6 +64,13 @@ final class RemoteSession: ObservableObject {
     @Published var latestScreenshot: UIImage? = nil
     /// C12: Son tool call event'leri (en yeni ilk). Ring buffer ~30 kayıt.
     @Published var recentToolCalls: [ToolCallEventPayload] = []
+    /// **Sprint 5 (iOS history viewer):** Mac'ten alınan arşiv listesi.
+    /// `requestArchiveList()` sonrası `archiveListResponse` ile dolar.
+    @Published var archiveEntries: [ArchiveEntryPayload] = []
+    /// **Sprint 5:** Seçilen arşivin mesajları. `requestArchive(id:)`
+    /// sonrası `archiveLoadResponse` ile dolar.
+    @Published var loadedArchiveMessages: [Message] = []
+    @Published var isLoadingArchives: Bool = false
 
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
@@ -211,6 +218,36 @@ final class RemoteSession: ObservableObject {
             try await transport.send(signed)
         } catch {
             lastError = "Ekran resmi istenemedi: \(error.localizedDescription)"
+        }
+    }
+
+    /// **Sprint 5 (iOS history viewer):** Mac'ten arşiv listesi iste.
+    /// `archiveListResponse` envelope geldiğinde `archiveEntries` dolar.
+    func requestArchiveList() async {
+        guard let transport else { return }
+        isLoadingArchives = true
+        loadedArchiveMessages = []
+        let envelope = RemoteEnvelope.archiveListRequest()
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            isLoadingArchives = false
+            lastError = "Arşiv listesi istenemedi: \(error.localizedDescription)"
+        }
+    }
+
+    /// **Sprint 5:** Mac'ten belirli bir arşivin mesajlarını iste.
+    /// `archiveLoadResponse` envelope geldiğinde `loadedArchiveMessages` dolar.
+    func requestArchive(id: String) async {
+        guard let transport else { return }
+        loadedArchiveMessages = []
+        let envelope = RemoteEnvelope.archiveLoadRequest(id: id)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Arşiv yüklenemedi: \(error.localizedDescription)"
         }
     }
 
@@ -376,6 +413,17 @@ final class RemoteSession: ObservableObject {
                 if recentToolCalls.count > 30 {
                     recentToolCalls = Array(recentToolCalls.prefix(30))
                 }
+            }
+        case .archiveListResponse:
+            // Sprint 5: Mac'in arşiv listesi cevabı.
+            if let entries = envelope.payload?.archiveEntries {
+                archiveEntries = entries
+            }
+            isLoadingArchives = false
+        case .archiveLoadResponse:
+            // Sprint 5: belirli arşivin mesajları.
+            if let messages = envelope.payload?.archiveMessages {
+                loadedArchiveMessages = messages
             }
         case .error:
             if let message = envelope.payload?.errorMessage {

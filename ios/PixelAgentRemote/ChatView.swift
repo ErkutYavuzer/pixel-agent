@@ -8,6 +8,8 @@ struct ChatView: View {
     @EnvironmentObject var session: RemoteSession
     @State private var draft: String = ""
     @State private var showAbout: Bool = false
+    /// **Sprint 5 (iOS history viewer):** Geçmiş sheet'i için flag.
+    @State private var showHistory: Bool = false
     /// **Sprint 5 (iOS connection-lost pulse):** Bağlantı düştüğünde set
     /// edilir; banner'a iletilir → ripple animasyonu tetiklenir. Mac
     /// `ConnectionPillView.pulseTrigger` ile aynı pattern.
@@ -101,6 +103,10 @@ struct ChatView: View {
             AboutView()
                 .environmentObject(session)
         }
+        .sheet(isPresented: $showHistory) {
+            ConversationHistoryViewIOS()
+                .environmentObject(session)
+        }
         // Sprint 5: isConnected geçişlerini dinleyip loss event'te
         // lastDisconnectAt'ı yenile — banner pulse'lar.
         .onChange(of: session.isConnected) { wasConnected, isConnected in
@@ -181,6 +187,13 @@ struct ChatView: View {
                     .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
             }
             
+            // Sprint 5 (iOS history viewer): Sohbet geçmişi sheet'i.
+            Button { showHistory = true } label: {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+
             Button { showAbout = true } label: {
                 Image(systemName: "info.circle")
                     .font(.title3)
@@ -661,7 +674,8 @@ struct ZoomableImageView: UIViewRepresentable {
     }
 }
 
-private struct MessageRow: View {
+// Sprint 5: internal hale getirildi — ConversationHistoryViewIOS de kullanır.
+struct MessageRow: View {
     let message: Message
 
     var body: some View {

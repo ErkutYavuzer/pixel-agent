@@ -1,6 +1,7 @@
 import Combine
 import CryptoKit
 import Foundation
+import PixelCore
 
 @MainActor
 public final class RemoteHost: ObservableObject {
@@ -12,6 +13,13 @@ public final class RemoteHost: ObservableObject {
 
     public var onClientConfigReceived: ((_ backend: String, _ model: String, _ planMode: Bool) -> Void)?
     public var onClientActionReceived: ((_ action: String, _ targetID: String?) -> Void)?
+    /// **Sprint 5 (iOS history viewer):** iOS archive listesi istediğinde
+    /// çağrılır. Caller `ConversationStore.listAllArchives` çağırıp
+    /// `ArchiveEntryPayload` listesi döner.
+    public var onArchiveListRequested: (() async -> [ArchiveEntryPayload])?
+    /// **Sprint 5:** iOS belirli bir arşivi yüklemek istediğinde çağrılır.
+    /// Parametre: Mac URL string. Caller dosyayı okuyup Message listesi döner.
+    public var onArchiveLoadRequested: ((_ id: String) async -> [Message])?
 
     public var relayURL: String
 
@@ -310,8 +318,50 @@ public final class RemoteHost: ObservableObject {
             if let action = envelope.payload?.actionType {
                 onClientActionReceived?(action, envelope.payload?.targetID)
             }
+        case .archiveListRequest:
+            // Sprint 5: iOS arşiv listesi istedi — handler'dan al, response gönder.
+            Task { [weak self] in
+                guard let self else { return }
+                guard let handler = await self.onArchiveListRequested else { return }
+                let entries = await handler()
+                await self.sendArchiveListResponse(entries: entries)
+            }
+        case .archiveLoadRequest:
+            // Sprint 5: belirli arşiv mesajları istendi.
+            if let archiveID = envelope.payload?.archiveLoadID {
+                Task { [weak self] in
+                    guard let self else { return }
+                    guard let handler = await self.onArchiveLoadRequested else { return }
+                    let messages = await handler(archiveID)
+                    await self.sendArchiveLoadResponse(messages: messages)
+                }
+            }
         default:
             break
+        }
+    }
+
+    // MARK: - Sprint 5 archive send helpers
+
+    public func sendArchiveListResponse(entries: [ArchiveEntryPayload]) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.archiveListResponse(entries: entries)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Arşiv listesi gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
+    public func sendArchiveLoadResponse(messages: [Message]) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.archiveLoadResponse(messages: messages)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Arşiv yüklenemedi: \(error.localizedDescription)"
         }
     }
 }
