@@ -33,6 +33,12 @@ public actor ControlSocketServer {
     /// `ui_*` çağrılarında kullanılır.
     private lazy var computer = PixelComputerUse()
 
+    /// C12: Her execute() sonrası tetiklenir — ChatHost iOS dashboard'a
+    /// duyuru yapar. `nil` ise no-op (test target / unwired durumlar).
+    /// Closure parametreleri: toolName, status ("success" / "failure"),
+    /// summary (response body veya hata mesajı).
+    var onToolCalled: (@Sendable (String, String, String?) -> Void)?
+
     public init(socketPath: String = BridgePaths.defaultSocketPath()) {
         self.socketPath = socketPath
     }
@@ -40,6 +46,11 @@ public actor ControlSocketServer {
     /// `RootView` Manager hazır olduğunda çağırır. Idempotent — son `attach` kazanır.
     func attach(_ manager: SubagentManager) {
         self.manager = manager
+    }
+
+    /// C12: ChatHost wire-up'ı bunu kullanır.
+    func attachToolCallListener(_ listener: @Sendable @escaping (String, String, String?) -> Void) {
+        self.onToolCalled = listener
     }
 
     public func start() throws {
@@ -114,13 +125,46 @@ public actor ControlSocketServer {
 
         guard let requestBytes = Self.readLine(fd: fd) else { return }
         let response: BridgeResponse
+        var toolName: String?
         do {
             let req = try JSONDecoder().decode(BridgeRequest.self, from: Data(requestBytes))
+            toolName = req.tool
             response = await execute(request: req)
         } catch {
             response = .failure("İstek parse edilemedi: \(error.localizedDescription)")
         }
         _ = Self.writeLine(fd: fd, response: response)
+
+        // C12: Tool call event'i ChatHost'a fire — iOS dashboard'a duyurmak için.
+        if let tool = toolName, let listener = onToolCalled {
+            let (status, summary) = Self.summarize(response)
+            listener(tool, status, summary)
+        }
+    }
+
+    /// C12: BridgeResponse'tan `(status, summary)` çiftini çıkarır.
+    /// Success summary string-truncated (~100 char), failure error mesajı.
+    /// `BridgeResponse` enum değil struct (ok/result/error); pattern match yok.
+    private static func summarize(_ response: BridgeResponse) -> (status: String, summary: String?) {
+        if response.ok {
+            let raw = response.result.map(stringSummary(of:)) ?? "ok"
+            let trimmed = raw.count > 100 ? String(raw.prefix(100)) + "…" : raw
+            return ("success", trimmed)
+        } else {
+            return ("failure", response.error ?? "Bilinmeyen hata")
+        }
+    }
+
+    private static func stringSummary(of value: JSONValue) -> String {
+        switch value {
+        case .string(let s): return s
+        case .int(let i): return "\(i)"
+        case .double(let d): return "\(d)"
+        case .bool(let b): return b ? "true" : "false"
+        case .null: return "null"
+        case .array: return "ok (array)"
+        case .object: return "ok (object)"
+        }
     }
 
     private static func readLine(fd: Int32) -> [UInt8]? {

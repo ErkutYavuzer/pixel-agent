@@ -552,6 +552,10 @@ struct ChatHost: View {
             // Rescan'da ChatHost re-init olunca yeni Manager attach edilir (son
             // attach kazanır — actor field idempotent).
             await RootView.controlServer.attach(subagentManager)
+            // C12: bridge tool çağrıldığında iOS dashboard'a duyur.
+            await RootView.controlServer.attachToolCallListener { [weak remoteHost] tool, status, summary in
+                Task { await remoteHost?.sendToolCallEvent(toolName: tool, status: status, summary: summary) }
+            }
 
             remoteHost.onClientConfigReceived = { backend, model, plan in
                 guard let kind = CLIKind(rawValue: backend) else { return }

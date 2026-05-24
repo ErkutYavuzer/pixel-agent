@@ -248,6 +248,27 @@ public final class RemoteHost: ObservableObject {
         }
     }
 
+    /// C12 (Sprint 3): Mac'te MCP bridge bir tool call'ı işlediğinde iOS
+    /// dashboard'a duyurmak için. Sessizce başarısız olur (best-effort).
+    public func sendToolCallEvent(
+        toolName: String,
+        status: String,
+        summary: String? = nil
+    ) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.toolCallEvent(
+            toolName: toolName,
+            status: status,
+            summary: summary
+        )
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Tool call event gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Inbound handshake + signature verification
 
     private func handle(

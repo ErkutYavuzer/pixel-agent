@@ -13,6 +13,40 @@ public enum EnvelopeType: String, Codable, Sendable, CaseIterable {
     case clientAction
     case hostStatus
     case screenshotPayload
+    /// C12 (Sprint 3): Mac MCP bridge'inde bir tool çağrısı gerçekleştiğinde
+    /// iOS dashboard'a duyuru. `EnvelopePayload.toolCallEvent` taşır.
+    case toolCallEvent
+}
+
+/// Mac'te MCP bridge üzerinden gerçekleşen bir tool call'un kısa özeti (C12).
+///
+/// iOS dashboard "Mac şu an X tool'unu çalıştırıyor / çalıştırdı" feed'i
+/// için kullanır. Saf-data, Codable, Sendable.
+public struct ToolCallEventPayload: Codable, Sendable, Equatable, Identifiable {
+    /// Stable UUID — `Identifiable` için, iOS list'inde re-render hint.
+    public let id: String
+    /// Bridge tool adı — `dispatch_subagent`, `ui_screenshot`, `notify`, vb.
+    public let toolName: String
+    /// `"success"` veya `"failure"` — bridge response sonucundan üretilir.
+    public let status: String
+    /// Opsiyonel kısa açıklama: hata mesajı veya success summary.
+    public let summary: String?
+    /// Tetiklenme zamanı — Unix epoch saniye.
+    public let timestamp: Double
+
+    public init(
+        id: String = UUID().uuidString,
+        toolName: String,
+        status: String,
+        summary: String? = nil,
+        timestamp: Double = Date().timeIntervalSince1970
+    ) {
+        self.id = id
+        self.toolName = toolName
+        self.status = status
+        self.summary = summary
+        self.timestamp = timestamp
+    }
 }
 
 public struct SubagentStatusPayload: Codable, Sendable, Equatable {
@@ -67,6 +101,9 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
     public var activeSubagents: [SubagentStatusPayload]?
     public var systemMetrics: SystemMetricsPayload?
 
+    /// C12 (Sprint 3): Tool call event payload — `.toolCallEvent` type'ında dolu.
+    public var toolCallEvent: ToolCallEventPayload?
+
     public init(
         text: String? = nil,
         role: String? = nil,
@@ -84,7 +121,8 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
         availableBackends: [String]? = nil,
         availableModels: [String: [String]]? = nil,
         activeSubagents: [SubagentStatusPayload]? = nil,
-        systemMetrics: SystemMetricsPayload? = nil
+        systemMetrics: SystemMetricsPayload? = nil,
+        toolCallEvent: ToolCallEventPayload? = nil
     ) {
         self.text = text
         self.role = role
@@ -103,6 +141,7 @@ public struct EnvelopePayload: Codable, Sendable, Equatable {
         self.availableModels = availableModels
         self.activeSubagents = activeSubagents
         self.systemMetrics = systemMetrics
+        self.toolCallEvent = toolCallEvent
     }
 }
 
@@ -155,6 +194,24 @@ extension RemoteEnvelope {
 
     public static func ping() -> RemoteEnvelope {
         RemoteEnvelope(type: .ping)
+    }
+
+    /// C12: Mac MCP bridge'inde bir tool call tamamlandığında iOS dashboard'a
+    /// duyurmak için.
+    public static func toolCallEvent(
+        toolName: String,
+        status: String,
+        summary: String? = nil
+    ) -> RemoteEnvelope {
+        let event = ToolCallEventPayload(
+            toolName: toolName,
+            status: status,
+            summary: summary
+        )
+        return RemoteEnvelope(
+            type: .toolCallEvent,
+            payload: EnvelopePayload(toolCallEvent: event)
+        )
     }
 
     /// Handshake'in ilk envelope'u: gönderen tarafın public key'ini taşır.

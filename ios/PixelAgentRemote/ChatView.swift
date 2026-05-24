@@ -492,10 +492,104 @@ struct MacPanelDashboardSection: View {
                 }
                 .padding()
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+
+                // C12 (Sprint 3): Tool call feed — Mac MCP bridge'inde tetiklenen
+                // son ~30 tool çağrısının yatay-dağıtılmış listesi.
+                ToolCallFeedSection()
             }
             .padding()
         }
         .background(Color(.systemGroupedBackground))
+    }
+}
+
+/// C12: iOS Mac Paneli'nde Mac'in son MCP tool aktivitesini gösteren
+/// kart. Boşsa "Henüz aktivite yok" placeholder.
+struct ToolCallFeedSection: View {
+    @EnvironmentObject var session: RemoteSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Tool Aktivitesi", systemImage: "bolt.horizontal.circle")
+                    .font(.headline)
+                Spacer()
+                if !session.recentToolCalls.isEmpty {
+                    Text("\(session.recentToolCalls.count)")
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Divider()
+            if session.recentToolCalls.isEmpty {
+                Text("Henüz aktivite yok. MCP server bir tool çağırdığında burada görüneceksin.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(session.recentToolCalls.prefix(10)) { event in
+                        ToolCallRow(event: event)
+                    }
+                    if session.recentToolCalls.count > 10 {
+                        Text("ve \(session.recentToolCalls.count - 10) daha…")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct ToolCallRow: View {
+    let event: ToolCallEventPayload
+
+    private var iconName: String {
+        event.status == "success" ? "checkmark.circle.fill" : "xmark.octagon.fill"
+    }
+
+    private var iconColor: Color {
+        event.status == "success" ? .green : .red
+    }
+
+    private var timeText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .medium
+        return formatter.string(from: Date(timeIntervalSince1970: event.timestamp))
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: iconName)
+                .foregroundStyle(iconColor)
+                .font(.caption)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(event.toolName)
+                        .font(.caption.monospaced().bold())
+                    Text(timeText)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                if let summary = event.summary, !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 

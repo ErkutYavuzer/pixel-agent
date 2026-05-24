@@ -104,7 +104,9 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 | ✅ | B2 | Conversation history sidebar |
 | ✅ | B1 | Settings scene (tab'lı) |
 | ✅ | B8 | iOS settings tab |
-| ⏳ | C12 | Tool-call envelope events |
+| ✅ | C12 | Tool-call envelope events |
+
+**24 May 2026: Sprint 3 tamamlandı — Persistent State + iOS Parity paketi.** 4 commit (7f6665a, 102332a, 0350b12, ve C12 commit'i). Test sayısı: 574 → 606 (+32). PixelAgent.app + iOS BUILD SUCCEEDED. Sonraki adım: v0.2.28 release tag (Sprint 3 bundle).
 
 ## Demo Senaryosu (Sprint 1 sonrası)
 

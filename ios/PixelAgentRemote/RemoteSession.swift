@@ -62,6 +62,8 @@ final class RemoteSession: ObservableObject {
     @Published var selectedModel: String = ""
     @Published var planMode: Bool = false
     @Published var latestScreenshot: UIImage? = nil
+    /// C12: Son tool call event'leri (en yeni ilk). Ring buffer ~30 kayıt.
+    @Published var recentToolCalls: [ToolCallEventPayload] = []
 
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
@@ -365,6 +367,15 @@ final class RemoteSession: ObservableObject {
                let data = Data(base64Encoded: base64),
                let image = UIImage(data: data) {
                 self.latestScreenshot = image
+            }
+        case .toolCallEvent:
+            // C12: Mac MCP bridge bir tool çağırdı — ring buffer'ı en yeni
+            // ilk olacak şekilde güncelle, 30 kayıttan fazlasını at.
+            if let event = envelope.payload?.toolCallEvent {
+                recentToolCalls.insert(event, at: 0)
+                if recentToolCalls.count > 30 {
+                    recentToolCalls = Array(recentToolCalls.prefix(30))
+                }
             }
         case .error:
             if let message = envelope.payload?.errorMessage {

@@ -18,7 +18,12 @@ final class RemoteEnvelopeTests: XCTestCase {
     }
 
     func testEnvelopeTypeContainsAllExpectedCases() {
-        let expected: Set<String> = ["hello", "ready", "ping", "ack", "error", "userMessage", "assistantMessage", "assistantChunk", "clientConfig", "clientAction", "hostStatus", "screenshotPayload"]
+        let expected: Set<String> = [
+            "hello", "ready", "ping", "ack", "error",
+            "userMessage", "assistantMessage", "assistantChunk",
+            "clientConfig", "clientAction", "hostStatus", "screenshotPayload",
+            "toolCallEvent",  // C12 (Sprint 3) — Mac MCP bridge tool aktivitesi
+        ]
         let actual = Set(EnvelopeType.allCases.map { $0.rawValue })
         XCTAssertEqual(actual, expected)
     }
