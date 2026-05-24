@@ -9,9 +9,117 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
-- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopeType` `unknown` fallback case (forward-compat); `EnvelopePayload` sum-type refactor (17 opsiyonel field → enum, toolCallEvent ile bir daha büyüdü); iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- Sprint 4 hazırlığı: Apple Developer ID + notarization (Cask --no-quarantine bağımlılığı kaldırır); persistent screenshot asset directory (Sprint 2/C2-C3 follow-up); demo GIF recording.
-- Screenshot attachment'ları RAM-only (Sprint 2 / C2-C3); app restart'ında kaybolur, placeholder text persiste edilir.
+- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopePayload` sum-type refactor (17 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
+- Sprint 4+ adayları: SoM marks JSONL sidecar (Sprint 4 / C2-C3 follow-up'ı tamamlar); iOS-side connection-lost pulse (paralel); Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.29] — 2026-05-24
+
+**Sprint 4 "Polish + Persistence" — 5 atomic item, protocol forward-compat + storage durability + ergonomic touches.** Sprint 1/2/3'ün üzerine bir katman: yeni envelope tiplerinin eski client'ları kırmamasını, ekran görüntülerinin app restart'ından sonra hâlâ görünür olmasını, arşivlenmiş konuşmaların geri yüklenebilmesini, bağlantı kaybının görsel uyarısını ve screenshot → soru workflow'unu sağlar. **631 test yeşil** (+25 bu release'te). Breaking change yok pratikte.
+
+### Added — Sprint 4 / Polish + Persistence
+
+#### EnvelopeType.unknown forward-compat sentinel (commit `f5dd70d`)
+- `Sources/PixelRemote/RemoteEnvelope.swift`:
+  * `EnvelopeType.unknown` yeni case (rawValue "unknown"). Production'da
+    yalnızca decode fallback'i.
+  * Custom `Codable` conformance — `init(from:)` raw string okuyup
+    `EnvelopeType(rawValue:) ?? .unknown` döner; `encode(to:)` rawValue yazar.
+  * **Behavioral change:** önceki sürümlerde unknown type decode throw
+    idi, artık `.unknown`'a düşer — wire-protocol forward-compat. iOS
+    handler'lar zaten `default: break` ile geçiyordu.
+- 8 yeni test + `testUnknownEnvelopeTypeThrows` → `testUnknownEnvelopeTypeDecodesToUnknownCase` rename.
+
+#### "Bu sohbete devam et" archive load (commit `368275e`)
+- `Sources/PixelMemory/ConversationStore.swift`:
+  * `replaceWithArchive(_ entry:)` instance metodu — `newConversation()`
+    ile mevcut arşivlenir, archive dosyasının data'sı aktif `fileURL`'e
+    yazılır.
+  * Archive timestamp **millisecond precision**'a yükseltildi —
+    `YYYY-MM-DDTHH-MM-SS.sssZ` (24 char). Saniye precision'da hızlı
+    ardışık `newConversation()` çakışmasını çözer.
+- `Sources/PixelMemory/ArchivedConversation.swift`:
+  * Parser artık [24, 20] uzunluğunu sırayla dener — backward-compat
+    eski archive dosyalarına.
+- `Sources/PixelMacApp/ConversationHistoryView.swift`:
+  * `onLoadArchive: ((Entry) -> Void)?` opsiyonel parametre.
+  * Detail view'in üstüne sticky `loadActionBar` — "Yükle"
+    borderedProminent buton + arrow.uturn.forward.circle ikon.
+- `Sources/PixelMacApp/PixelMacApp.swift`:
+  * `@State archiveLoadNonce` ChatView .id'sine eklendi → aynı backend
+    için bile force re-init garantilenir → restoreIfNeeded yeni JSONL'i
+    okur.
+  * `loadArchive(_:)` async handler — store.replaceWithArchive +
+    selectedKind switch + nonce artırma.
+- 2 yeni test (replaceWithArchive happy path + boş aktif edge case).
+
+#### Persist screenshots to disk (commit `1ba91ce`)
+- `Sources/PixelMemory/ScreenshotStore.swift` (yeni, saf enum):
+  * `defaultDirectory()` → `~/Library/Application Support/pixel-agent/
+    screenshots/`.
+  * `save(pngData:for:directory:)` — `<UUID>.png` atomic write.
+  * `load(for:directory:)` — bytes ya da nil.
+  * `delete(for:directory:)` — best-effort, idempotent.
+  * `purgeOrphans(keeping:directory:)` — aktif `messageID` set'inde
+    olmayan PNG'leri temizler; non-PNG yoksayar.
+- `Sources/PixelMacApp/ChatViewModel.swift`:
+  * `captureScreenshotIntoChat`: PNG save artık disk'e (best-effort).
+  * `restoreIfNeeded`: `.system` + `[ekran görüntüsü` prefix filter ile
+    her eşleşme için disk'ten PNG yükle, `NSImage.representations.first
+    .pixelsWide/High` ile pixel size çıkar, attachment dict'e ekle.
+    Marks restore edilmez (sidecar JSON ileride).
+- 8 yeni test (save/load round-trip, missing file, dir creation, delete,
+  idempotent, purgeOrphans).
+
+#### Connection-lost pulse animation (commit `19ce45e`)
+- `Sources/PixelMacApp/ConnectionPillView.swift`:
+  * `var pulseTrigger: Date? = nil` parametresi. Yeni Date'e set olunca
+    `.onChange` reset + animate (scale 1.0→1.7, opacity 0.85→0, 1.6s
+    easeOut).
+  * Background overlay: tint color stroke 2pt Capsule, hit-testing kapalı.
+  * `ConnectionTransitionDetector` saf enum — `isLossEvent(from:to:)`
+    `connected → disconnected` koşulunu tek noktada tutar (niyetli
+    disconnect ve handshake transitionları hariç).
+- `Sources/PixelMacApp/PixelMacApp.swift`:
+  * `@State lastDisconnectAt: Date?` + `currentPillState` computed.
+  * Toolbar pill `.onChange(of: currentPillState)` → isLossEvent
+    doğruysa `lastDisconnectAt = Date()` → pulse tetiklenir.
+- 7 yeni test (4 state × transitions, self-transitions, loss event
+  isolation).
+
+#### Screenshot → composer prompt prefill (commit `586a0e6`)
+- `Sources/PixelMacApp/ChatViewModel.swift`:
+  * `captureScreenshotIntoChat`: PNG save'ten sonra composer'ın boş
+    olup olmadığını kontrol; boşsa `draft = Self.defaultScreenshotPrompt`
+    ("Bu ekran görüntüsünde ne görüyorsun?").
+  * Composer doluysa kullanıcının taslağına dokunulmuyor (non-destructive).
+  * `static let defaultScreenshotPrompt` — testten/diğer yerden erişim.
+
+### Changed
+- **`EnvelopeType.allCases`** 13 → 14 case (`.unknown` eklendi).
+- **`EnvelopePayload`** 17 opsiyonel field (toolCallEvent v0.2.28'de eklendi,
+  Sprint 4'te değişiklik yok); sum-type refactor hâlâ adayı.
+- **`ConversationStore.newConversation()`** artık `.withFractionalSeconds`
+  ISO8601 format kullanıyor — 24 char stamp; eski 20 char stamp'li
+  arşivler parser'ın backward-compat path'i ile hâlâ okunur.
+
+### Tests
+- **Sprint 4 toplam:** 4 yeni test dosyası, 25 yeni test (**606 → 631**). 0 regression.
+- `EnvelopeTypeForwardCompatTests` (8), `ConversationStoreTests` (+2 yeni replaceWithArchive), `ScreenshotStoreTests` (8), `ConnectionTransitionDetectorTests` (7).
+
+### Notes
+- **`EnvelopeType.unknown`** behavioral change: önceki Mac/iOS sürümleri
+  bilinmeyen type'a throw veriyordu (test seviyesinde). v3 envelope
+  formatına geçişe yapısal hazırlık.
+- **Screenshot persistence:** PNG bytes diskte; marks RAM-only (kullanıcı-
+  initiated capture'larda zaten boş, LLM ui_screenshot için sidecar JSON
+  Sprint 4+ adayı).
+- **Connection-lost pulse** sadece `connected → disconnected` transition'ını
+  tetikler — kullanıcı "Bağlantıyı kapat" (connected → notPaired) veya
+  handshake aborted (connecting → notPaired) durumunda pulse yok.
+- **Screenshot prompt prefill** composer doluysa no-op — kullanıcının
+  yarım kalmış taslağı korunur.
+
+**Sprint 1+2+3+4 birikim:** 25 audit item kapandı (10 demo-ready + 6 power-user + 4 persistent-state + 5 polish). 443 → 631 test (+188). 18 saf helper + 12 view + 22 test dosyası.
 
 ## [0.2.28] — 2026-05-24
 
