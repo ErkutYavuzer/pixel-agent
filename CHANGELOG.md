@@ -9,9 +9,138 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
-- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopeType` `unknown` fallback case (forward-compat); `EnvelopePayload` sum-type refactor (16 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- Sprint 3 ("Persistent State + iOS Parity") hazır: B2 conversation history sidebar (Large), B1 Settings scene (Large), B8 iOS settings tab (Medium), C12 tool-call envelope events (Medium).
-- Screenshot attachment'ları RAM-only (Sprint 2 / C2-C3); app restart'ında kaybolur. Asset directory persistence Sprint 3 follow-up adayı.
+- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopeType` `unknown` fallback case (forward-compat); `EnvelopePayload` sum-type refactor (17 opsiyonel field → enum, toolCallEvent ile bir daha büyüdü); iOS continuous screenshot streaming; `hostStatus` delta-only push.
+- Sprint 4 hazırlığı: Apple Developer ID + notarization (Cask --no-quarantine bağımlılığı kaldırır); persistent screenshot asset directory (Sprint 2/C2-C3 follow-up); demo GIF recording.
+- Screenshot attachment'ları RAM-only (Sprint 2 / C2-C3); app restart'ında kaybolur, placeholder text persiste edilir.
+
+## [0.2.28] — 2026-05-24
+
+**Sprint 3 "Persistent State + iOS Parity" tamamlandı — 4 polish item, mac+ios platformları arası simetri.** Sprint 1/2 demo-ready + power-user katmanlarına ek olarak: arşiv erişimi (geçmiş konuşmaları gözden geçir), standart ⌘, Preferences penceresi, iOS dashboard'da 4. tab (settings), iOS Mac Paneli'nde gerçek zamanlı tool aktivitesi feed'i. **606 test yeşil** (+32 bu release'te). Breaking change yok pratikte.
+
+Mac + iOS her commit'te `BUILD SUCCEEDED`. Sprint 1+2+3 birikim: 20 audit item kapandı, 443 → 606 test (+163), 16 saf helper + 11 view + 20 test dosyası.
+
+### Added — Sprint 3 / Persistent State + iOS Parity
+
+#### B2 Conversation history sidebar (commit `7f6665a`, audit "Large")
+- `Sources/PixelMemory/ArchivedConversation.swift` (yeni):
+  * `ArchivedConversationEntry` public struct (id URL, backendKind, archivedAt
+    Date, messageCount, firstUserSnippet) — Identifiable + Equatable + Sendable.
+  * `ArchivedConversationParser.parseFilename(_:)` saf — `conversation-<kind>-
+    <YYYY-MM-DDTHH-MM-SSZ>.jsonl` formatından `(kind, date)` çıkarır. **Sabit-
+    uzunluk 20 char timestamp yaklaşımı** — tarih içindeki `-` karakterlerine
+    takılmayan reliable parse.
+  * `firstUserSnippet(messages:)` saf — ilk non-empty `.user` mesajının ilk
+    60 karakteri (+"…" trim).
+- `Sources/PixelMemory/ConversationStore.swift`:
+  * `loadMessages(fromArchive url:)` instance metodu — verilen URL'den JSONL
+    satırlarını decode eder.
+  * `listAllArchives(directory:)` static — `archive/` dizinini tarar, parse'i
+    geçen her dosya için entry üretir (message count + snippet için içeriği
+    bir kez okur). archivedAt descending sıralı.
+- `Sources/PixelMacApp/ConversationHistoryView.swift` (yeni, ~210 satır):
+  NavigationSplitView sheet (`.balanced` style, min 720×480). Sidebar:
+  backend kind'larına göre gruplu Section'lar (Claude/Codex/Gemini öncelikli +
+  diğerleri alfabetik). Her satır 2-line layout: snippet + tarih + count.
+  Detail: seçili konuşmanın `MessageRow`'larını ScrollView içinde — Sprint 1/
+  A1 markdown render'ı otomatik aktif. Empty/loading/error state'ler ayrı
+  view'lar. Toolbar'da Kapat + Yenile.
+- ChatHost toolbar'a "🕒 Geçmiş" butonu (`clock.arrow.circlepath`) +
+  `.sheet(isPresented:)` wiring. Permissions/About butonlarından önce.
+- 12 yeni test: parser happy path (Claude/Codex/Gemini), invalid filenames,
+  unknown backend forward-compat, snippet selection/truncation/skip-empty,
+  end-to-end listing temp directory'den (1 archive, empty dir, sort
+  descending).
+
+#### B1 Settings scene (⌘, tab'lı) (commit `102332a`, audit "Large")
+- `Sources/PixelMacApp/SettingsView.swift` (yeni, ~280 satır):
+  * `SettingsTab: String, CaseIterable, Identifiable, Sendable` saf enum —
+    4 case (`.general`, `.models`, `.connection`, `.permissions`); title +
+    systemImage computed.
+  * `SettingsView`: TabView selectedTab @State binding.
+  * `GeneralSettingsTab`: Form .grouped style — sürüm/test/lisans info +
+    depo dizini (Finder'da göster) + "Tüm model tercihlerini sıfırla" buton.
+  * `ModelsSettingsTab` + `BackendModelRow`: per-CLI Picker (Varsayılan +
+    ModelCatalog.knownModels). UserDefaults pixel.model.* yazar/okur.
+  * `ConnectionSettingsTab`: Relay URL + kopyala butonu; env override
+    detect uyarı satırı. LAN service type + protokol versiyonu info.
+  * `PermissionsSettingsTab`: Accessibility + Screen Recording status,
+    eksikte "Aç" deep-link (System Settings).
+- `Sources/PixelMacApp/PixelMacApp.swift`: App body'ye `Settings {
+  SettingsView() }` scene eklendi — macOS otomatik ⌘, kısayolunu ve
+  "pixel-agent › Settings…" menü öğesini ekler.
+- 6 yeni test: allCases regression guard, non-empty metadata her tab'da,
+  title/icon uniqueness, rawValue lowercase, id == rawValue.
+
+#### B8 iOS settings tab (4. tab) (commit `0350b12`, audit "Medium")
+- `Sources/PixelRemote/PublicKeyFormatter.swift` (yeni, saf, public):
+  `format(_:groupSize:)` — base64 ed25519 public key'i okunabilir gruplara
+  böler (default 8 char). Empty → "—", invalid groupSize → original. **Mac +
+  iOS aynı binary'den faydalanır.**
+- `ios/PixelAgentRemote/SettingsTabView.swift` (yeni, ~165 satır):
+  Form-based 5 section:
+    * **Durum**: bağlı/değil capsule + transport badge (LAN/Relay) + lastError.
+    * **Eşleşme**: pairing code + relay URL (textSelection.enabled,
+      monospaced) veya "henüz eşleşmemiş" placeholder.
+    * **Mac genel anahtarı**: PublicKeyFormatter.format'lı pk + ADR-0015 footer.
+    * **Uygulama**: version + build + GitHub link.
+    * **Eylemler**: bağlantı kapat / yeniden bağlan / eşleşmeyi sıfırla
+      (destructive role + confirmation alert).
+- `ios/PixelAgentRemote/ChatView.swift`: TabView'a 4. tab eklendi —
+  `SettingsTabView()` + `Label("Ayarlar", systemImage: "gear")`. Mevcut
+  AboutView modal'ı korundu (header'daki ⓘ butonundan erişim sürüyor).
+- 7 yeni test: empty input → "—", default 8-char gruplar, non-exact multiple
+  shorter last, short input single group, custom groupSize=4, zero
+  groupSize defensive, reassembly fidelity. **iOS build SUCCEEDED.**
+
+#### C12 Tool-call envelope events (commit `f65c749`, audit "Medium")
+- `Sources/PixelRemote/RemoteEnvelope.swift`:
+  * `EnvelopeType.toolCallEvent` yeni case (wire-compat raw "toolCallEvent").
+  * `ToolCallEventPayload`: Codable, Sendable, Equatable, Identifiable
+    (id UUID string), `toolName`, `status` ("success"/"failure"), opsiyonel
+    `summary`, Unix epoch `timestamp`.
+  * `EnvelopePayload.toolCallEvent` opsiyonel field + init param.
+  * `RemoteEnvelope.toolCallEvent(toolName:status:summary:)` static factory.
+- `Sources/PixelRemote/RemoteHost.swift`:
+  * `sendToolCallEvent(toolName:status:summary:)` async — diğer send'lerle
+    aynı pattern (sign + send, best-effort).
+- `Sources/PixelMacApp/ControlSocketServer.swift`:
+  * `var onToolCalled: (@Sendable (String, String, String?) -> Void)?` +
+    `attachToolCallListener(_:)` setter.
+  * `handleClient(fd:)` execute() sonrası listener'ı çağırır (tool name +
+    summarize sonucu).
+  * `summarize(_:)` saf yardımcı — `BridgeResponse` struct'tan (enum değil)
+    `(status, summary)` çıkarır. Result string-truncated 100 char.
+- `Sources/PixelMacApp/PixelMacApp.swift`: ChatHost `.task`'ta
+  `controlServer.attachToolCallListener` ile remoteHost.sendToolCallEvent
+  closure'ını bağlar (weak reference).
+- `ios/PixelAgentRemote/RemoteSession.swift`:
+  * `@Published var recentToolCalls: [ToolCallEventPayload]` ring buffer 30 cap.
+  * Envelope handler `case .toolCallEvent:` — payload decode + insert (en
+    yeni başta).
+- `ios/PixelAgentRemote/ChatView.swift`:
+  * Mac Paneli'ne `ToolCallFeedSection` — header bolt ikon + count badge;
+    ilk 10 satır `ToolCallRow` (SF Symbol success/failure rengi, monospace
+    tool adı, timestamp, summary 2-line); empty state placeholder.
+- 7 yeni test: payload init defaults + Codable round-trip, envelope factory
+  type + payload, envelope JSON round-trip lossless, EnvelopeType.allCases
+  contains, raw value wire-stable. **iOS BUILD SUCCEEDED.**
+
+### Changed
+- **`EnvelopeType.allCases`** artık 13 case (yeni `.toolCallEvent`); existing
+  `testEnvelopeTypeContainsAllExpectedCases` testi güncellendi.
+- **`EnvelopePayload`** 17 opsiyonel field (toolCallEvent eklendi); sum-type
+  refactor Sprint 4 follow-up adayı.
+
+### Tests
+- **Sprint 3 toplam:** 4 yeni test dosyası, 32 yeni test (**574 → 606**). 0 regression.
+- `ArchivedConversationTests` (12), `SettingsTabTests` (6), `PublicKeyFormatterTests` (7), `ToolCallEventTests` (7) + `RemoteEnvelopeTests.testEnvelopeTypeContainsAllExpectedCases` updated.
+
+### Notes
+- **Conversation history sidebar** read-only viewer (devam etme / import yok bu sürümde) — non-destructive, aktif sohbeti değiştirmiyor. Sprint 4'te "Bu arşivi yükle" eklenebilir.
+- **Settings scene** standart macOS Settings konvansiyonuna uyar; AboutView modal'ı korundu (info ikonu hâlâ aktif).
+- **iOS Ayarlar tab** AboutView'in tab eşdeğeri ek olarak Mac public key fingerprint + transport label badge + reconnect butonu.
+- **Tool call events** Mac MCP bridge hattındaki tüm 9 tool'u kapsar (dock_badge_set, notify, play_sound, dispatch_subagent, ui_query/click/type/screenshot/resolve). Direct MCP server stdio tool'ları (5 saf-data) ayrı bir yolda, bu envelope'a düşmez — bridge sınırı tarafından yakalanır.
+- **Sprint 1+2+3 birikim** — 20 audit item kapandı (10 demo-ready + 6 power-user + 4 persistent-state); kalan audit item'ları (19 adet) Sprint 4+'a defer.
 
 ## [0.2.27] — 2026-05-24
 
