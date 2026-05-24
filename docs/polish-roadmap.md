@@ -103,7 +103,7 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 |---|---|---|
 | ✅ | B2 | Conversation history sidebar |
 | ✅ | B1 | Settings scene (tab'lı) |
-| ⏳ | B8 | iOS settings tab |
+| ✅ | B8 | iOS settings tab |
 | ⏳ | C12 | Tool-call envelope events |
 
 ## Demo Senaryosu (Sprint 1 sonrası)

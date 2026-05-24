@@ -75,6 +75,15 @@ struct ChatView: View {
             .tabItem {
                 Label("Mac Paneli", systemImage: "desktopcomputer")
             }
+
+            // Tab 4: Ayarlar (B8)
+            VStack(spacing: 0) {
+                header
+                SettingsTabView()
+            }
+            .tabItem {
+                Label("Ayarlar", systemImage: "gear")
+            }
         }
         .tint(.purple)
         .sheet(isPresented: $showAbout) {
