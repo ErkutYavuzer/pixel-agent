@@ -23,6 +23,7 @@ final class RemoteEnvelopeTests: XCTestCase {
             "userMessage", "assistantMessage", "assistantChunk",
             "clientConfig", "clientAction", "hostStatus", "screenshotPayload",
             "toolCallEvent",  // C12 (Sprint 3) — Mac MCP bridge tool aktivitesi
+            "unknown",        // Sprint 4 — forward-compat decode fallback
         ]
         let actual = Set(EnvelopeType.allCases.map { $0.rawValue })
         XCTAssertEqual(actual, expected)
@@ -90,10 +91,14 @@ final class RemoteEnvelopeTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(RemoteEnvelope.self, from: data))
     }
 
-    func testUnknownEnvelopeTypeThrows() {
+    func testUnknownEnvelopeTypeDecodesToUnknownCase() throws {
+        // **Sprint 4 (forward-compat):** önceki davranış throw idi; artık
+        // bilinmeyen tip `.unknown` sentinel'ine düşer. Bu sayede ileride
+        // yeni envelope tipleri eski client'ları kırmaz.
         let json = #"{"v":1,"id":"x","ts":0,"type":"futureType"}"#
         let data = json.data(using: .utf8)!
-        XCTAssertThrowsError(try JSONDecoder().decode(RemoteEnvelope.self, from: data))
+        let envelope = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(envelope.type, .unknown)
     }
 
     func testTurkishCharsPreserved() throws {

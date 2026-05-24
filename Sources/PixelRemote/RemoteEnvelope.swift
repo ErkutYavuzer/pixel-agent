@@ -1,6 +1,6 @@
 import Foundation
 
-public enum EnvelopeType: String, Codable, Sendable, CaseIterable {
+public enum EnvelopeType: String, Sendable, CaseIterable {
     case hello
     case ready
     case ping
@@ -16,6 +16,27 @@ public enum EnvelopeType: String, Codable, Sendable, CaseIterable {
     /// C12 (Sprint 3): Mac MCP bridge'inde bir tool çağrısı gerçekleştiğinde
     /// iOS dashboard'a duyuru. `EnvelopePayload.toolCallEvent` taşır.
     case toolCallEvent
+    /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
+    /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
+    /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
+    /// `allCases` bu sentinel'i de içerir ama production'da encode edilmez —
+    /// yalnızca decode fallback'i.
+    case unknown
+}
+
+extension EnvelopeType: Codable {
+    /// Bilinmeyen `rawValue` → `.unknown` (strict throw yerine). Mevcut
+    /// known case'ler için davranış aynı (RawRepresentable Codable default'u).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        self = EnvelopeType(rawValue: raw) ?? .unknown
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 /// Mac'te MCP bridge üzerinden gerçekleşen bir tool call'un kısa özeti (C12).
