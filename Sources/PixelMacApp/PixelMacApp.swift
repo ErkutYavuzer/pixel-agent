@@ -154,6 +154,8 @@ struct ChatHost: View {
     @State private var showPairing: Bool = false
     @State private var showAbout: Bool = false
     @State private var showPermissions: Bool = false
+    /// B2: Conversation history sidebar sheet.
+    @State private var showHistory: Bool = false
     @State private var permissionsStatus: ComputerUsePermissions.Status = ComputerUsePermissions.status()
     @State private var incomingFromRemote: String?
     @State private var planMode: Bool = false
@@ -469,6 +471,12 @@ struct ChatHost: View {
                       ? "Computer Use izinleri tamam"
                       : "Computer Use izinleri eksik — tıkla")
 
+                Button { showHistory = true } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+                .buttonStyle(.borderless)
+                .help("Sohbet geçmişi (arşiv)")
+
                 Button { showAbout = true } label: {
                     Image(systemName: "info.circle")
                 }
@@ -511,6 +519,9 @@ struct ChatHost: View {
             }
         }
         .animation(.easeInOut(duration: 0.22), value: configToast)
+        .sheet(isPresented: $showHistory) {
+            ConversationHistoryView()
+        }
         .sheet(isPresented: $showPairing) {
             PairingView(remoteHost: remoteHost)
         }

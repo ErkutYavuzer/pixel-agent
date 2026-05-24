@@ -99,6 +99,13 @@ C7, B6, B3, A8, C10, C2/C3 + sprint 1 follow-up'lar.
 
 B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS settings tab), C12 (tool-call envelope events).
 
+| Status | # | Item |
+|---|---|---|
+| ✅ | B2 | Conversation history sidebar |
+| ⏳ | B1 | Settings scene (tab'lı) |
+| ⏳ | B8 | iOS settings tab |
+| ⏳ | C12 | Tool-call envelope events |
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

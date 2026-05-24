@@ -79,6 +79,68 @@ public actor ConversationStore {
         return data.split(separator: 0x0A).filter { !$0.isEmpty }.count
     }
 
+    /// B2: Belirli bir archived dosyadan mesajları oku. URL store'un kendi
+    /// archive dizininde olmalı (defensive boundary değil — caller dikkat etsin).
+    public func loadMessages(fromArchive url: URL) throws -> [Message] {
+        let data = try Data(contentsOf: url)
+        guard !data.isEmpty else { return [] }
+        let decoder = JSONDecoder()
+        let lines = data.split(separator: 0x0A)
+        var messages: [Message] = []
+        for line in lines {
+            guard !line.isEmpty else { continue }
+            if let m = try? decoder.decode(Message.self, from: Data(line)) {
+                messages.append(m)
+            }
+        }
+        return messages
+    }
+
+    /// B2: Tüm backend'lerin arşivlerini tek listede döner. Sidebar'da
+    /// kullanılır. Filename'den parse edilemeyenler atlanır (geriye-uyumlu).
+    public nonisolated static func listAllArchives(
+        directory: URL? = nil
+    ) throws -> [ArchivedConversationEntry] {
+        let baseDir = directory ?? defaultDirectory()
+        let archiveDir = baseDir.appendingPathComponent("archive", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: archiveDir.path) else { return [] }
+
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: archiveDir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        let decoder = JSONDecoder()
+        var entries: [ArchivedConversationEntry] = []
+        for url in urls {
+            let filename = url.lastPathComponent
+            guard filename.hasSuffix(".jsonl") else { continue }
+            guard let parsed = ArchivedConversationParser.parseFilename(filename) else {
+                continue
+            }
+            // Mesaj sayısı + ilk user snippet'i için içeriği oku.
+            let data = (try? Data(contentsOf: url)) ?? Data()
+            let lines = data.split(separator: 0x0A).filter { !$0.isEmpty }
+            var messages: [Message] = []
+            for line in lines {
+                if let m = try? decoder.decode(Message.self, from: Data(line)) {
+                    messages.append(m)
+                }
+            }
+            let entry = ArchivedConversationEntry(
+                id: url,
+                backendKind: parsed.kind,
+                archivedAt: parsed.date,
+                messageCount: messages.count,
+                firstUserSnippet: ArchivedConversationParser.firstUserSnippet(messages: messages)
+            )
+            entries.append(entry)
+        }
+        // En yeni arşiv üstte.
+        return entries.sorted { $0.archivedAt > $1.archivedAt }
+    }
+
     public nonisolated static func defaultDirectory() -> URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
