@@ -67,11 +67,22 @@ public struct MascotFrame: Sendable, Equatable {
 public enum PixelMascot {
     public static let version = "0.1.0"
 
+    /// Verilen state için varsayılan (frame index 0) frame'i döner. Eski API
+    /// — geriye uyumlu kalır.
     public static func frame(for state: MascotState) -> MascotFrame {
+        frame(for: state, atFrameIndex: 0)
+    }
+
+    /// **Sprint 5 (mascot polish):** State'in çoklu frame'i varsa index'e
+    /// göre döndürür. Şu an yalnızca `.speaking` 2 frame (0 = open mouth,
+    /// 1 = closed mouth); diğer state'ler tek frame (her index aynı sonucu
+    /// döner — out-of-bounds yumuşak fallback).
+    public static func frame(for state: MascotState, atFrameIndex index: Int) -> MascotFrame {
         switch state {
         case .idle: return idleFrame
         case .thinking: return thinkingFrame
-        case .speaking: return speakingFrame
+        case .speaking:
+            return index % 2 == 0 ? speakingFrame : speakingFrameClosed
         case .error: return errorFrame
         }
     }
@@ -115,6 +126,24 @@ public enum PixelMascot {
     ..XOXXXXOX..
     ..XXMMMMXX..
     ..XSMMMMSX..
+    ...SXXXXS...
+    ....SXXS....
+    ............
+    ............
+    """)
+
+    /// **Sprint 5 (mascot polish):** Ağız "kapalı/küçülmüş" 2. konuşma frame'i.
+    /// `MascotAnimationClock.speakingFrameIndex(time:)` 5Hz'de 0↔1 arasında
+    /// alternates → ağız açılıp kapanır görüntüsü.
+    public static let speakingFrameClosed = MascotFrame(ascii: """
+    ............
+    ....XXXX....
+    ...HXXXXS...
+    ..HXXXXXXS..
+    ..XOXXXXOX..
+    ..XOXXXXOX..
+    ..XXX__XXX..
+    ..XSXXXXSX..
     ...SXXXXS...
     ....SXXS....
     ............
