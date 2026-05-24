@@ -65,10 +65,21 @@ final class ChatViewModel: ObservableObject {
                     continue
                 }
                 let pixelSize = CGSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                // **Sprint 6 (SoM marks sidecar):** marks JSON sidecar varsa
+                // decode et — `ui_screenshot(elements:)` overlay'leri restart
+                // sonrası geri gelir. Sidecar yok / decode başarısız → boş array
+                // (user-initiated capture'larda zaten olmayan durum).
+                let marks: [SoMMark]
+                if let sidecarData = try? ScreenshotStore.loadSidecar(for: msg.id),
+                   let decoded = try? JSONDecoder().decode([SoMMark].self, from: sidecarData) {
+                    marks = decoded
+                } else {
+                    marks = []
+                }
                 let attachment = ScreenshotAttachment(
                     pngData: pngData,
                     pixelSize: pixelSize,
-                    marks: [],  // marks JSONL'e yazılmıyor — restart'ta kaybolur (kabul edildi)
+                    marks: marks,
                     capturedAt: msg.createdAt
                 )
                 screenshotAttachments[msg.id] = attachment
@@ -213,6 +224,13 @@ final class ChatViewModel: ObservableObject {
                 // Hata best-effort yutar — placeholder text JSONL'de var,
                 // sonraki restart'ta sadece görsel kaybolur (mesaj kalır).
                 try? ScreenshotStore.save(pngData: result.pngData, for: msg.id)
+                // **Sprint 6 (SoM marks sidecar):** marks varsa JSON sidecar
+                // dosyasına yaz — restart sonrası numbered overlay'ler de hidrate
+                // olur. Marks boşsa dosya yazma (gereksiz IO).
+                if !result.marks.isEmpty,
+                   let marksData = try? JSONEncoder().encode(result.marks) {
+                    try? ScreenshotStore.saveSidecar(jsonData: marksData, for: msg.id)
+                }
                 // **Sprint 4 (C11 "screenshot → soruna sor"):** Composer boşsa
                 // varsayılan soruyu prefill et — kullanıcı eklemeyi tetikleyici
                 // bir cümleye bakar, düzenleyip Enter'a basabilir. Composer

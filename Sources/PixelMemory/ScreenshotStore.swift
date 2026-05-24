@@ -51,19 +51,65 @@ public enum ScreenshotStore {
         return try Data(contentsOf: url)
     }
 
-    /// Bir messageID için kaydedilmiş PNG'yi siler (best-effort).
+    /// Bir messageID için kaydedilmiş PNG'yi (ve varsa JSON sidecar'ı) siler
+    /// (best-effort). Sidecar Sprint 6'da SoMMark dizisi için eklendi.
     public static func delete(
         for messageID: UUID,
         directory: URL? = nil
     ) throws {
         let dir = directory ?? defaultDirectory()
-        let url = dir.appendingPathComponent("\(messageID.uuidString).png")
+        let pngURL = dir.appendingPathComponent("\(messageID.uuidString).png")
+        try? FileManager.default.removeItem(at: pngURL)
+        try? deleteSidecar(for: messageID, directory: dir)
+    }
+
+    // MARK: - Sprint 6: Sidecar JSON (SoM marks vb.)
+
+    /// Sidecar JSON dosya path'i — `<UUID>.json` aynı dizinde.
+    private static func sidecarURL(for messageID: UUID, in directory: URL) -> URL {
+        directory.appendingPathComponent("\(messageID.uuidString).json")
+    }
+
+    /// PNG'nin yanına arbitrary JSON yazar. Sprint 6'da SoMMark dizisi için
+    /// kullanılır — restart sonrası `ui_screenshot` numbered overlay'leri
+    /// yeniden render olur.
+    public static func saveSidecar(
+        jsonData: Data,
+        for messageID: UUID,
+        directory: URL? = nil
+    ) throws {
+        let dir = directory ?? defaultDirectory()
+        try FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true
+        )
+        let url = sidecarURL(for: messageID, in: dir)
+        try jsonData.write(to: url, options: .atomic)
+    }
+
+    /// Sidecar'ı okur. Dosya yoksa nil — caller marks olmadan attachment kurar.
+    public static func loadSidecar(
+        for messageID: UUID,
+        directory: URL? = nil
+    ) throws -> Data? {
+        let dir = directory ?? defaultDirectory()
+        let url = sidecarURL(for: messageID, in: dir)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return try Data(contentsOf: url)
+    }
+
+    /// Sidecar'ı siler (best-effort).
+    public static func deleteSidecar(
+        for messageID: UUID,
+        directory: URL? = nil
+    ) throws {
+        let dir = directory ?? defaultDirectory()
+        let url = sidecarURL(for: messageID, in: dir)
         try? FileManager.default.removeItem(at: url)
     }
 
     /// Dizini tarayıp **artık aktif store'da olmayan** `messageID`'lerin
-    /// PNG dosyalarını siler. Caller `activeIDs` set'ini ConversationStore'dan
-    /// türetir. Boş set verilirse no-op.
+    /// PNG ve JSON sidecar dosyalarını siler. Caller `activeIDs` set'ini
+    /// ConversationStore'dan türetir. Sprint 6: `.json` sidecar'lar da dahil.
     public static func purgeOrphans(
         keeping activeIDs: Set<UUID>,
         directory: URL? = nil
@@ -76,7 +122,9 @@ public enum ScreenshotStore {
             options: [.skipsHiddenFiles]
         )
         var removed = 0
-        for url in urls where url.pathExtension == "png" {
+        for url in urls {
+            let ext = url.pathExtension
+            guard ext == "png" || ext == "json" else { continue }
             let stem = url.deletingPathExtension().lastPathComponent
             guard let uuid = UUID(uuidString: stem) else { continue }
             if !activeIDs.contains(uuid) {

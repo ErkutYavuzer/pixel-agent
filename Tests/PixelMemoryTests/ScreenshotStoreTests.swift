@@ -94,10 +94,11 @@ final class ScreenshotStoreTests: XCTestCase {
         XCTAssertEqual(removed, 0)
     }
 
-    func testPurgeIgnoresNonPNGFiles() throws {
+    func testPurgeIgnoresNonScreenshotFiles() throws {
         try FileManager.default.createDirectory(
             at: testDir, withIntermediateDirectories: true
         )
+        // .txt — purge'a dahil değil (yalnızca .png ve .json).
         let txtURL = testDir.appendingPathComponent("notes.txt")
         try "hello".write(to: txtURL, atomically: true, encoding: .utf8)
 
@@ -107,5 +108,74 @@ final class ScreenshotStoreTests: XCTestCase {
         )
         XCTAssertEqual(removed, 0)
         XCTAssertTrue(FileManager.default.fileExists(atPath: txtURL.path))
+    }
+
+    // MARK: - Sprint 6: Sidecar JSON
+
+    func testSaveAndLoadSidecarRoundTrip() throws {
+        let id = UUID()
+        let sample = #"{"hello":"world"}"#.data(using: .utf8)!
+        try ScreenshotStore.saveSidecar(jsonData: sample, for: id, directory: testDir)
+        let loaded = try ScreenshotStore.loadSidecar(for: id, directory: testDir)
+        XCTAssertEqual(loaded, sample)
+    }
+
+    func testLoadSidecarReturnsNilForMissingFile() throws {
+        let id = UUID()
+        XCTAssertNil(try ScreenshotStore.loadSidecar(for: id, directory: testDir))
+    }
+
+    func testDeleteSidecarRemovesFile() throws {
+        let id = UUID()
+        try ScreenshotStore.saveSidecar(jsonData: Data([1, 2, 3]), for: id, directory: testDir)
+        XCTAssertNotNil(try ScreenshotStore.loadSidecar(for: id, directory: testDir))
+
+        try ScreenshotStore.deleteSidecar(for: id, directory: testDir)
+        XCTAssertNil(try ScreenshotStore.loadSidecar(for: id, directory: testDir))
+    }
+
+    func testDeleteAlsoRemovesSidecar() throws {
+        // Sprint 6: PNG ile birlikte sidecar da temizlensin.
+        let id = UUID()
+        try ScreenshotStore.save(pngData: Data([0x89, 0x50]), for: id, directory: testDir)
+        try ScreenshotStore.saveSidecar(jsonData: Data([0x7B, 0x7D]), for: id, directory: testDir)
+
+        try ScreenshotStore.delete(for: id, directory: testDir)
+
+        XCTAssertNil(try ScreenshotStore.load(for: id, directory: testDir))
+        XCTAssertNil(try ScreenshotStore.loadSidecar(for: id, directory: testDir))
+    }
+
+    func testPurgeOrphansAlsoRemovesJSONSidecars() throws {
+        // Sprint 6: orphan sidecar JSON da temizlensin.
+        let keep = UUID()
+        let orphan = UUID()
+
+        try ScreenshotStore.save(pngData: Data([0x89]), for: keep, directory: testDir)
+        try ScreenshotStore.saveSidecar(jsonData: Data([0x7B]), for: keep, directory: testDir)
+
+        try ScreenshotStore.save(pngData: Data([0x89]), for: orphan, directory: testDir)
+        try ScreenshotStore.saveSidecar(jsonData: Data([0x7B]), for: orphan, directory: testDir)
+
+        let removed = try ScreenshotStore.purgeOrphans(
+            keeping: [keep],
+            directory: testDir
+        )
+        // 2 file (orphan .png + orphan .json) silindi.
+        XCTAssertEqual(removed, 2)
+
+        // Keep'in dosyaları hâlâ var.
+        XCTAssertNotNil(try ScreenshotStore.load(for: keep, directory: testDir))
+        XCTAssertNotNil(try ScreenshotStore.loadSidecar(for: keep, directory: testDir))
+        // Orphan'ın iki dosyası da silinmiş.
+        XCTAssertNil(try ScreenshotStore.load(for: orphan, directory: testDir))
+        XCTAssertNil(try ScreenshotStore.loadSidecar(for: orphan, directory: testDir))
+    }
+
+    func testSidecarSaveCreatesDirectoryIfMissing() throws {
+        let nested = testDir.appendingPathComponent("nested/deep", isDirectory: true)
+        let id = UUID()
+        try ScreenshotStore.saveSidecar(jsonData: Data([1]), for: id, directory: nested)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: nested.path))
     }
 }
