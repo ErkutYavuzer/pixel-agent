@@ -336,6 +336,19 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 22 tamamlandı — Wire-level latency.** v0.2.46 adaptive rate `lastSendLatencyMs`'i **local** ölçüyordu (capture + JPEG + transport handoff) — backpressure'a duyarlı ama ağ koşulundan habersiz. Sprint 22 Mac her frame'e UUID frameID iliştiriyor, iOS aynı ID ile `screenshotFrameAck` döner; coordinator round-trip ms = wire latency. Adaptive controller artık gerçek ağ latency'sine göre scale ediyor. Henüz ACK yokken (stream başlangıcı, eski iOS) `WireLatencyTracker.effectiveLatencyMs` 5 sn freshness window dışında **local fallback**'e düşer — graceful degradation. Mac test 859 → 871 (+12 net: 16 WireLatencyTracker + 3 Coordinator + 5 EnvelopePayload + 1 RemoteEnvelope regression set + 1 SettingsTab v0.2.39 pre-existing fix; bazıları aynı modülde duplicate-counted). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (`screenshotPayload` factory default `frameID: nil` ile eski callsites unchanged).
 
+## Sprint 23 — "Wire latency badge UI" (v0.2.48)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | protokol | `HostStatusContent.screenshotWireLatencyMs: Int?` + `HostStatusDeltaContent.screenshotWireLatencyMs: Int?` (additive, encodeIfPresent) |
+| ✅ | delta calc | `HostStatusDeltaCalculator.delta` field-by-field diff'e wireLatency dahil; bootstrap (from nil) için new'den kopyalanır |
+| ✅ | Mac push | Periyodik 3 sn loop'ta `coordinator.isActive ? coordinator.lastWireLatencyMs : nil` snapshot'a |
+| ✅ | iOS merge | RemoteSession `@Published screenshotWireLatencyMs`; hostStatus/Delta merge handler; stopScreenshotStream reset |
+| ✅ | iOS UI | Mac Paneli "Ekran Resmi" badge: `isStreamingScreenshots && latency != nil` gate; renk bantları (<100 yeşil / <300 turuncu / ≥300 kırmızı); monospaced "Ağ: X ms" + wifi icon |
+| ⏸ | v0.2.49+ | Per-frame latency embed (`screenshotPayload.wireLatencyMs`) — 3 sn lag yerine 1Hz real-time güncelleme |
+
+**25 May 2026: Sprint 23 tamamlandı — Wire latency badge UI.** Sprint 22 Mac side wire latency'i ölçüyordu ama iOS user'a görsel feedback yoktu. Sprint 23 protocol additive (hostStatus + hostStatusDelta `screenshotWireLatencyMs: Int?`) + Mac periyodik push + iOS Mac Paneli renk-bantlı rozet. 3 saniyelik delta loop'a piggyback — debug-tier feedback için yeterli, gerçek-zamanlı değil. Mac test 871 → 880 (+9 HostStatusDeltaCalculator: change/unchanged/value→nil edge case, full bootstrap, host envelope round-trip, isEmpty truth table, getter passthrough). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

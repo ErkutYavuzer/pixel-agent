@@ -10,8 +10,48 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - v0.2.45 follow-up: OCR-based badge placement (Vision framework — text bounding box detection; AX label-aware heuristic'in pratik limiti aşıldığında).
-- v0.2.47 follow-up: UI'da wire latency badge (Mac Paneli'nde "Ağ: 87 ms" görselleştirme; `lastWireLatencyMs` zaten coordinator'da `@Published`).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.48] — 2026-05-25
+
+**Wire latency badge UI — Sprint 22 follow-up.** v0.2.47 Mac side wire-level latency'i `WireLatencyTracker` ile ölçüyordu ama iOS kullanıcısına görsel feedback yoktu. v0.2.48 `HostStatusContent` + `HostStatusDeltaContent` aggregator'larına `screenshotWireLatencyMs: Int?` field eklendi; Mac periyodik 3 sn delta loop'unda coordinator'ın son ölçümünü push'lar; iOS Mac Paneli "Ekran Resmi" section'unda **renk-bantlı capsule rozet** (yeşil <100ms, turuncu <300ms, kırmızı >=300ms). Görselleştirme `isStreamingScreenshots` gate'i ile streaming aktif değilken gizlenir.
+
+**Test:** Mac 871 → **880** (+9 net: 9 HostStatusDeltaCalculator wire latency testleri — full bootstrap, change/unchanged delta, value→nil edge case, host envelope round-trip with/without latency, isEmpty truth table, getter passthrough). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (additive optional field, `encodeIfPresent` ile eski wire format korunur).
+
+### Added — Sprint 23 / Wire latency badge UI
+
+#### `Sources/PixelRemote/RemoteEnvelope.swift` (protokol genişletme, additive)
+- **`HostStatusContent.screenshotWireLatencyMs: Int?`** yeni field (default nil — stream aktif değil veya henüz ACK gelmedi).
+- **`HostStatusDeltaContent.screenshotWireLatencyMs: Int?`** delta versiyonu — diğer delta field'larıyla aynı pattern (nil = "değişmedi").
+- **`PayloadKey.screenshotWireLatencyMs`** wire field — decode/encode `encodeIfPresent`.
+- **`payload?.screenshotWireLatencyMs: Int?`** backward-compat computed getter (her iki case'i kapsar).
+- **`HostStatusDeltaContent.isEmpty`** wire latency'yi de kontrol eder.
+- **Factory:** `hostStatus(...screenshotWireLatencyMs: nil)` ve `hostStatusDelta(...screenshotWireLatencyMs: nil)` parametreleri default'lu.
+
+#### `Sources/PixelRemote/HostStatusDeltaCalculator.swift`
+- **`delta(from:to:)`** field-by-field karşılaştırması listesine `screenshotWireLatencyMs` eklendi.
+- **Full bootstrap (`from: nil`):** new'in `screenshotWireLatencyMs`'i delta'ya kopyalanır.
+- **Incremental:** `old != new` ise yeni değer; eşitse nil (skip).
+- **Edge case:** old=87, new=nil → delta.wireLatency = nil; calculator `isEmpty` ile push'u skip eder (stream stop sonrası tek başına latency clear push'u yapılmaz, iOS UI gate'i badge'i gizler).
+
+#### `Sources/PixelRemote/RemoteHost.swift`
+- **`sendHostStatus(...screenshotWireLatencyMs: nil)`** opsiyonel param eklendi (default nil ile eski callsites unchanged).
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **Periyodik delta loop:** `HostStatusContent` snapshot'ına `screenshotStream.isActive` iken `screenshotStream.lastWireLatencyMs`, aksi halde nil iletilir.
+
+#### `ios/PixelAgentRemote/RemoteSession.swift`
+- **`@Published var screenshotWireLatencyMs: Int? = nil`** yeni field.
+- **`.hostStatus, .hostStatusDelta`** merge handler: `if let latency = payload.screenshotWireLatencyMs` ile guard'lı update (nil = unchanged delta).
+- **`stopScreenshotStream`** ek olarak `screenshotWireLatencyMs = nil` — bir sonraki başlangıçta stale değer briefly görünmesin.
+
+#### `ios/PixelAgentRemote/ChatView.swift` (Mac Paneli "Ekran Resmi" section)
+- **Wire latency badge:** `isStreamingScreenshots && screenshotWireLatencyMs != nil` koşuluyla görünür capsule (`wifi` icon + "Ağ: X ms" monospaced).
+- **`wireLatencyColor(_:)`** private helper — eşik bantları (<100 yeşil, <300 turuncu, ≥300 kırmızı). Tip backstop: subjektif eşikler; LAN <30 ms, internet+relay 50-200 ms tipik.
+
+### Notes — Sprint 23
+- **Tahmini delay:** Badge 3 saniyelik delta loop ile güncellenir; debug-tier feedback yeterli, real-time değil. Daha hızlı güncelleme için latency'i `screenshotPayload` envelope'una embed etmek alternatif (her tick = ~1Hz)—v0.2.49+ adayı.
+- **Stream kapatma davranışı:** Mac stream stop edip Mac'ten latency nil gelse de delta calculator `isEmpty` ile push'u skip eder; iOS UI badge'i `isStreamingScreenshots` ile gizler. iOS taraf manuel stop ile `screenshotWireLatencyMs = nil` reset eder.
 
 ## [0.2.47] — 2026-05-25
 
