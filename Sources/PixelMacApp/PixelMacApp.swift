@@ -782,13 +782,22 @@ struct ChatHost: View {
             }
         }
         .task {
+            // **Sprint 19 (v0.2.44):** Delta-only push. Bir önceki snapshot'ı
+            // tut, her tick'te diff hesapla; fark yoksa skip (bandwidth ~700
+            // B/s → 0 idle, sadece değişikliklerde küçük delta).
+            var lastSnapshot: HostStatusContent? = nil
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(nanoseconds: 3_000_000_000)
                 } catch {
                     break
                 }
-                guard remoteHost.isConnected && remoteHost.isPaired else { continue }
+                guard remoteHost.isConnected && remoteHost.isPaired else {
+                    // Disconnect → bir sonraki connect'te full bootstrap delta
+                    // gönderilsin diye snapshot'ı sıfırla.
+                    lastSnapshot = nil
+                    continue
+                }
 
                 let selectedBackendRaw = selectedKind.rawValue
                 let selectedModelID = currentModel(for: selectedKind)
@@ -815,10 +824,9 @@ struct ChatHost: View {
                 let activeWindowName = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Bilinmiyor"
                 let cpu = await SystemStats.shared.cpuUsagePercent()
                 let ram = SystemStats.memoryUsagePercent()
-
                 let metrics = SystemMetricsPayload(cpuUsage: cpu, ramUsage: ram, activeWindow: activeWindowName)
 
-                await remoteHost.sendHostStatus(
+                let newSnapshot = HostStatusContent(
                     selectedBackend: selectedBackendRaw,
                     selectedModel: selectedModelID,
                     planMode: isPlan,
@@ -827,6 +835,12 @@ struct ChatHost: View {
                     activeSubagents: activeSubs,
                     systemMetrics: metrics
                 )
+
+                if let delta = HostStatusDeltaCalculator.delta(from: lastSnapshot, to: newSnapshot) {
+                    await remoteHost.sendHostStatusDelta(delta)
+                    lastSnapshot = newSnapshot
+                }
+                // Fark yoksa skip — bandwidth idle.
             }
         }
     }

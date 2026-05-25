@@ -43,6 +43,11 @@ public enum EnvelopeType: String, Sendable, CaseIterable {
     /// **Sprint 15 (v0.2.40):** iOS → Mac, aktif stream'i durdur. Payload
     /// boş. Mac task'i cancel eder, push akışı biter.
     case screenshotStreamStop
+    /// **Sprint 19 (v0.2.44):** Mac → iOS, host status delta — sadece bir
+    /// önceki snapshot'tan değişen field'lar (bandwidth optimization).
+    /// iOS field-by-field merge eder; mevcut state korunur, dolu field'lar
+    /// override eder.
+    case hostStatusDelta
     /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
     /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
     /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
@@ -150,6 +155,48 @@ public struct SystemMetricsPayload: Codable, Sendable, Equatable {
     }
 }
 
+/// **Sprint 19 (v0.2.44):** `EnvelopeType.hostStatusDelta` için aggregator —
+/// tüm field'lar opsiyonel ("nil = değişmedi"). Mac diff hesabı sonucu;
+/// iOS field-by-field merge eder.
+public struct HostStatusDeltaContent: Sendable, Equatable {
+    public let selectedBackend: String?
+    public let selectedModel: String?
+    public let planMode: Bool?
+    public let availableBackends: [String]?
+    public let availableModels: [String: [String]]?
+    public let activeSubagents: [SubagentStatusPayload]?
+    public let systemMetrics: SystemMetricsPayload?
+
+    public init(
+        selectedBackend: String? = nil,
+        selectedModel: String? = nil,
+        planMode: Bool? = nil,
+        availableBackends: [String]? = nil,
+        availableModels: [String: [String]]? = nil,
+        activeSubagents: [SubagentStatusPayload]? = nil,
+        systemMetrics: SystemMetricsPayload? = nil
+    ) {
+        self.selectedBackend = selectedBackend
+        self.selectedModel = selectedModel
+        self.planMode = planMode
+        self.availableBackends = availableBackends
+        self.availableModels = availableModels
+        self.activeSubagents = activeSubagents
+        self.systemMetrics = systemMetrics
+    }
+
+    /// Hiçbir field set edilmemişse delta boş — push atlanmalı.
+    public var isEmpty: Bool {
+        selectedBackend == nil
+            && selectedModel == nil
+            && planMode == nil
+            && availableBackends == nil
+            && availableModels == nil
+            && activeSubagents == nil
+            && systemMetrics == nil
+    }
+}
+
 /// `EnvelopeType.hostStatus` için aggregator content.
 public struct HostStatusContent: Sendable, Equatable {
     public let selectedBackend: String
@@ -221,6 +268,8 @@ public enum EnvelopePayload: Sendable, Equatable {
     /// Sprint 15 (v0.2.40): iOS → Mac, screenshot stream başlat.
     /// `intervalMs` 250-5000 arası clamp edilir.
     case screenshotStreamStart(intervalMs: Int)
+    /// Sprint 19 (v0.2.44): Mac → iOS, host status delta (bandwidth opt).
+    case hostStatusDelta(HostStatusDeltaContent)
 }
 
 // MARK: - Backward-compat field getters
@@ -274,6 +323,7 @@ extension EnvelopePayload {
         switch self {
         case .clientConfig(let b, _, _): return b
         case .hostStatus(let c): return c.selectedBackend
+        case .hostStatusDelta(let c): return c.selectedBackend
         default: return nil
         }
     }
@@ -282,6 +332,7 @@ extension EnvelopePayload {
         switch self {
         case .clientConfig(_, let m, _): return m
         case .hostStatus(let c): return c.selectedModel
+        case .hostStatusDelta(let c): return c.selectedModel
         default: return nil
         }
     }
@@ -290,6 +341,7 @@ extension EnvelopePayload {
         switch self {
         case .clientConfig(_, _, let p): return p
         case .hostStatus(let c): return c.planMode
+        case .hostStatusDelta(let c): return c.planMode
         default: return nil
         }
     }
@@ -310,23 +362,35 @@ extension EnvelopePayload {
     }
 
     public var availableBackends: [String]? {
-        if case .hostStatus(let c) = self { return c.availableBackends }
-        return nil
+        switch self {
+        case .hostStatus(let c): return c.availableBackends
+        case .hostStatusDelta(let c): return c.availableBackends
+        default: return nil
+        }
     }
 
     public var availableModels: [String: [String]]? {
-        if case .hostStatus(let c) = self { return c.availableModels }
-        return nil
+        switch self {
+        case .hostStatus(let c): return c.availableModels
+        case .hostStatusDelta(let c): return c.availableModels
+        default: return nil
+        }
     }
 
     public var activeSubagents: [SubagentStatusPayload]? {
-        if case .hostStatus(let c) = self { return c.activeSubagents }
-        return nil
+        switch self {
+        case .hostStatus(let c): return c.activeSubagents
+        case .hostStatusDelta(let c): return c.activeSubagents
+        default: return nil
+        }
     }
 
     public var systemMetrics: SystemMetricsPayload? {
-        if case .hostStatus(let c) = self { return c.systemMetrics }
-        return nil
+        switch self {
+        case .hostStatus(let c): return c.systemMetrics
+        case .hostStatusDelta(let c): return c.systemMetrics
+        default: return nil
+        }
     }
 
     public var toolCallEvent: ToolCallEventPayload? {
@@ -518,6 +582,20 @@ extension EnvelopePayload {
             let clamped = max(250, min(5000, raw))
             return .screenshotStreamStart(intervalMs: clamped)
 
+        case .hostStatusDelta:
+            // Sprint 19 (v0.2.44): tüm field'lar opsiyonel — nil = değişmedi.
+            // hostStatus key'leri reuse (selectedBackend, selectedModel, vs.).
+            let content = HostStatusDeltaContent(
+                selectedBackend: try c.decodeIfPresent(String.self, forKey: .selectedBackend),
+                selectedModel: try c.decodeIfPresent(String.self, forKey: .selectedModel),
+                planMode: try c.decodeIfPresent(Bool.self, forKey: .planMode),
+                availableBackends: try c.decodeIfPresent([String].self, forKey: .availableBackends),
+                availableModels: try c.decodeIfPresent([String: [String]].self, forKey: .availableModels),
+                activeSubagents: try c.decodeIfPresent([SubagentStatusPayload].self, forKey: .activeSubagents),
+                systemMetrics: try c.decodeIfPresent(SystemMetricsPayload.self, forKey: .systemMetrics)
+            )
+            return .hostStatusDelta(content)
+
         case .ping, .ready, .archiveListRequest, .screenshotStreamStop, .unknown:
             // Empty payload type'lar — nil dönmeli (RemoteEnvelope.payload = nil).
             return nil
@@ -607,6 +685,17 @@ extension EnvelopePayload {
 
         case .screenshotStreamStart(let intervalMs):
             try c.encode(intervalMs, forKey: .streamIntervalMs)
+
+        case .hostStatusDelta(let content):
+            // Sprint 19 (v0.2.44): sadece dolu (non-nil) field'ları encode et —
+            // bandwidth optimization'ın kalbi.
+            try c.encodeIfPresent(content.selectedBackend, forKey: .selectedBackend)
+            try c.encodeIfPresent(content.selectedModel, forKey: .selectedModel)
+            try c.encodeIfPresent(content.planMode, forKey: .planMode)
+            try c.encodeIfPresent(content.availableBackends, forKey: .availableBackends)
+            try c.encodeIfPresent(content.availableModels, forKey: .availableModels)
+            try c.encodeIfPresent(content.activeSubagents, forKey: .activeSubagents)
+            try c.encodeIfPresent(content.systemMetrics, forKey: .systemMetrics)
         }
     }
 }
@@ -768,6 +857,36 @@ extension RemoteEnvelope {
     /// Payload yok.
     public static func screenshotStreamStop() -> RemoteEnvelope {
         RemoteEnvelope(type: .screenshotStreamStop)
+    }
+
+    /// **Sprint 19 (v0.2.44):** Mac → iOS. Host status delta push (bandwidth opt).
+    /// Sadece bir önceki snapshot'tan değişen field'lar gönderilir; iOS
+    /// field-by-field merge eder. Boş delta (`isEmpty`) push edilmemeli
+    /// (caller sorumluluğu — `HostStatusDeltaCalculator` zaten skip eder).
+    public static func hostStatusDelta(
+        selectedBackend: String? = nil,
+        selectedModel: String? = nil,
+        planMode: Bool? = nil,
+        availableBackends: [String]? = nil,
+        availableModels: [String: [String]]? = nil,
+        activeSubagents: [SubagentStatusPayload]? = nil,
+        systemMetrics: SystemMetricsPayload? = nil
+    ) -> RemoteEnvelope {
+        let content = HostStatusDeltaContent(
+            selectedBackend: selectedBackend,
+            selectedModel: selectedModel,
+            planMode: planMode,
+            availableBackends: availableBackends,
+            availableModels: availableModels,
+            activeSubagents: activeSubagents,
+            systemMetrics: systemMetrics
+        )
+        return RemoteEnvelope(type: .hostStatusDelta, payload: .hostStatusDelta(content))
+    }
+
+    /// Sprint 19 (v0.2.44): direct content init için convenience.
+    public static func hostStatusDelta(_ content: HostStatusDeltaContent) -> RemoteEnvelope {
+        RemoteEnvelope(type: .hostStatusDelta, payload: .hostStatusDelta(content))
     }
 
     /// Handshake'in ilk envelope'u: gönderen tarafın public key'ini taşır.

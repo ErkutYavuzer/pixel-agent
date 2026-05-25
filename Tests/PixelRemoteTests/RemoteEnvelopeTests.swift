@@ -33,6 +33,7 @@ final class RemoteEnvelopeTests: XCTestCase {
             "archiveDelete",        // Sprint 12 — iOS → Mac mutation (kalıcı sil)
             "screenshotStreamStart", // Sprint 15 — iOS → Mac continuous stream
             "screenshotStreamStop",  // Sprint 15 — iOS → Mac stream durdur
+            "hostStatusDelta",       // Sprint 19 — Mac → iOS delta-only push (bandwidth)
         ]
         let actual = Set(EnvelopeType.allCases.map { $0.rawValue })
         XCTAssertEqual(actual, expected)

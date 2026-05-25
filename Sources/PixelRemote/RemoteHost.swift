@@ -421,6 +421,21 @@ public final class RemoteHost: ObservableObject {
 
     // MARK: - Sprint 5 archive send helpers
 
+    /// **Sprint 19 (v0.2.44):** Mac → iOS host status delta push. Caller
+    /// `HostStatusDeltaCalculator.delta(from:to:)` ile delta üretip nil
+    /// değilse buraya verir; iOS field-by-field merge eder.
+    public func sendHostStatusDelta(_ content: HostStatusDeltaContent) async {
+        guard let transport = activeTransport else { return }
+        guard !content.isEmpty else { return }
+        let envelope = RemoteEnvelope.hostStatusDelta(content)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Host status delta gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     public func sendArchiveListResponse(entries: [ArchiveEntryPayload]) async {
         guard let transport = activeTransport else { return }
         let envelope = RemoteEnvelope.archiveListResponse(entries: entries)

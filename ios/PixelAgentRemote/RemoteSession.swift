@@ -501,7 +501,11 @@ final class RemoteSession: ObservableObject {
                 }
                 mascotState = .idle
             }
-        case .hostStatus:
+        case .hostStatus, .hostStatusDelta:
+            // Sprint 19 (v0.2.44): hostStatusDelta aynı field-by-field merge
+            // pattern'i kullanır — handler zaten delta-aware (her field için
+            // `if let` guard). Aynı switch arm: hostStatus full snapshot tüm
+            // field'ları doldurur; hostStatusDelta sadece değişenleri.
             if let payload = envelope.payload {
                 if let backend = payload.selectedBackend {
                     self.selectedBackend = backend
