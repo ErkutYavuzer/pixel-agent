@@ -8,10 +8,99 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+- v0.2 kalan: Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.37 follow-up: test isolation refactor (flake'ı yapısal çöz — ayrı xctest binary'ler veya fixture cleanup); demo GIF; Apple Dev ID + notarization.
+- v0.2.38 follow-up: test isolation refactor (flake'ı yapısal çöz); SoM Faz 5 follow-up (badge'i element rect dışına content-aware kaydırma için OCR/AX label-aware logic — şimdi sadece 4 köşe + bounds clamping).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.38] — 2026-05-25
+
+**PixelComputerUse Faz 5 — SoM Tier 2.** v0.2.31'de iniş yapan Faz 4 (Set-of-Mark visual annotation) hardcoded palette/outline/badge sabitleriyle çalışıyordu; her element için badge sabit sol-üst köşede; caller `ui_screenshot` çağırmadan önce `ui_query` ile element listesi hazırlamak zorundaydı. Faz 5 üç eksiği kapatıyor:
+
+1. **SoMOptions override** — palette, outline width, badge size, font size, text color, badge placement strategy → tümü configurable. MCP tool şemasında `som_options` parametre olarak alınır. `.default` eski hardcoded davranış (geri uyumlu).
+2. **AX-based otomatik element keşfi** — `ui_screenshot(auto_discover: true)` AX tree'de interactive element'leri (button/link/textfield/checkbox/...) BFS ile tarar, otomatik annotate eder. Vision model için tek-shot "tıklanabilir ne var?" özeti.
+3. **Content-aware badge placement** — 5 strategy: `.topLeftInside` (default, eski davranış), `.topLeftOutside` (element üstüne taşar, içerik kapanmaz), `.topRightInside/Outside`, `.smartCorner` (image bounds'a göre otomatik seçer; outside taşmıyorsa outside, taşıyorsa inside fallback). `BadgeLayout` saf helper image bounds clamping yapar.
+
+**Test:** Mac 762 → **783** (+21: 11 SoMOptionsTests + 10 BadgeLayoutTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (eski default davranış korundu — yeni parametreler opsiyonel + default value).
+
+### Added — Sprint 13 / PixelComputerUse Faz 5
+
+#### `Sources/PixelComputerUse/SoMOptions.swift` (yeni saf struct, public)
+- **`SoMOptions`** — Codable + Sendable + Equatable: palette/outlineWidth/badgeSize/
+  fontSize/textColor/badgePlacement. Init'te clamping (outlineWidth>=0.5,
+  badgeSize>=8, fontSize>=6); boş palette `defaultPalette`'e düşer.
+- **`SoMColor`** — RGBA Double 0-1, `cgColor` computed (CoreGraphics
+  bridge). `.white`, `.black`, `.defaultPalette` (eski hardcoded 5 renk).
+- **`BadgePlacement`** — enum: 5 case (topLeftInside/Outside, topRightInside/
+  Outside, smartCorner). String rawValue → MCP wire snake_case
+  uyumlu (`top_left_inside`, `smart_corner`).
+- **`SoMOptions.default`** — eski hardcoded davranışla aynı (geri uyumlu
+  guarantee).
+
+#### `Sources/PixelComputerUse/BadgeLayout.swift` (yeni saf helper, public)
+- **`computeBadgeRect(elementRect:badgeSize:imagePixelSize:placement:)`** —
+  ana entry. Strategy resolve + raw rect + clamp to bounds.
+- **`resolveStrategy(...)`** — `.smartCorner` için: outside taşmıyorsa
+  `.topLeftOutside`, taşıyorsa `.topLeftInside` fallback.
+- **`rawBadgeRect(...)`** — strategy'ye göre clamping öncesi rect (test
+  edilebilir saf math).
+- **`clampToImageBounds(...)`** — image bounds dışına taşan rect'i içeri
+  çeker (boyut korunur, origin clamp). Tamamen bounds dışındaysa nil.
+
+#### `Sources/PixelComputerUse/SoMRenderer.swift` (parametrize edildi)
+- Eski hardcoded `palette`, `outlineWidth: 4`, `badgeSize: 36` sabitleri
+  kaldırıldı; `annotate(...)` yeni `options: SoMOptions = .default`
+  parametresi alır. Her element için `BadgeLayout.computeBadgeRect`
+  ile content-aware konum hesaplanır.
+
+#### `Sources/PixelComputerUse/UITypes.swift` (AXRole genişletme)
+- **`AXRole.interactiveRoles: Set<String>`** static — Faz 5 auto-discover
+  için: button/link/textField/textArea/checkbox/radioButton/popUpButton/
+  comboBox/menuItem.
+
+#### `Sources/PixelComputerUse/AXBridge.swift` (yeni method)
+- **`discoverInteractive(bundleID:maxDepth:timeout:limit:)`** actor-isolated
+  throws — BFS traversal, `AXRole.interactiveRoles` filter, zero-frame
+  element skip. Limit default 30 (vision model annotation noise),
+  timeout default 2s.
+
+#### `Sources/PixelComputerUse/PixelComputerUse.swift` (API genişletme)
+- **`screenshot(of:annotating:autoDiscover:options:)`** — yeni 2 param
+  default ile additive: `autoDiscover: Bool = false`, `options: SoMOptions
+  = .default`. `autoDiscover: true` + `annotating: []` ise `AXBridge.
+  discoverInteractive` çağrısı (target window ise bundleID forward).
+  Explicit `annotating` listesi auto-discover'ı override eder.
+
+#### `Sources/PixelComputerUse/ScreenshotCapture.swift` (forwarding)
+- **`capture(target:annotating:options:)`** — yeni `options` param,
+  `SoMRenderer.annotate(options:)`'a forward.
+
+### MCP wire (`Sources/PixelMCPServer/ToolRegistry.swift` + `Sources/PixelMacApp/ControlSocketServer.swift`)
+
+#### Tool schema
+- `ui_screenshot` input schema'sına 2 yeni opsiyonel field:
+  - `auto_discover: bool` — true ise AX tree'den interactive element'ler
+    bulunur.
+  - `som_options: object` — palette/outline_width/badge_size/font_size/
+    text_color/badge_placement (snake_case keys, Codable convertFromSnakeCase
+    ile mapping).
+
+#### Bridge handler
+- `ControlSocketServer.uiScreenshot` 2 yeni param decode:
+  - `auto_discover` Bool fallback `false`.
+  - `som_options` JSONValue → `SoMOptions` via generic `decodeJSON(_:from:)`
+    helper (yeni; eski tip-spesifik decoder'lar refactor).
+- `computer.screenshot(of:annotating:autoDiscover:options:)` forward.
+
+### Tests (+21)
+- `Tests/PixelComputerUseTests/SoMOptionsTests.swift` (yeni, 11 test):
+  default eski hardcoded değerlere eşit, empty palette → fallback, clamping
+  (outlineWidth/badgeSize/fontSize), Codable round-trip default + custom,
+  SoMColor + BadgePlacement Codable.
+- `Tests/PixelComputerUseTests/BadgeLayoutTests.swift` (yeni, 10 test):
+  4 placement basic math, image bounds clamping (origin + maxBounds),
+  smartCorner strategy resolve (outside prefer + inside fallback +
+  non-smart pass-through), defensive edges (zero image / zero badge).
 
 ## [0.2.37] — 2026-05-25
 

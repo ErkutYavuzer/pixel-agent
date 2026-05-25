@@ -214,6 +214,19 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 12 tamamlandı — bundle.** Üç paralel iş tek release'de. iOS chat row Mac ile cross-platform tutarlı (görsel değişiklik yok, sadece refactor); arşiv silme tam round-trip (iOS swipe → Mac delete → otomatik refresh); flake için root cause kayıt altına alındı (parallel mode'da deterministik PixelLAN SIGSEGV, default mode'da nadir random SIGBUS — test isolation refactor v0.3+ adayı). Mac test 754 → 762 (+8). iOS xcodebuild simulator BUILD SUCCEEDED.
 
+## Sprint 13 — "PixelComputerUse Faz 5" (v0.2.38)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | SoM Tier 2 | SoMOptions saf struct (palette/outline/badge/font/textColor/placement) |
+| ✅ | SoM Tier 2 | BadgeLayout saf helper (4 köşe + smartCorner + bounds clamping) |
+| ✅ | renderer | SoMRenderer.annotate(options:) parametrize |
+| ✅ | auto-discover | AXRole.interactiveRoles set + AXBridge.discoverInteractive BFS |
+| ✅ | API | PixelComputerUse.screenshot(autoDiscover:options:) genişletme |
+| ✅ | MCP wire | ui_screenshot şeması auto_discover + som_options |
+
+**25 May 2026: Sprint 13 tamamlandı — PixelComputerUse Faz 5.** v0.2.31 Faz 4'ün üç eksiği kapatıldı: palette/badge override, AX-based otomatik element keşfi, content-aware badge placement. Vision model artık `ui_screenshot(auto_discover: true)` tek çağrıyla "ne tıklanabilir?" özetini alabilir; SoM stil tasarımı caller-side configurable. Mac test 762 → 783 (+21: 11 SoMOptions + 10 BadgeLayout). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (geri uyumlu default davranış).
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
