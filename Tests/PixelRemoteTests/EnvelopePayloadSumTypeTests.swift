@@ -179,4 +179,94 @@ final class EnvelopePayloadSumTypeTests: XCTestCase {
         let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         XCTAssertNil(dict?["payload"])
     }
+
+    // MARK: - Sprint 10 (v0.2.35): archive mutation envelope'ları
+
+    func testArchiveRenameWithTitleRoundTrip() throws {
+        let original = RemoteEnvelope.archiveRename(archiveID: "url-1", newTitle: "Yeni Başlık")
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.type, .archiveRename)
+        guard case .archiveRename(let id, let title) = decoded.payload else {
+            XCTFail("expected .archiveRename")
+            return
+        }
+        XCTAssertEqual(id, "url-1")
+        XCTAssertEqual(title, "Yeni Başlık")
+    }
+
+    func testArchiveRenameWithNilTitleEncodesClearsSentinel() throws {
+        let original = RemoteEnvelope.archiveRename(archiveID: "url-2", newTitle: nil)
+        let data = try JSONEncoder().encode(original)
+        let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let payload = dict?["payload"] as? [String: Any]
+        // Encoder explicit sentinel ile nil intent'i taşır (decoder ayırt edebilsin).
+        XCTAssertEqual(payload?["renameClearsTitle"] as? Bool, true)
+        XCTAssertNil(payload?["renameNewTitle"])
+
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        guard case .archiveRename(_, let title) = decoded.payload else {
+            XCTFail("expected .archiveRename")
+            return
+        }
+        XCTAssertNil(title)
+    }
+
+    func testArchiveSetTagsWithListRoundTrip() throws {
+        let original = RemoteEnvelope.archiveSetTags(archiveID: "url-3", tags: ["work", "urgent"])
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.type, .archiveSetTags)
+        guard case .archiveSetTags(let id, let tags) = decoded.payload else {
+            XCTFail("expected .archiveSetTags")
+            return
+        }
+        XCTAssertEqual(id, "url-3")
+        XCTAssertEqual(tags, ["work", "urgent"])
+    }
+
+    func testArchiveSetTagsWithNilRoundTrip() throws {
+        let original = RemoteEnvelope.archiveSetTags(archiveID: "url-4", tags: nil)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        guard case .archiveSetTags(_, let tags) = decoded.payload else {
+            XCTFail("expected .archiveSetTags")
+            return
+        }
+        XCTAssertNil(tags)
+    }
+
+    func testMutationArchiveIDGetterForBothCases() {
+        XCTAssertEqual(
+            RemoteEnvelope.archiveRename(archiveID: "rid", newTitle: "x").payload?.mutationArchiveID,
+            "rid"
+        )
+        XCTAssertEqual(
+            RemoteEnvelope.archiveSetTags(archiveID: "tid", tags: ["a"]).payload?.mutationArchiveID,
+            "tid"
+        )
+        XCTAssertNil(RemoteEnvelope.ping().payload?.mutationArchiveID)
+        XCTAssertNil(
+            RemoteEnvelope.archiveLoadRequest(id: "x").payload?.mutationArchiveID
+        )
+    }
+
+    func testRenameNewTitleGetterPresentWhenSet() {
+        XCTAssertEqual(
+            RemoteEnvelope.archiveRename(archiveID: "x", newTitle: "Yeni").payload?.renameNewTitle,
+            "Yeni"
+        )
+        XCTAssertNil(RemoteEnvelope.archiveRename(archiveID: "x", newTitle: nil).payload?.renameNewTitle)
+        // Diğer case'lerde nil.
+        XCTAssertNil(RemoteEnvelope.archiveSetTags(archiveID: "x", tags: ["a"]).payload?.renameNewTitle)
+    }
+
+    func testEditedTagsGetterPresentWhenSet() {
+        XCTAssertEqual(
+            RemoteEnvelope.archiveSetTags(archiveID: "x", tags: ["a", "b"]).payload?.editedTags,
+            ["a", "b"]
+        )
+        XCTAssertNil(RemoteEnvelope.archiveSetTags(archiveID: "x", tags: nil).payload?.editedTags)
+        XCTAssertNil(RemoteEnvelope.archiveRename(archiveID: "x", newTitle: "y").payload?.editedTags)
+    }
 }

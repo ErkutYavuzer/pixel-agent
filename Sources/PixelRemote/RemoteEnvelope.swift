@@ -26,6 +26,12 @@ public enum EnvelopeType: String, Sendable, CaseIterable {
     case archiveLoadRequest
     /// **Sprint 5:** Mac → iOS, arşiv mesajları.
     case archiveLoadResponse
+    /// **Sprint 10 (v0.2.35):** iOS → Mac, bir arşivi yeniden adlandır.
+    /// `newTitle` nil → custom title kaldırılır (snippet fallback'e döner).
+    case archiveRename
+    /// **Sprint 10 (v0.2.35):** iOS → Mac, bir arşivin tag listesini ayarla.
+    /// `tags` nil veya boş → tüm tag'ler kaldırılır.
+    case archiveSetTags
     /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
     /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
     /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
@@ -194,6 +200,10 @@ public enum EnvelopePayload: Sendable, Equatable {
     case archiveListResponse(entries: [ArchiveEntryPayload])
     case archiveLoadRequest(archiveID: String)
     case archiveLoadResponse(messages: [Message])
+    /// Sprint 10 (v0.2.35): iOS → Mac mutation. `newTitle` nil → kaldır.
+    case archiveRename(archiveID: String, newTitle: String?)
+    /// Sprint 10 (v0.2.35): iOS → Mac mutation. `tags` nil → tüm tag'leri kaldır.
+    case archiveSetTags(archiveID: String, tags: [String]?)
 }
 
 // MARK: - Backward-compat field getters
@@ -321,6 +331,27 @@ extension EnvelopePayload {
         if case .archiveLoadResponse(let messages) = self { return messages }
         return nil
     }
+
+    /// Sprint 10: `archiveRename` / `archiveSetTags` ortak `archiveID` getter.
+    public var mutationArchiveID: String? {
+        switch self {
+        case .archiveRename(let id, _): return id
+        case .archiveSetTags(let id, _): return id
+        default: return nil
+        }
+    }
+
+    /// Sprint 10: `archiveRename` payload'unda yeni başlık (nil → sıfırla).
+    public var renameNewTitle: String? {
+        if case .archiveRename(_, let title) = self { return title }
+        return nil
+    }
+
+    /// Sprint 10: `archiveSetTags` payload'unda yeni tag listesi (nil → sıfırla).
+    public var editedTags: [String]? {
+        if case .archiveSetTags(_, let tags) = self { return tags }
+        return nil
+    }
 }
 
 // MARK: - Wire format (flat dict, eski formatla uyumlu)
@@ -338,6 +369,14 @@ private enum PayloadKey: String, CodingKey {
     case availableBackends, availableModels, activeSubagents, systemMetrics
     case toolCallEvent
     case archiveEntries, archiveLoadID, archiveMessages
+    // Sprint 10 (v0.2.35): iOS → Mac mutation envelope'ları.
+    case mutationArchiveID, renameNewTitle, editedTags
+    /// `renameNewTitle` nil olarak gönderilmek istendiğinde explicit sentinel
+    /// (decoder JSON `null`'ı opsiyonel field yokluğu olarak okuyamıyor;
+    /// "field var ama null" ile "field hiç yok" ayrımı encoder side'da
+    /// hep field encode edip null değer atayarak yapılmalı). Bu key true
+    /// → kullanıcı bilerek "title kaldır" diyor demektir.
+    case renameClearsTitle
 }
 
 extension EnvelopePayload {
@@ -422,6 +461,26 @@ extension EnvelopePayload {
             let messages = try c.decodeIfPresent([Message].self, forKey: .archiveMessages) ?? []
             return .archiveLoadResponse(messages: messages)
 
+        case .archiveRename:
+            let id = try c.decodeIfPresent(String.self, forKey: .mutationArchiveID) ?? ""
+            // `renameClearsTitle: true` → title kaldır (nil). Aksi halde
+            // `renameNewTitle` decode; field yoksa nil sayma → boş string olarak
+            // davran (ConversationStore.renameArchive whitespace-only'i de
+            // sıfırlama sayar — pratikte aynı sonuç).
+            let clears = try c.decodeIfPresent(Bool.self, forKey: .renameClearsTitle) ?? false
+            if clears {
+                return .archiveRename(archiveID: id, newTitle: nil)
+            }
+            let title = try c.decodeIfPresent(String.self, forKey: .renameNewTitle)
+            return .archiveRename(archiveID: id, newTitle: title)
+
+        case .archiveSetTags:
+            let id = try c.decodeIfPresent(String.self, forKey: .mutationArchiveID) ?? ""
+            // `editedTags` yoksa nil → tüm tag'leri kaldır anlamı; varsa
+            // (boş array dahil) explicit set.
+            let tags = try c.decodeIfPresent([String].self, forKey: .editedTags)
+            return .archiveSetTags(archiveID: id, tags: tags)
+
         case .ping, .ready, .archiveListRequest, .unknown:
             // Empty payload type'lar — nil dönmeli (RemoteEnvelope.payload = nil).
             return nil
@@ -490,6 +549,21 @@ extension EnvelopePayload {
 
         case .archiveLoadResponse(let messages):
             try c.encode(messages, forKey: .archiveMessages)
+
+        case .archiveRename(let id, let title):
+            try c.encode(id, forKey: .mutationArchiveID)
+            if let title {
+                try c.encode(title, forKey: .renameNewTitle)
+            } else {
+                // nil intent'ini wire'da explicit sentinel ile taşı.
+                try c.encode(true, forKey: .renameClearsTitle)
+            }
+
+        case .archiveSetTags(let id, let tags):
+            try c.encode(id, forKey: .mutationArchiveID)
+            // tags nil → field omit (decoder nil olarak okur → "kaldır")
+            // tags == [] → explicit boş array yine "kaldır" semantiği
+            try c.encodeIfPresent(tags, forKey: .editedTags)
         }
     }
 }
@@ -608,6 +682,24 @@ extension RemoteEnvelope {
 
     public static func archiveLoadResponse(messages: [Message]) -> RemoteEnvelope {
         RemoteEnvelope(type: .archiveLoadResponse, payload: .archiveLoadResponse(messages: messages))
+    }
+
+    /// Sprint 10 (v0.2.35): iOS → Mac. Bir arşivi yeniden adlandır.
+    /// `newTitle` nil → custom title kaldırılır (snippet fallback'e döner).
+    public static func archiveRename(archiveID: String, newTitle: String?) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .archiveRename,
+            payload: .archiveRename(archiveID: archiveID, newTitle: newTitle)
+        )
+    }
+
+    /// Sprint 10 (v0.2.35): iOS → Mac. Bir arşivin tag listesini ayarla.
+    /// `tags` nil veya boş → tüm tag'ler kaldırılır.
+    public static func archiveSetTags(archiveID: String, tags: [String]?) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .archiveSetTags,
+            payload: .archiveSetTags(archiveID: archiveID, tags: tags)
+        )
     }
 
     /// Handshake'in ilk envelope'u: gönderen tarafın public key'ini taşır.

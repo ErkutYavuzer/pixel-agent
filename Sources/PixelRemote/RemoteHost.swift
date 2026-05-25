@@ -20,6 +20,15 @@ public final class RemoteHost: ObservableObject {
     /// **Sprint 5:** iOS belirli bir arşivi yüklemek istediğinde çağrılır.
     /// Parametre: Mac URL string. Caller dosyayı okuyup Message listesi döner.
     public var onArchiveLoadRequested: ((_ id: String) async -> [Message])?
+    /// **Sprint 10 (v0.2.35):** iOS bir arşivi yeniden adlandırmak istediğinde
+    /// çağrılır. `newTitle` nil → custom title kaldırılır. Caller işlem
+    /// sonrası güncel arşiv listesini iOS'a otomatik göndermelidir
+    /// (`sendArchiveListResponse` çağırarak veya `onArchiveListRequested`
+    /// üzerinden taze listeyle).
+    public var onArchiveRenameRequested: ((_ id: String, _ newTitle: String?) async -> Void)?
+    /// **Sprint 10 (v0.2.35):** iOS bir arşivin tag listesini değiştirmek
+    /// istediğinde çağrılır. `tags` nil veya boş → tüm tag'ler kaldırılır.
+    public var onArchiveSetTagsRequested: ((_ id: String, _ tags: [String]?) async -> Void)?
 
     public var relayURL: String
 
@@ -334,6 +343,36 @@ public final class RemoteHost: ObservableObject {
                     guard let handler = await self.onArchiveLoadRequested else { return }
                     let messages = await handler(archiveID)
                     await self.sendArchiveLoadResponse(messages: messages)
+                }
+            }
+        case .archiveRename:
+            // Sprint 10 (v0.2.35): iOS rename dispatch'i.
+            if let id = envelope.payload?.mutationArchiveID, !id.isEmpty {
+                let newTitle = envelope.payload?.renameNewTitle
+                Task { [weak self] in
+                    guard let self else { return }
+                    guard let renameHandler = await self.onArchiveRenameRequested else { return }
+                    await renameHandler(id, newTitle)
+                    // Otomatik refresh: iOS güncel listeyi otomatik görsün.
+                    if let listHandler = await self.onArchiveListRequested {
+                        let entries = await listHandler()
+                        await self.sendArchiveListResponse(entries: entries)
+                    }
+                }
+            }
+        case .archiveSetTags:
+            // Sprint 10 (v0.2.35): iOS tag dispatch'i.
+            if let id = envelope.payload?.mutationArchiveID, !id.isEmpty {
+                let tags = envelope.payload?.editedTags
+                Task { [weak self] in
+                    guard let self else { return }
+                    guard let tagsHandler = await self.onArchiveSetTagsRequested else { return }
+                    await tagsHandler(id, tags)
+                    // Otomatik refresh.
+                    if let listHandler = await self.onArchiveListRequested {
+                        let entries = await listHandler()
+                        await self.sendArchiveListResponse(entries: entries)
+                    }
                 }
             }
         default:

@@ -666,6 +666,26 @@ struct ChatHost: View {
                 return messages
             }
 
+            // Sprint 10 (v0.2.35): iOS rename/tag dispatch handler'ları.
+            // ConversationStore.renameArchive/setTags static nonisolated — view
+            // instance'ı olmadan çağırılabilir. Otomatik refresh
+            // RemoteHost.handle içinde, archiveListRequested ile yapılır.
+            remoteHost.onArchiveRenameRequested = { idString, newTitle in
+                guard let url = URL(string: idString) else { return }
+                try? ConversationStore.renameArchive(at: url, title: newTitle)
+            }
+            remoteHost.onArchiveSetTagsRequested = { idString, tags in
+                guard let url = URL(string: idString) else { return }
+                // Defense in depth: iOS gönderse de Mac normalize eder
+                // (trim+lowercase+dedup+sorted+30 char max). Mac UI ile
+                // tutarlı sonuç garantiler.
+                let normalized = tags.map { TagNormalizer.normalize($0) }
+                try? ConversationStore.setTags(
+                    (normalized?.isEmpty ?? true) ? nil : normalized,
+                    for: url
+                )
+            }
+
             remoteHost.onClientConfigReceived = { backend, model, plan in
                 guard let kind = CLIKind(rawValue: backend) else { return }
                 let oldBackend = self.selectedKind.rawValue

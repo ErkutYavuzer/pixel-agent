@@ -159,23 +159,47 @@ struct ConversationHistoryViewIOS: View {
 /// Seçilen arşivin mesajlarını gösterir — Mac'ten yükle, read-only render.
 /// **Sprint 6:** Üstte "Bu sohbete Mac'te devam et" butonu — Mac'te aktif
 /// backend'e arşivi yükler (mevcut sohbet arşivlenir).
+/// **Sprint 10:** Toolbar'da "Düzenle" — rename + tag düzenleme sheet'i.
 private struct ArchiveDetailView: View {
     @EnvironmentObject var session: RemoteSession
     @Environment(\.dismiss) private var dismiss
     let entry: ArchiveEntryPayload
     @State private var didRequestLoad: Bool = false
+    @State private var showEditSheet: Bool = false
+
+    /// `session.archiveEntries`'in güncel halinden bu entry'nin (id eşleşmesi
+    /// üzerinden) son hali — Mac değişikliği sonrası listeyi otomatik
+    /// günceller, biz buradan en güncel customTitle/tags'i alırız.
+    private var liveEntry: ArchiveEntryPayload {
+        session.archiveEntries.first(where: { $0.id == entry.id }) ?? entry
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             loadActionBar
-            if let tags = entry.tags, !tags.isEmpty {
+            if let tags = liveEntry.tags, !tags.isEmpty {
                 tagChipRow(tags: tags)
             }
             Divider()
             content
         }
-        .navigationTitle(IOSArchiveTitleResolver.displayTitle(for: entry))
+        .navigationTitle(IOSArchiveTitleResolver.displayTitle(for: liveEntry))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showEditSheet = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .disabled(!session.isConnected)
+                .help(session.isConnected ? "Başlık + etiket düzenle" : "Mac bağlı değil")
+            }
+        }
+        .sheet(isPresented: $showEditSheet) {
+            EditArchiveSheet(entry: liveEntry)
+                .environmentObject(session)
+        }
         .task {
             await session.requestArchive(id: entry.id)
         }

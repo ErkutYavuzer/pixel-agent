@@ -269,6 +269,38 @@ final class RemoteSession: ObservableObject {
         }
     }
 
+    /// **Sprint 10 (v0.2.35):** iOS → Mac. Bir arşivi yeniden adlandır.
+    /// `newTitle` nil veya whitespace-only → custom title kaldırılır
+    /// (Mac side `ConversationStore.renameArchive` whitespace-only'i
+    /// kaldırma olarak yorumlar). Mac handler işlem sonrası otomatik
+    /// `archiveListResponse` döner — `archiveEntries` güncel görünür.
+    func renameArchive(id: String, newTitle: String?) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.archiveRename(archiveID: id, newTitle: newTitle)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Yeniden adlandırma gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
+    /// **Sprint 10 (v0.2.35):** iOS → Mac. Bir arşivin tag listesini ayarla.
+    /// `tags` nil veya boş → tüm tag'ler kaldırılır. Caller normalize
+    /// edilmiş liste göndermeli (TagNormalizer karşılığı iOS'ta yok —
+    /// Mac side ek normalize uygulamıyor, iOS girdi disiplinli olmalı).
+    /// Mac handler işlem sonrası otomatik `archiveListResponse` döner.
+    func setArchiveTags(id: String, tags: [String]?) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.archiveSetTags(archiveID: id, tags: tags)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Etiket güncellenmesi gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     func disconnect(forget: Bool = true) async {
         reconnectTask?.cancel()
         reconnectTask = nil
