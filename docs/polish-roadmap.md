@@ -140,7 +140,20 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 | ✅ | B kategorisi | MCP setup wizard (auto config edit) |
 | ✅ | B2 power | Conversation rename (sidecar, contextMenu, sheet) |
 
-**25 May 2026: Sprint 6 tamamlandı — Persistence + Polish paketi.** 4 commit (69bb2f6, a976c20, b0a0482, ve bu release commit'i). Test: 698 → 718 (+20). Sprint 6 "tag/etiketleme" ayağı kasıtlı v0.3'e ertelendi (rename scope odağı korundu). Apple Developer ID + notarization + demo GIF kullanıcı aksiyonu olarak Sprint 6 dışında bekliyor.
+**25 May 2026: Sprint 6 tamamlandı — Persistence + Polish paketi.** 4 commit (69bb2f6, a976c20, b0a0482, ve v0.2.31 release commit'i). Test: 698 → 718 (+20). Sprint 6 "tag/etiketleme" ayağı Sprint 7'ye taşındı (rename scope odağı korundu).
+
+## Sprint 7 — "Conversation tag" (v0.2.32)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | B2 power | ArchiveTagsStore sidecar (`tags.json` flat dict) |
+| ✅ | B2 power | TagNormalizer + TagFilter saf helper'lar |
+| ✅ | B2 power | EditTagsSheet (chip'ler + TextField + Enter Add) |
+| ✅ | B2 power | Sidebar filter chip bar (multi-select OR/union) |
+| ✅ | B2 power | Row inline tag preview (`#x #y #z +N`) + contextMenu |
+| ✅ | wire | `ArchiveEntryPayload.tags` opsiyonel (iOS read-only) |
+
+**25 May 2026: Sprint 7 tamamlandı — Conversation tag.** v0.2.31'in (rename) eşi: 27 yeni test (+8 ArchiveTagsStore + 9 TagNormalizer + 6 TagFilter + 4 ConversationStore). Test: 718 → 745. iOS UI'da tag görünümü v0.2.33'e ertelendi (şu an wire-only data layer). Apple Developer ID + notarization + demo GIF hâlâ kullanıcı aksiyonu olarak bekliyor.
 
 ## Demo Senaryosu (Sprint 1 sonrası)
 

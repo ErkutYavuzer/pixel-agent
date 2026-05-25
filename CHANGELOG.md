@@ -10,7 +10,80 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): `EnvelopePayload` sum-type refactor (20+ opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- Sprint 6 kalan: Conversation **tag** ayağı (rename v0.2.31'de iniş yaptı, tag/etiketleme v0.3'e ertelendi); Apple Developer ID + notarization (kullanıcı aksiyonu); demo GIF recording (kullanıcı aksiyonu).
+- v0.2.32 follow-up: iOS UI'da tag görünümü (şu an wire-only; iOS read-only chip listing eklenebilir); A items polish (scroll spring/asymmetric bubble/reconnect countdown).
+- Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.32] — 2026-05-25
+
+**Sprint 7 "Conversation tag" — rename'in eşi.** Sprint 6 (v0.2.31) iniş yapan conversation rename feature'ının doğal devamı: her arşive 0+ etiket eklenebilir, sidebar header'ında filter chip'leri (multi-select OR/union), row'da inline tag preview. Sidecar persistence (`archive/tags.json`), saf helper'lar (TagNormalizer/TagFilter) testable. iOS wire field eklendi (read-only, additive). **745 test yeşil** (+27 bu release'te). Breaking change yok.
+
+### Added — Sprint 7 / B2 Conversation Tag
+
+#### Sidecar persistence (`Sources/PixelMemory/`)
+- `ArchiveTagsStore.swift` (yeni, saf enum, public): `ArchiveTitleStore`
+  paterniyle aynı — `archive/tags.json` flat dict `[filename: [tag, ...]]`.
+  * `load(directory:)` — sidecar yoksa/bozuksa `[:]`.
+  * `save(_:directory:)` — atomic write, pretty + sortedKeys.
+  * `setTags(_:for:directory:)` — boş veya nil → key kaldırılır.
+  * `allTags(directory:)` — tüm entry'lerin tag union'u sorted (sidebar filter
+    chip'leri için).
+- `ArchivedConversation.swift`: `ArchivedConversationEntry.tags: [String]`
+  yeni field; init default `[]` (additive, backward-compat).
+- `ConversationStore.swift`:
+  * `setTags(_:for:)` actor method.
+  * `setTags(_:for:directory:)` nonisolated static overload.
+  * `listAllTags(directory:)` nonisolated static.
+  * `listAllArchives` tags sidecar'ını da bir kere yükler, entry'ye
+    `tags: tagsByFile[filename] ?? []` enjekte eder.
+
+#### Saf helper'lar (`Sources/PixelMacApp/`)
+- `TagNormalizer.swift` (yeni, saf, public): trim + lowercase + max 30 char +
+  empty-reject. Liste için: dedup + sorted. Türkçe karakter desteği
+  (Foundation `lowercased()` locale-independent).
+- `TagFilter.swift` (yeni, saf, public): `apply(entries:activeTags:)`. Boş
+  set → tüm entry'ler döner. Çoklu tag → **OR / union** (`!isDisjoint`).
+
+#### UI (`Sources/PixelMacApp/`)
+- `EditTagsSheet.swift` (yeni, view): mevcut tag chip'leri (X butonu remove) +
+  yeni tag TextField (Enter Add, `TagNormalizer` invalid girdi reject) +
+  Kapat. `LazyVGrid(adaptive: 90pt)` chip layout. Capsule mor 0.18 alpha.
+- `ConversationHistoryView.swift`:
+  * **Sidebar filter chip bar:** `availableTags` varsa sidebar üstünde
+    `ScrollView(.horizontal)` chip listesi. Aktif olan dolu mor capsule
+    (beyaz text), pasif olan açık mor capsule (primary text). "Temizle"
+    butonu en sağda.
+  * **Filtered entries:** `TagFilter.apply` ile `entries` üzerine uygulanır,
+    `groupedByKind` artık `filteredEntries` kullanır.
+  * **Filtered empty state:** Filter yüzünden boş ise `tag.slash` ikon +
+    "Filtreyle eşleşen konuşma yok" + "Filtreyi temizle" buton.
+  * **Row tag preview:** `tagInlineSummary` — ilk 3 tag `#x #y #z` + fazlası
+    `+N`. Mor 0.85 alpha caption2, lineLimit(1).
+  * **Context menu:** "Etiketleri düzenle…" + (tags varsa) "Tüm etiketleri
+    sıfırla" destructive. Rename grubuyla Divider ile ayrık.
+  * **State:** `editTagsTarget` + `editTagsDraft` + `activeTagFilter: Set` +
+    `availableTags: [String]`. `.sheet(item: editTagsTarget)` EditTagsSheet
+    açar; Kapat → `applyTags(...)` → `ConversationStore.setTags(normalized)`
+    + reload. `reload()` `availableTags`'i de günceller, ölü filter'ları temizler.
+
+#### Wire (`Sources/PixelRemote/RemoteEnvelope.swift`)
+- `ArchiveEntryPayload.tags: [String]?` opsiyonel field — eski iOS client'lar
+  Codable additive olduğu için sorunsuz decode eder. Mac handler boş `tags`
+  arrayini nil olarak gönderir (wire'da gereksiz `"tags": []` yok).
+- Mac archive list handler (`PixelMacApp.swift`):
+  `tags: entry.tags.isEmpty ? nil : entry.tags`.
+
+### Tests (+27)
+- `Tests/PixelMemoryTests/ArchiveTagsStoreTests.swift` (yeni, 8 test):
+  empty/corrupt graceful, round-trip, setTags add/nil/empty remove, allTags
+  union sorted, empty when no sidecar.
+- `Tests/PixelMacAppTests/TagNormalizerTests.swift` (yeni, 9 test):
+  trim+lowercase Türkçe karakter, empty reject, max length truncate +
+  boundary, list sanitize+dedup+sort, drop-all-empty, empty array passthrough.
+- `Tests/PixelMacAppTests/TagFilterTests.swift` (yeni, 6 test): empty
+  active → all, single tag, multiple tags OR union, untagged excluded when
+  filter active, preserves order, no-match empty.
+- `Tests/PixelMemoryTests/ConversationStoreTests.swift` (4 yeni test):
+  setTags actor + static + nil/empty clears + listAllTags union.
 
 ## [0.2.31] — 2026-05-25
 
