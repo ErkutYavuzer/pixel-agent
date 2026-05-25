@@ -135,6 +135,9 @@ public enum ScreenshotCapture {
     ///   (deduplication yok — SoMRenderer scoring CGRect overlap'le iş
     ///   görür, duplicate region'lar score'u şişirmez çünkü `min` arama
     ///   yapılır, tüm adayların score'u eşit oranda etkilenir).
+    ///
+    /// **Faz 5c follow-up (v0.2.53):** `.perElement` artık `ParallelCropDetection.detect`
+    /// ile paralel — N task konkurrent çalışır, wall-clock max(per-element).
     private static func collectTextRegions(
         for elements: [UIElement],
         in image: CGImage,
@@ -148,10 +151,10 @@ public enum ScreenshotCapture {
         case .perElement:
             let pixelSize = CGSize(width: Double(image.width), height: Double(image.height))
             let badgeSize = CGFloat(options.badgeSize)
-            var union: [CGRect] = []
+
+            // 1. Crop rect listesi — saf, hızlı (sync CGRect math).
+            var cropRects: [CGRect] = []
             for element in elements {
-                // MarkLayout ile element image içindeki konumunu hesapla
-                // (SoMRenderer'ın yaptığı dönüşümün aynısı).
                 guard let elementRectInImage = MarkLayout.computeMarkRect(
                     elementFrame: element.frame.cgRect,
                     imageScreenOrigin: imageScreenOrigin,
@@ -163,10 +166,15 @@ public enum ScreenshotCapture {
                     badgeSize: badgeSize,
                     imagePixelSize: pixelSize
                 ) else { continue }
-                let regions = await OCRTextDetector.detectTextRegions(in: image, cropRect: cropRect)
-                union.append(contentsOf: regions)
+                cropRects.append(cropRect)
             }
-            return union
+
+            // 2. Paralel Vision pass'leri — withTaskGroup.
+            // CGImage CFType (effectively Sendable for read-only ops);
+            // closure'a strong capture.
+            return await ParallelCropDetection.detect(cropRects: cropRects) { rect in
+                await OCRTextDetector.detectTextRegions(in: image, cropRect: rect)
+            }
         }
     }
 
