@@ -545,7 +545,7 @@ public enum BuiltInTools {
                 ]),
                 "som_options": .object([
                     "type": .string("object"),
-                    "description": .string("Faz 5 (v0.2.38): SoM renderer override — palette, outline_width, badge_size, font_size, text_color, badge_placement. Boş bırakırsan default değerler (geri uyumlu eski davranış). badge_placement: 'top_left_inside' (default) | 'top_left_outside' | 'top_right_inside' | 'top_right_outside' | 'smart_corner'."),
+                    "description": .string("Faz 5 (v0.2.38) + 5b (v0.2.45): SoM renderer override — palette, outline_width, badge_size, font_size, text_color, badge_placement. Boş bırakırsan default değerler (geri uyumlu eski davranış). badge_placement: 'top_left_inside' (default) | 'top_left_outside' | 'top_right_inside' | 'top_right_outside' | 'smart_corner' | 'label_aware' (AX role bazlı: button → topRightOutside, link → topRightInside, vs. — content kapanmama optimization)."),
                 ]),
             ]),
         ]),

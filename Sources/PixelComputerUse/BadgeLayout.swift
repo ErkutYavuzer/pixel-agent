@@ -86,8 +86,9 @@ public enum BadgeLayout {
                 origin: CGPoint(x: elementRect.maxX - badgeSize / 2, y: elementRect.minY - badgeSize / 2),
                 size: size
             )
-        case .smartCorner:
-            // resolveStrategy concrete bir case'e çevirir; bu satıra düşmemeli.
+        case .smartCorner, .labelAware:
+            // resolveStrategy / LabelAwarePlacementResolver concrete bir case'e
+            // çevirir; bu satıra düşmemeli. Defensive: topLeftInside fallback.
             return CGRect(origin: CGPoint(x: elementRect.minX, y: elementRect.minY), size: size)
         }
     }

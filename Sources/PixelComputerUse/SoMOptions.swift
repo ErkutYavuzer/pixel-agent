@@ -97,4 +97,10 @@ public enum BadgePlacement: String, Sendable, Equatable, Codable {
     /// yakın değilse `.topLeftOutside` tercih — content kapanmasın; aksi
     /// halde içeri kayar).
     case smartCorner
+    /// **Faz 5b (v0.2.45):** AX element role'üne göre içerik-aware konum.
+    /// Button text merkezde → köşe; link text sol kenar → sağ-üst; checkbox
+    /// simgesi sol + label sağ → sağ-üst dış. `LabelAwarePlacementResolver`
+    /// her element için role'den concrete placement türetir; sonra image
+    /// bounds clamping mevcut pattern.
+    case labelAware
 }

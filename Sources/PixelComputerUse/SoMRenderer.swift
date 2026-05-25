@@ -124,13 +124,18 @@ enum SoMRenderer {
 
             // **Faz 5 (v0.2.38):** Badge konumu BadgeLayout helper'ından —
             // content-aware placement (.smartCorner image kenarına göre seçer).
-            // Clamping/bounds dışı kontrolü helper içinde; nil dönerse skip
-            // (defansif — MarkLayout zaten görünür element'leri filtreliyor).
+            // **Faz 5b (v0.2.45):** `.labelAware` ise AX role'üne göre concrete
+            // placement türetilir (button → topRightOutside, link → topRightInside,
+            // vs.). BadgeLayout saf math helper kaldığı için role lookup'ı
+            // burada yapılır.
+            let resolvedPlacement: BadgePlacement = (options.badgePlacement == .labelAware)
+                ? LabelAwarePlacementResolver.placement(for: mark.element.role)
+                : options.badgePlacement
             guard let badgeRect = BadgeLayout.computeBadgeRect(
                 elementRect: rect,
                 badgeSize: badgeSize,
                 imagePixelSize: pixelSize,
-                placement: options.badgePlacement
+                placement: resolvedPlacement
             ) else { continue }
             context.setFillColor(color)
             context.fillEllipse(in: badgeRect)
