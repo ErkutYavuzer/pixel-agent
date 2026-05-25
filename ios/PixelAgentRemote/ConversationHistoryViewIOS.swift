@@ -84,9 +84,17 @@ struct ConversationHistoryViewIOS: View {
     @ViewBuilder
     private func row(for entry: ArchiveEntryPayload) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(entry.firstUserSnippet ?? "(başlıksız)")
-                .font(.subheadline)
-                .lineLimit(2)
+            HStack(spacing: 4) {
+                Text(IOSArchiveTitleResolver.displayTitle(for: entry))
+                    .font(.subheadline)
+                    .lineLimit(2)
+                // Sprint 9 (v0.2.34): rename rozet — Mac'le paralel.
+                if entry.customTitle != nil {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.purple.opacity(0.7))
+                }
+            }
             HStack(spacing: 6) {
                 Text(formattedDate(epoch: entry.archivedAt))
                 Text("·")
@@ -94,6 +102,14 @@ struct ConversationHistoryViewIOS: View {
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
+            // Sprint 9 (v0.2.34): tag inline preview (varsa) — Mac'le paralel.
+            let tagSummary = IOSArchiveTitleResolver.tagInlineSummary(entry.tags)
+            if !tagSummary.isEmpty {
+                Text(tagSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.purple.opacity(0.85))
+                    .lineLimit(1)
+            }
         }
         .padding(.vertical, 2)
     }
@@ -152,14 +168,37 @@ private struct ArchiveDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             loadActionBar
+            if let tags = entry.tags, !tags.isEmpty {
+                tagChipRow(tags: tags)
+            }
             Divider()
             content
         }
-        .navigationTitle("Sohbet")
+        .navigationTitle(IOSArchiveTitleResolver.displayTitle(for: entry))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await session.requestArchive(id: entry.id)
         }
+    }
+
+    /// Sprint 9 (v0.2.34): Detail screen üstünde tag chip listesi — readonly
+    /// görselleştirme (iOS'tan rename/tag düzenlemesi v0.2.35+ adayı).
+    @ViewBuilder
+    private func tagChipRow(tags: [String]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(tags, id: \.self) { tag in
+                    Text("#\(tag)")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.purple.opacity(0.18), in: Capsule())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
+        .background(Color(.secondarySystemGroupedBackground))
     }
 
     private var loadActionBar: some View {
