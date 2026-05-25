@@ -36,11 +36,51 @@ public actor MultiTurnSubagentRunner {
 
     /// N turn sequential çalıştır + her turn için kısmi sonuç döner.
     /// İlk turn'ün cevabı history'ye eklenir, ikinci turn full history ile
-    /// gönderilir, vb.
+    /// gönderilir, vb. Backwards-compatible API — sadece final result.
     public func runConversation(
         turns: [String],
         system: String? = nil,
         options: ChatOptions = ChatOptions()
+    ) async -> MultiTurnSubagentResult {
+        await runConversationInternal(
+            turns: turns, system: system, options: options, onEvent: nil
+        )
+    }
+
+    /// **Faz 6 (v0.2.43):** Streaming API — caller per-turn chunk + turn
+    /// boundary event'leri alır, terminal `.allFinished` event'inde
+    /// `MultiTurnSubagentResult` gömülü olarak gelir. Stream her zaman
+    /// tam olarak bir `.allFinished` event ile biter.
+    ///
+    /// `nonisolated` — caller actor await'i olmadan stream döndürür; gerçek
+    /// iş içeride Task spawn edip `runConversationInternal`'ı çağırır.
+    public nonisolated func runConversationStreaming(
+        turns: [String],
+        system: String? = nil,
+        options: ChatOptions = ChatOptions()
+    ) -> AsyncStream<MultiTurnSubagentEvent> {
+        AsyncStream(MultiTurnSubagentEvent.self) { continuation in
+            let task = Task {
+                let result = await self.runConversationInternal(
+                    turns: turns,
+                    system: system,
+                    options: options,
+                    onEvent: { event in continuation.yield(event) }
+                )
+                continuation.yield(.allFinished(result))
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Hem `runConversation` hem `runConversationStreaming` için ortak.
+    /// `onEvent` nil ise event yayını yapılmaz (geri uyumlu).
+    private func runConversationInternal(
+        turns: [String],
+        system: String?,
+        options: ChatOptions,
+        onEvent: (@Sendable (MultiTurnSubagentEvent) -> Void)?
     ) async -> MultiTurnSubagentResult {
         let start = Date()
         var history: [Message] = []
@@ -69,6 +109,8 @@ public actor MultiTurnSubagentRunner {
                     )
                 }
 
+                onEvent?(.turnStarted(index: index, prompt: prompt))
+
                 let userMessage = Message(role: .user, text: prompt)
                 history.append(userMessage)
 
@@ -79,12 +121,17 @@ public actor MultiTurnSubagentRunner {
                     system: system,
                     options: options,
                     budget: budget,
-                    deadline: turnStart.addingTimeInterval(remaining)
+                    deadline: turnStart.addingTimeInterval(remaining),
+                    onChunk: { chunk in
+                        onEvent?(.chunk(turnIndex: index, chunk: chunk))
+                    }
                 )
 
                 let assistant = Message(role: .assistant, text: turnResult.output)
                 history.append(assistant)
                 turnResults.append(turnResult)
+
+                onEvent?(.turnFinished(index: index, result: turnResult))
 
                 // Turn budget exceeded veya failed → kalanları atla.
                 switch turnResult.outcome {
@@ -122,13 +169,16 @@ public actor MultiTurnSubagentRunner {
 
     /// Static — Swift 6 strict concurrency uyumu (actor self closure'a
     /// taşımaz). Caller actor'dan elindeki referansları geçer.
+    /// `onChunk` nil ise chunk'lar sadece OutputBuffer'a yazılır; dolu
+    /// ise her chunk için event yayını yapılır (streaming path).
     private static func runSingleTurn(
         backend: any ChatBackend,
         history: [Message],
         system: String?,
         options: ChatOptions,
         budget: Budget,
-        deadline: Date
+        deadline: Date,
+        onChunk: (@Sendable (String) -> Void)? = nil
     ) async -> TurnResult {
         let start = Date()
         let outputBuffer = TurnOutputBuffer()
@@ -145,6 +195,7 @@ public actor MultiTurnSubagentRunner {
                         switch delta {
                         case .textChunk(let chunk):
                             await outputBuffer.append(chunk)
+                            onChunk?(chunk)
                             if let maxBytes = budget.maxOutputBytes,
                                await outputBuffer.byteCount() > maxBytes {
                                 let snap = await outputBuffer.snapshot()
@@ -200,6 +251,22 @@ public actor MultiTurnSubagentRunner {
             return first
         }
     }
+}
+
+/// **Faz 6 (v0.2.43):** Multi-turn streaming sırasında dış dünyaya yayınlanan
+/// olaylar. `runConversationStreaming` AsyncStream'inde sırasıyla yayınlanır:
+/// 1. `.turnStarted(index:prompt:)` — yeni turn başladı (history'ye user
+///    eklendi, backend.send hazırlığı).
+/// 2. Sıfır veya daha fazla `.chunk(turnIndex:chunk:)` — backend'den gelen
+///    partial output.
+/// 3. `.turnFinished(index:result:)` — turn tamamlandı (her outcome dahil).
+/// 4. Tek bir terminal `.allFinished(MultiTurnSubagentResult)` — tüm
+///    konuşma bitti (completedAllTurns veya 3 erken çıkış vakasından biri).
+public enum MultiTurnSubagentEvent: Sendable, Equatable {
+    case turnStarted(index: Int, prompt: String)
+    case chunk(turnIndex: Int, chunk: String)
+    case turnFinished(index: Int, result: TurnResult)
+    case allFinished(MultiTurnSubagentResult)
 }
 
 /// Per-turn output biriktirici — worker ve watchdog Sendable-friendly paylaşır.

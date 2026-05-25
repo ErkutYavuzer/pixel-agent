@@ -27,6 +27,14 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
     /// One-shot dispatch'te nil. UI detail sheet bunu görünce per-turn
     /// expanded list render eder; nil ise tek output bloğu (eski davranış).
     var multiTurnTurns: [TurnResult]?
+    /// **Faz 6 (v0.2.43):** Multi-turn streaming sırasında şu an çalışan
+    /// turn'ün index'i (0-based). nil → aktif turn yok (henüz başlamadı
+    /// veya tüm turn'ler bitti). UI detail sheet aktif turn için live
+    /// "in-progress" kart render eder.
+    var activeTurnIndex: Int?
+    /// **Faz 6 (v0.2.43):** Aktif turn'ün biriken chunk'ları (live partial
+    /// output). Turn bittiğinde temizlenir, ilgili TurnResult'a kaydedilir.
+    var activeTurnPartial: String
 
     init(
         id: SubagentID = SubagentID(),
@@ -38,7 +46,9 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
         finishedAt: Date? = nil,
         result: SubagentResult? = nil,
         partialOutput: String = "",
-        multiTurnTurns: [TurnResult]? = nil
+        multiTurnTurns: [TurnResult]? = nil,
+        activeTurnIndex: Int? = nil,
+        activeTurnPartial: String = ""
     ) {
         self.id = id
         self.prompt = prompt
@@ -50,6 +60,8 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
         self.result = result
         self.partialOutput = partialOutput
         self.multiTurnTurns = multiTurnTurns
+        self.activeTurnIndex = activeTurnIndex
+        self.activeTurnPartial = activeTurnPartial
     }
 
     /// Prompt'un kart üzerinde gösterilecek kısaltılmış hali (40 karakter).

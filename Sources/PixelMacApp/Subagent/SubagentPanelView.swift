@@ -62,7 +62,8 @@ struct SubagentPanelView: View {
             .frame(height: 72)
             .sheet(item: $selectedSession) { session in
                 SubagentDetailSheet(
-                    session: session,
+                    initialSession: session,
+                    manager: manager,
                     onRemove: {
                         manager.dismiss(session.id)
                         selectedSession = nil
@@ -205,10 +206,22 @@ struct SubagentCardView: View {
 // MARK: - Detail sheet
 
 struct SubagentDetailSheet: View {
-    let session: SubagentSession
+    /// Sheet açıldığında snapshot — re-render olmasa bile fallback.
+    let initialSession: SubagentSession
+    /// **Faz 6 (v0.2.43):** Manager observed → multi-turn streaming sırasında
+    /// `session.activeTurnPartial` live update. Sheet açıkken her chunk
+    /// re-render eder.
+    @ObservedObject var manager: SubagentManager
     let onRemove: () -> Void
 
     @Environment(\.dismiss) private var dismissEnv
+
+    /// Fresh session lookup — manager.sessions değişince re-evaluate.
+    /// Session dismiss edilmişse initial snapshot'a düş (sheet sunum
+    /// boyunca tutarlı görünüm).
+    private var session: SubagentSession {
+        manager.sessions.first(where: { $0.id == initialSession.id }) ?? initialSession
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -232,14 +245,18 @@ struct SubagentDetailSheet: View {
                 .frame(minHeight: 60, maxHeight: 120)
             }
 
-            // Faz 5 (v0.2.41): Multi-turn dispatch ise per-turn expand list,
-            // aksi halde tek output bloğu (eski davranış).
-            if let turns = session.multiTurnTurns, !turns.isEmpty {
-                GroupBox("Turn List (\(turns.count))") {
+            // Faz 5 (v0.2.41): Multi-turn dispatch ise per-turn expand list.
+            // Faz 6 (v0.2.43): Aktif turn varsa list'in sonunda live in-progress card.
+            // Aksi halde tek output bloğu (eski davranış).
+            if let turns = session.multiTurnTurns, !turns.isEmpty || session.activeTurnIndex != nil {
+                GroupBox(turnListLabel) {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
                             ForEach(Array(turns.enumerated()), id: \.offset) { idx, turn in
                                 turnRow(index: idx + 1, turn: turn)
+                            }
+                            if let activeIdx = session.activeTurnIndex {
+                                activeTurnRow(index: activeIdx + 1, partial: session.activeTurnPartial)
                             }
                         }
                         .padding(.vertical, 4)
@@ -333,5 +350,47 @@ struct SubagentDetailSheet: View {
         case .cancelled: return .gray
         case .failed: return .red
         }
+    }
+
+    /// Faz 6 (v0.2.43): Aktif turn için live in-progress kart.
+    /// Tamamlanan turn'lerden görsel olarak ayrı: mavi dashed border, spinner,
+    /// monospaced live partial output.
+    @ViewBuilder
+    private func activeTurnRow(index: Int, partial: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Turn \(index)")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.blue.opacity(0.18), in: Capsule())
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text("Çalışıyor")
+                        .font(.caption2.bold())
+                }
+                .foregroundStyle(.blue)
+                Spacer()
+            }
+            Text(partial.isEmpty ? "(akış bekleniyor…)" : partial)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(Color.blue.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.blue.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                )
+        }
+    }
+
+    /// "Turn List (3)" veya "Turn List (2/3)" — aktif turn varsa progress göster.
+    private var turnListLabel: String {
+        let completed = session.multiTurnTurns?.count ?? 0
+        if session.activeTurnIndex != nil {
+            return "Turn List (\(completed)/\(completed + 1) — çalışıyor)"
+        }
+        return "Turn List (\(completed))"
     }
 }

@@ -163,8 +163,43 @@ final class SubagentManager: ObservableObject {
         let runner = MultiTurnSubagentRunner(backend: backend, budget: budget, id: id)
         runners[id] = Task { [weak self] in
             await MainActor.run { self?.updateStatus(id: id, to: .running) }
-            let result = await runner.runConversation(turns: turns)
-            await MainActor.run { self?.finalizeMultiTurn(id: id, result: result) }
+
+            // Faz 6 (v0.2.43): Streaming consume — her event MainActor'da
+            // session state'ini günceller; UI live render eder.
+            var didFinalize = false
+            for await event in runner.runConversationStreaming(turns: turns) {
+                switch event {
+                case .turnStarted(let index, _):
+                    await MainActor.run { self?.beginTurn(id: id, turnIndex: index) }
+                case .chunk(let turnIndex, let chunk):
+                    await MainActor.run { self?.appendTurnChunk(id: id, turnIndex: turnIndex, chunk: chunk) }
+                case .turnFinished(let index, let result):
+                    await MainActor.run { self?.completeTurn(id: id, turnIndex: index, result: result) }
+                case .allFinished(let result):
+                    didFinalize = true
+                    await MainActor.run { self?.finalizeMultiTurn(id: id, result: result) }
+                }
+            }
+
+            // Defensive: stream cancel olursa .allFinished gelmemiş olabilir.
+            if !didFinalize {
+                let partialTurns = await MainActor.run {
+                    self?.sessions.first(where: { $0.id == id })?.multiTurnTurns ?? []
+                }
+                let elapsed = await MainActor.run {
+                    self?.sessions.first(where: { $0.id == id })?.elapsedSeconds() ?? 0
+                }
+                await MainActor.run {
+                    self?.finalizeMultiTurn(
+                        id: id,
+                        result: .cancelledAt(
+                            turnIndex: partialTurns.count,
+                            completedTurns: partialTurns,
+                            totalDurationSeconds: elapsed
+                        )
+                    )
+                }
+            }
         }
 
         let result = await withCheckedContinuation {
@@ -267,6 +302,33 @@ final class SubagentManager: ObservableObject {
         if let session = finalizedSession {
             onSessionCompleted?(session)
         }
+    }
+
+    /// **Faz 6 (v0.2.43):** Streaming event handler'ları — turn boundary +
+    /// per-turn chunk akışı. UI live render için session state'i her event'te
+    /// günceller.
+    private func beginTurn(id: SubagentID, turnIndex: Int) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[idx].activeTurnIndex = turnIndex
+        sessions[idx].activeTurnPartial = ""
+    }
+
+    private func appendTurnChunk(id: SubagentID, turnIndex: Int, chunk: String) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        // Defensive: chunk geldiği turn aktif değilse skip (race koruma).
+        guard sessions[idx].activeTurnIndex == turnIndex else { return }
+        sessions[idx].activeTurnPartial += chunk
+    }
+
+    private func completeTurn(id: SubagentID, turnIndex: Int, result: TurnResult) {
+        guard let idx = sessions.firstIndex(where: { $0.id == id }) else { return }
+        var turns = sessions[idx].multiTurnTurns ?? []
+        // Index sanity — turns.count == turnIndex bekleniyor (sequential).
+        // Olmazsa append yine yapılır (defansif).
+        turns.append(result)
+        sessions[idx].multiTurnTurns = turns
+        sessions[idx].activeTurnIndex = nil
+        sessions[idx].activeTurnPartial = ""
     }
 
     /// **Faz 5 (v0.2.41):** Multi-turn dispatch terminal state finalize.
