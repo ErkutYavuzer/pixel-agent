@@ -319,9 +319,22 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 | ✅ | saf helper | AdaptiveRateController.nextInterval (slow lane 1.5x, fast lane 0.8x, hysteresis) |
 | ✅ | coordinator | baseIntervalMs (kullanıcı taban) + currentIntervalMs (dinamik) + lastSendLatencyMs |
 | ✅ | loop | Per-tick latency ölçümü + controller call + state update |
-| ⏸ | v0.2.47+ | Wire-level latency (transport.send round-trip, şu an local) |
+| ✅ | v0.2.47 | Wire-level latency (Sprint 22 ile iniş — iOS ACK round-trip) |
 
 **25 May 2026: Sprint 21 tamamlandı — Adaptive stream rate.** v0.2.40 continuous screenshot stream sabit interval'den **latency-aware** adaptive'e geçti. Slow network → 1.5x backoff (max 5000ms); rahat network → 0.8x speedup baseMs alt sınıra kadar; hysteresis zone osilasyon engeller. Mac test 849 → 859 (+10 AdaptiveRateControllerTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
+## Sprint 22 — "Wire-level latency" (v0.2.47)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | protokol | `EnvelopeType.screenshotFrameAck` + `screenshotPayload.frameID: String?` (additive, eski iOS sürümleri görmez) |
+| ✅ | saf helper | `WireLatencyState` + `WireLatencyTracker` (record/consumeAck/prune/effectiveLatencyMs) |
+| ✅ | coordinator | Her tick UUID frameID, wireState pending map, `recordAck` callback, `effectiveLatencyMs` adaptive controller'a |
+| ✅ | host wire | `RemoteHost.onScreenshotFrameAckReceived` callback + inbound switch + `sendScreenshot(frameID:)` optional param |
+| ✅ | iOS wire | RemoteSession: screenshotPayload alındığında frameID varsa `sendScreenshotFrameAck` (best-effort, sessizce yutar) |
+| ⏸ | v0.2.48+ | UI'da wire latency badge (`lastWireLatencyMs` Mac Paneli'nde "Ağ: 87 ms") |
+
+**25 May 2026: Sprint 22 tamamlandı — Wire-level latency.** v0.2.46 adaptive rate `lastSendLatencyMs`'i **local** ölçüyordu (capture + JPEG + transport handoff) — backpressure'a duyarlı ama ağ koşulundan habersiz. Sprint 22 Mac her frame'e UUID frameID iliştiriyor, iOS aynı ID ile `screenshotFrameAck` döner; coordinator round-trip ms = wire latency. Adaptive controller artık gerçek ağ latency'sine göre scale ediyor. Henüz ACK yokken (stream başlangıcı, eski iOS) `WireLatencyTracker.effectiveLatencyMs` 5 sn freshness window dışında **local fallback**'e düşer — graceful degradation. Mac test 859 → 871 (+12 net: 16 WireLatencyTracker + 3 Coordinator + 5 EnvelopePayload + 1 RemoteEnvelope regression set + 1 SettingsTab v0.2.39 pre-existing fix; bazıları aynı modülde duplicate-counted). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (`screenshotPayload` factory default `frameID: nil` ile eski callsites unchanged).
 
 ## Demo Senaryosu (Sprint 1 sonrası)
 

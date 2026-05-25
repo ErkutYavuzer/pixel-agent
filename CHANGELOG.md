@@ -10,8 +10,71 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - v0.2.45 follow-up: OCR-based badge placement (Vision framework — text bounding box detection; AX label-aware heuristic'in pratik limiti aşıldığında).
-- v0.2.46 follow-up: Latency wire-level (transport.send round-trip, şu an local send latency — JPEG encode + transport handoff dahil).
+- v0.2.47 follow-up: UI'da wire latency badge (Mac Paneli'nde "Ağ: 87 ms" görselleştirme; `lastWireLatencyMs` zaten coordinator'da `@Published`).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.47] — 2026-05-25
+
+**Wire-level latency — Sprint 21 follow-up.** v0.2.46 adaptive rate son tick latency'sini **local** (capture + JPEG + transport handoff) ölçüyordu — backpressure'a duyarlı ama ağ koşulundan habersiz. v0.2.47 Mac her frame'e UUID `frameID` iliştirir; iOS aynı ID ile `screenshotFrameAck` envelope döner; coordinator round-trip ms = **wire latency**. Adaptive controller artık gerçek ağ latency'sine göre scale ediyor. Henüz ACK yokken (stream başlangıcı, eski iOS sürümleri) `WireLatencyTracker.effectiveLatencyMs` 5 sn freshness window dışında **local fallback**'e düşer — graceful degradation.
+
+**Test:** Mac 859 → **871** (+12 net: 16 WireLatencyTracker + 3 ScreenshotStreamCoordinator + 5 EnvelopePayloadSumType + 1 RemoteEnvelope regression set + 1 SettingsTab v0.2.39 pre-existing fix; duplicate-counted across modules). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok — `screenshotPayload(base64Image:)` factory default `frameID: nil` ile eski callsites unchanged; `EnvelopeType.screenshotFrameAck` forward-compat unknown fallback ile eski client'lar sessizce yutar.
+
+### Added — Sprint 22 / Wire-level latency
+
+#### `Sources/PixelMacApp/WireLatencyTracker.swift` (yeni saf helper)
+- **`WireLatencyState: Sendable, Equatable`** struct
+  - `pending: [String: Date]` — gönderilen ama henüz ACK'lenmemiş frameID → sentAt.
+  - `lastWireLatencyMs: Int?` — son alınan ACK'in hesapladığı wire latency (nil = hiç ACK gelmedi).
+  - `lastAckAt: Date?` — son ACK alınma anı; freshness window kontrolü için.
+- **`WireLatencyTracker`** enum static funcs (saf math, inout state):
+  - **`record(state:frameID:at:)`** — frame gönderildiğinde caller çağırır.
+  - **`consumeAck(state:frameID:receivedAt:) -> Int?`** — ACK geldiğinde; eşleşirse latency ms, `lastWireLatencyMs/lastAckAt` günceller, pending'den siler; eşleşmezse nil/no-op. Saat sapması için negatif latency 0'a clamp.
+  - **`prune(state:olderThan:)`** — stale pending entry'leri (>30s) sil; sınırsız map büyümesini engeller.
+  - **`effectiveLatencyMs(state:localMs:now:freshnessSeconds:5)`** — adaptive controller'a verilecek değer: fresh ACK varsa wire, aksi halde local fallback.
+- Tüm metodlar `static`, side-effect dışında saf → 16 deterministik test.
+
+#### `Sources/PixelRemote/RemoteEnvelope.swift` (protokol genişletme, additive)
+- **`EnvelopeType.screenshotFrameAck`** yeni case (forward-compat: eski client'lar `.unknown` fallback ile yutar).
+- **`EnvelopePayload.screenshotPayload(base64Image: String, frameID: String?)`** — frameID associated value eklendi (eski struct nil ile uyumlu).
+- **`EnvelopePayload.screenshotFrameAck(frameID: String)`** yeni case.
+- **`PayloadKey.screenshotFrameID`** wire field (encode `encodeIfPresent` ile, omit-when-nil).
+- **`payload?.screenshotFrameID: String?`** backward-compat computed getter (her iki case'i kapsar).
+- **Factory:** `screenshotPayload(base64Image:frameID:nil)` default'lu; `screenshotFrameAck(frameID:)` yeni.
+
+#### `Sources/PixelRemote/RemoteHost.swift`
+- **`onScreenshotFrameAckReceived: ((frameID: String, receivedAt: Date) -> Void)?`** yeni callback property.
+- **`sendScreenshot(base64Image:frameID:nil)`** — frameID opsiyonel param eklendi (default nil ile eski callsites unchanged).
+- **Inbound handler `.screenshotFrameAck`** branch — frameID non-empty ise callback çağırır; boş ID (eski wire format) skip.
+
+#### `Sources/PixelMacApp/ScreenshotStreamCoordinator.swift` (refactor)
+- **`wireState: WireLatencyState`** yeni private field — MainActor isolated.
+- **`@Published lastWireLatencyMs: Int?`** — UI debug için son ACK wire latency (nil = henüz yok).
+- **`start(intervalMs:sendImage:)`** sendImage signature: `(String) -> Void` → `(_ base64: String, _ frameID: String) -> Void`. Her tick'te `UUID().uuidString` üretip iliştirir + `WireLatencyTracker.record` çağrısı.
+- **`recordAck(frameID:at:)`** public method — RemoteHost callback'i çağırır; pending map'te bulursa `lastWireLatencyMs` günceller.
+- **Loop:** `effectiveLatencyAndPrune` (prune + effective seç) → `AdaptiveRateController.nextInterval` artık wire-aware effective latency'yi alır.
+- **Re-start:** `wireState = WireLatencyState()` + `lastWireLatencyMs = nil` reset.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **`onScreenshotStreamStartRequested`** wire-up: yeni `(base64, frameID)` callback signature'a göre `sendScreenshot(base64Image:frameID:)`.
+- **`onScreenshotFrameAckReceived`** yeni handler: `screenshotStream.recordAck(frameID:at:)` forward.
+
+#### `ios/PixelAgentRemote/RemoteSession.swift`
+- **`.screenshotPayload`** case: envelope payload'da `screenshotFrameID` non-nil/non-empty ise async `sendScreenshotFrameAck(frameID:)` Task.
+- **`sendScreenshotFrameAck(frameID:)`** private method — `RemoteEnvelope.screenshotFrameAck(frameID:)` sign+send; transport veya signing hatası **sessizce yutulur** (ACK best-effort, kayıp frame adaptive rate için minor; bir sonraki ACK düzeltir).
+
+### Fixed
+- **`Tests/PixelMacAppTests/SettingsTabTests.swift testAllCasesPresent`** — v0.2.39 Sprint 14'te `subagent` 5. tab eklendiğinde stale kalan hardcoded count 4 → 5; `.subagent` case kontrolü eklendi. (Pre-existing bug; fix opportunistic.)
+
+### Tests
+- `Tests/PixelMacAppTests/WireLatencyTrackerTests.swift` — **16 yeni**: record/consumeAck/prune/effectiveLatencyMs tüm kombinasyonlar, negatif latency clamp, freshness threshold, state Equatable.
+- `Tests/PixelMacAppTests/ScreenshotStreamCoordinatorTests.swift` — **+3**: initialWireLatencyNil, recordAckUnknownNoOp, startResetsWireLatencyState. Mevcut testler `{_, _ in}` yeni signature'a güncellendi.
+- `Tests/PixelRemoteTests/EnvelopePayloadSumTypeTests.swift` — **+5**: screenshotPayload without/with frameID round-trip, screenshotFrameAck round-trip, frameID getter unrelated cases nil, ack missing ID empty decode.
+- `Tests/PixelRemoteTests/RemoteEnvelopeTests.swift` — regression set'e `screenshotFrameAck` eklendi.
+
+### Notes — Sprint 22
+- **Backward-compat:** Yeni Mac v0.2.47 eski iOS sürümleriyle pairing yapabilir. Mac frameID iliştirir, eski iOS yoksayar, ACK göndermez → Mac `lastAckAt` nil kalır → `effectiveLatencyMs` her zaman localMs döner → Sprint 21 davranışı korunur. **Breaking change yok.**
+- **Wire format:** Eski `screenshotPayload` (frameID-yok) encode'u olduğu gibi decode olur; yeni Mac yeni iOS round-trip'i UUID frameID ile gerçek round-trip ölçer.
+- **Signing:** Yeni `screenshotFrameAck` envelope ed25519 ile imzalanır (`EnvelopeSigner.sign`); imzalı envelope canonical bytes'a frameID dahildir.
 
 ## [0.2.46] — 2026-05-25
 
