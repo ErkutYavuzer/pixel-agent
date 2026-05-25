@@ -103,10 +103,29 @@ struct ChatComposer: View {
     /// A8: send tetiklemeden önce hafif `.alignment` haptic — kullanıcı
     /// trackpad'inde "yolladım" hissi alır. Onsubmit ve Gönder butonu
     /// her ikisi de buradan geçer.
+    ///
+    /// **Sprint 32 (v0.2.57):** `TextField(axis: .vertical)` macOS'ta bilinen
+    /// bir SwiftUI bug var — focus active iken parent'in `draft = ""`
+    /// yazması NSTextField internal buffer'a yansımıyor; kullanıcının her
+    /// mesaj sonrası eski metni elle silmesi gerekiyordu. Workaround:
+    /// send'den hemen önce briefly defocus → commit + clear cycle, sonra
+    /// asyncAfter ile refocus (kullanıcı bir sonraki mesaja klavyeden
+    /// devam edebilsin).
     private func performSend() {
         guard canSend else { return }
         performHaptic()
+        let wasFocused = isComposerFocused
+        if wasFocused {
+            isComposerFocused = false
+        }
         onSend()
+        if wasFocused {
+            // Çok kısa bir defer — SwiftUI bir render cycle'da binding clear'ı
+            // işlesin, sonra alanı tekrar fokusla.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                isComposerFocused = true
+            }
+        }
     }
 
     private func performHaptic() {
