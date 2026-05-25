@@ -9,9 +9,82 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: App Store signing.
-- v0.2.25 follow-up adayları (hâlâ açık): `hostStatus` delta-only push.
 - v0.2.40 follow-up (kalan): Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.44] — 2026-05-25
+
+**hostStatus delta-only push — v0.2.25 follow-up.** v0.2.25 release notlarında "hostStatus delta-only push yok (full snapshot ~700 B/s)" deniyordu. Mac her 3 saniyede 7 field'lı full snapshot push'luyordu (selectedBackend, selectedModel, planMode, availableBackends, availableModels, activeSubagents, systemMetrics). Field'ların çoğu (availableBackends, availableModels) nadiren değişir; her push'ta yeniden göndermek bandwidth waste. v0.2.44 **diff-based push** ile bunu çözüyor: ilk frame full bootstrap, sonra sadece değişen field'lar.
+
+**Test:** Mac 825 → **837** (+12 HostStatusDeltaCalculatorTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni envelope case additive — eski sürümler `EnvelopeType.unknown` fallback ile yutar; mevcut `hostStatus` full snapshot envelope korundu).
+
+### Added — Sprint 19 / hostStatus delta-only push
+
+#### `Sources/PixelRemote/RemoteEnvelope.swift`
+- **`EnvelopeType.hostStatusDelta`** yeni case.
+- **`HostStatusDeltaContent`** yeni struct — 7 field'ın tümü opsiyonel
+  (`nil` = "değişmedi"). `isEmpty` computed (tüm field nil ise true,
+  push atlanmalı).
+- **`EnvelopePayload.hostStatusDelta(HostStatusDeltaContent)`** sum case.
+- **PayloadKey** reuse — hostStatus key'leri (selectedBackend,
+  selectedModel, vs.) aynı; yeni key yok.
+- **Decoder/Encoder:** tüm field'lar `decodeIfPresent` / `encodeIfPresent`.
+- **Backward-compat getters** genişletildi (selectedBackend, selectedModel,
+  planMode, availableBackends, availableModels, activeSubagents,
+  systemMetrics) — hem `.hostStatus` hem `.hostStatusDelta` case'ini
+  kapsar (iOS handler reuse).
+- **2 factory:** `hostStatusDelta(selectedBackend:selectedModel:...)`
+  default nil param'lar + `hostStatusDelta(_ content:)` direct.
+
+#### `Sources/PixelRemote/HostStatusDeltaCalculator.swift` (yeni saf helper)
+- **`delta(from: HostStatusContent?, to: HostStatusContent)`** —
+  - `from: nil` → tüm field'lar dolu (ilk frame, full bootstrap).
+  - Aksi halde field-by-field eşitlik check + `nil` set fark yoksa.
+  - Sonuç `isEmpty` ise nil (push skip).
+
+#### `Sources/PixelRemote/RemoteHost.swift`
+- **`sendHostStatusDelta(_:)`** async public method — delta envelope
+  imzalama + send. Empty delta no-op (caller sorumluluğu).
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **Periyodik push döngüsü** delta'ya geçti: `var lastSnapshot:
+  HostStatusContent? = nil` outer state; her tick'te
+  `HostStatusContent` yarat → `HostStatusDeltaCalculator.delta(from:to:)`
+  → varsa `sendHostStatusDelta` + lastSnapshot update.
+- **Disconnect handling:** `lastSnapshot = nil` set (bir sonraki connect'te
+  full bootstrap delta gönderilsin — iOS state boş başlar).
+
+#### `ios/PixelAgentRemote/RemoteSession.swift`
+- **`case .hostStatus, .hostStatusDelta:`** combined switch arm — iOS
+  handler zaten field-by-field `if let` merge pattern kullanıyordu
+  (delta-aware). Yeni envelope için sadece type case eklendi; merge
+  logic değişmedi.
+
+### Tests (+12)
+- `Tests/PixelRemoteTests/HostStatusDeltaCalculatorTests.swift` (yeni,
+  12 test):
+  * Nil old → full bootstrap delta (tüm field dolu).
+  * Identical snapshots → nil (push skip).
+  * Identical different instances → nil (Equatable auto-synth).
+  * Single field changes: backend only, plan only, metrics only — diğer
+    field'lar nil.
+  * Multi-field changes: tüm değişikler delta'da.
+  * `HostStatusDeltaContent.isEmpty` truth table.
+  * Envelope round-trip: partial decode preserves only set fields; encode
+    omits non-nil only (bandwidth verification).
+  * Backward-compat getter passthrough.
+- `Tests/PixelRemoteTests/RemoteEnvelopeTests.testEnvelopeTypeContainsAllExpectedCases`:
+  hardcoded set'e `hostStatusDelta` eklendi (regression guard).
+
+### Bandwidth impact
+
+| Durum | v0.2.43 | v0.2.44 |
+|---|---|---|
+| Idle (hiçbir değişiklik) | ~700 B/s | ~0 B/s (push skip) |
+| CPU/RAM değişti | ~700 B/s | ~150 B/s (sadece systemMetrics) |
+| Subagent state değişti | ~700 B/s | ~300 B/s (sadece activeSubagents + metrics) |
+| Backend/model değişti | ~700 B/s | ~50 B/s (sadece selectedBackend/Model) |
+| İlk connect | ~700 B | ~700 B (full bootstrap) |
 
 ## [0.2.43] — 2026-05-25
 
