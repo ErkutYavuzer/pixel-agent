@@ -163,4 +163,151 @@ final class HostStatusDeltaCalculatorTests: XCTestCase {
         XCTAssertEqual(env.payload?.availableBackends, ["gemini"])
         XCTAssertNil(env.payload?.selectedModel)
     }
+
+    // MARK: - Sprint 23 (v0.2.48): screenshotWireLatencyMs
+
+    func testDeltaIncludesWireLatencyOnChange() {
+        // Eski snapshot'ta latency yok, yeni snapshot'ta var → delta'da set.
+        let metrics = SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: "")
+        let old = HostStatusContent(
+            selectedBackend: "claude", selectedModel: "opus", planMode: false,
+            availableBackends: [], availableModels: [:], activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: nil
+        )
+        let new = HostStatusContent(
+            selectedBackend: "claude", selectedModel: "opus", planMode: false,
+            availableBackends: [], availableModels: [:], activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: 87
+        )
+        let delta = HostStatusDeltaCalculator.delta(from: old, to: new)
+        XCTAssertNotNil(delta)
+        XCTAssertEqual(delta?.screenshotWireLatencyMs, 87)
+    }
+
+    func testDeltaUnchangedLatencyOmitted() {
+        // Aynı latency iki snapshot'ta → delta nil (push skip).
+        let metrics = SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: "")
+        let old = HostStatusContent(
+            selectedBackend: "claude", selectedModel: "opus", planMode: false,
+            availableBackends: [], availableModels: [:], activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: 87
+        )
+        let new = old
+        let delta = HostStatusDeltaCalculator.delta(from: old, to: new)
+        XCTAssertNil(delta, "Hiçbir field değişmemişse delta skip edilmeli")
+    }
+
+    func testDeltaLatencyChangedFromValueToNil() {
+        // Stream stop edildi → Mac latency'i nil set'liyor. Delta semantiği
+        // gereği "nil = değişmedi" olsa da, calculator field eşitliğini
+        // kontrol ettiği için 87 != nil → yeni nil değer set'lenir.
+        // (iOS handler nil değeri görmezden gelir — guard `if let`; UI
+        // gate'i isStreamingScreenshots ile zaten badge'i gizler.)
+        let metrics = SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: "")
+        let old = HostStatusContent(
+            selectedBackend: "claude", selectedModel: "opus", planMode: false,
+            availableBackends: [], availableModels: [:], activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: 87
+        )
+        let new = HostStatusContent(
+            selectedBackend: "claude", selectedModel: "opus", planMode: false,
+            availableBackends: [], availableModels: [:], activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: nil
+        )
+        let delta = HostStatusDeltaCalculator.delta(from: old, to: new)
+        // Calculator: old(87) != new(nil) → delta.screenshotWireLatencyMs = nil
+        // (yeni değer; ama new nil olduğu için delta da nil olur — sonuç:
+        // isEmpty true, calculator nil döner). Bu kabul edilebilir: stream
+        // stop'tan sonra başka değişiklik yoksa push yapılmaz, iOS UI gate'i
+        // badge'i gizler.
+        XCTAssertNil(delta)
+    }
+
+    func testDeltaFullBootstrapIncludesWireLatency() {
+        // İlk frame (from nil): tüm field'lar new'den kopyalanır.
+        let metrics = SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: "")
+        let new = HostStatusContent(
+            selectedBackend: "claude", selectedModel: "opus", planMode: false,
+            availableBackends: [], availableModels: [:], activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: 42
+        )
+        let delta = HostStatusDeltaCalculator.delta(from: nil, to: new)
+        XCTAssertNotNil(delta)
+        XCTAssertEqual(delta?.screenshotWireLatencyMs, 42)
+    }
+
+    func testHostStatusEnvelopeRoundTripWithWireLatency() throws {
+        let metrics = SystemMetricsPayload(cpuUsage: 5, ramUsage: 12, activeWindow: "Editor")
+        let env = RemoteEnvelope.hostStatus(
+            selectedBackend: "claude",
+            selectedModel: "opus",
+            planMode: true,
+            availableBackends: ["claude"],
+            availableModels: [:],
+            activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: 156
+        )
+        let data = try JSONEncoder().encode(env)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.payload?.screenshotWireLatencyMs, 156)
+    }
+
+    func testHostStatusEnvelopeOmitsWireLatencyWhenNil() throws {
+        let metrics = SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: "")
+        let env = RemoteEnvelope.hostStatus(
+            selectedBackend: "claude",
+            selectedModel: "opus",
+            planMode: false,
+            availableBackends: [],
+            availableModels: [:],
+            activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: nil
+        )
+        let data = try JSONEncoder().encode(env)
+        let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let payload = dict?["payload"] as? [String: Any]
+        XCTAssertNil(payload?["screenshotWireLatencyMs"],
+            "nil latency wire format'ta omit edilmeli")
+    }
+
+    func testHostStatusDeltaEnvelopeWireLatencyRoundTrip() throws {
+        let content = HostStatusDeltaContent(screenshotWireLatencyMs: 220)
+        let env = RemoteEnvelope.hostStatusDelta(content)
+        let data = try JSONEncoder().encode(env)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.payload?.screenshotWireLatencyMs, 220)
+
+        // isEmpty: sadece wireLatency set ise isEmpty false (push edilebilir).
+        XCTAssertFalse(content.isEmpty)
+    }
+
+    func testDeltaIsEmptyOnlyWhenAllFieldsNil() {
+        XCTAssertTrue(HostStatusDeltaContent().isEmpty)
+        XCTAssertFalse(HostStatusDeltaContent(screenshotWireLatencyMs: 50).isEmpty)
+    }
+
+    func testWireLatencyGetterFromHostStatusAndDelta() {
+        let metrics = SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: "")
+        let fullEnv = RemoteEnvelope.hostStatus(
+            selectedBackend: "x", selectedModel: "y", planMode: false,
+            availableBackends: [], availableModels: [:], activeSubagents: [],
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: 99
+        )
+        XCTAssertEqual(fullEnv.payload?.screenshotWireLatencyMs, 99)
+
+        let deltaEnv = RemoteEnvelope.hostStatusDelta(screenshotWireLatencyMs: 33)
+        XCTAssertEqual(deltaEnv.payload?.screenshotWireLatencyMs, 33)
+
+        // Unrelated case → nil.
+        XCTAssertNil(RemoteEnvelope.ping().payload?.screenshotWireLatencyMs)
+    }
 }

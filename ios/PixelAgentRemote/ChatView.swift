@@ -506,7 +506,30 @@ struct MacPanelDashboardSection: View {
                         }
                         .disabled(session.isStreamingScreenshots)
                     }
-                    
+
+                    // Sprint 23 (v0.2.48): Wire latency badge — sadece stream
+                    // aktif ve Mac'ten ölçüm gelmişse görünür. Mac
+                    // WireLatencyTracker round-trip ölçer; hostStatusDelta
+                    // 3sn periyodik push'lar. Renk band: <100ms yeşil,
+                    // <300ms turuncu, >=300ms kırmızı.
+                    if session.isStreamingScreenshots,
+                       let latency = session.screenshotWireLatencyMs {
+                        HStack(spacing: 6) {
+                            Image(systemName: "wifi")
+                                .font(.caption2)
+                            Text("Ağ: \(latency) ms")
+                                .font(.caption.monospacedDigit())
+                            Spacer()
+                        }
+                        .foregroundStyle(wireLatencyColor(latency))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            wireLatencyColor(latency).opacity(0.12),
+                            in: Capsule()
+                        )
+                    }
+
                     if let image = session.latestScreenshot {
                         ZoomableImageView(image: image)
                             .frame(height: 220)
@@ -541,6 +564,15 @@ struct MacPanelDashboardSection: View {
             .padding()
         }
         .background(Color(.systemGroupedBackground))
+    }
+
+    /// Sprint 23 (v0.2.48): Wire latency badge rengi — kullanıcıya hızlı
+    /// görsel sınıflandırma. Eşikler subjektif; LAN typically <30ms,
+    /// internet+relay typically 50-200ms. >300ms "yavaş" hissettirir.
+    private func wireLatencyColor(_ latencyMs: Int) -> Color {
+        if latencyMs < 100 { return .green }
+        if latencyMs < 300 { return .orange }
+        return .red
     }
 }
 

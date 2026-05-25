@@ -62,6 +62,12 @@ final class RemoteSession: ObservableObject {
     @Published var selectedModel: String = ""
     @Published var planMode: Bool = false
     @Published var latestScreenshot: UIImage? = nil
+    /// **Sprint 23 (v0.2.48):** Mac coordinator'ın `WireLatencyTracker` ile
+    /// ölçtüğü son round-trip latency (ms). `hostStatus` veya `hostStatusDelta`
+    /// envelope'ında geliyor (3sn periyodik delta loop). UI'da Mac Paneli
+    /// "Ekran Resmi" section'unda badge olarak gösterilir, görselleştirme
+    /// `isStreamingScreenshots` gate'iyle.
+    @Published var screenshotWireLatencyMs: Int? = nil
     /// C12: Son tool call event'leri (en yeni ilk). Ring buffer ~30 kayıt.
     @Published var recentToolCalls: [ToolCallEventPayload] = []
     /// **Sprint 5 (iOS history viewer):** Mac'ten alınan arşiv listesi.
@@ -354,6 +360,8 @@ final class RemoteSession: ObservableObject {
 
     /// **Sprint 15 (v0.2.40):** iOS → Mac. Aktif stream'i durdur. Mac
     /// coordinator task'i cancel eder, push akışı biter.
+    /// **Sprint 23 (v0.2.48):** `screenshotWireLatencyMs` da reset — bir
+    /// sonraki başlangıçta stale değer briefly görünmesin.
     func stopScreenshotStream() async {
         guard let transport else { return }
         let envelope = RemoteEnvelope.screenshotStreamStop()
@@ -361,6 +369,7 @@ final class RemoteSession: ObservableObject {
             let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
             try await transport.send(signed)
             isStreamingScreenshots = false
+            screenshotWireLatencyMs = nil
         } catch {
             lastError = "Screenshot stream durdurulamadı: \(error.localizedDescription)"
         }
@@ -541,6 +550,14 @@ final class RemoteSession: ObservableObject {
                     self.cpuUsage = metrics.cpuUsage
                     self.ramUsage = metrics.ramUsage
                     self.activeWindow = metrics.activeWindow
+                }
+                // Sprint 23 (v0.2.48): wire latency badge field. Delta nil =
+                // "değişmedi" — guard `if let` ile sadece dolu değerler merge,
+                // önceki ölçüm korunur. Stream durduğunda Mac'in nil'lemesi
+                // delta'da nil olarak gelir ("unchanged" semantiği); iOS UI
+                // badge'i `isStreamingScreenshots`'a göre gizler.
+                if let latency = payload.screenshotWireLatencyMs {
+                    self.screenshotWireLatencyMs = latency
                 }
             }
         case .screenshotPayload:

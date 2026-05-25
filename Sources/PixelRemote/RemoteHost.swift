@@ -243,6 +243,8 @@ public final class RemoteHost: ObservableObject {
         }
     }
 
+    /// **Sprint 23 (v0.2.48):** `screenshotWireLatencyMs` opsiyonel param
+    /// eklendi — iOS Mac Paneli wire latency rozet için.
     public func sendHostStatus(
         selectedBackend: String,
         selectedModel: String,
@@ -250,7 +252,8 @@ public final class RemoteHost: ObservableObject {
         availableBackends: [String],
         availableModels: [String: [String]],
         activeSubagents: [SubagentStatusPayload],
-        systemMetrics: SystemMetricsPayload
+        systemMetrics: SystemMetricsPayload,
+        screenshotWireLatencyMs: Int? = nil
     ) async {
         guard let transport = activeTransport else { return }
         let envelope = RemoteEnvelope.hostStatus(
@@ -260,7 +263,8 @@ public final class RemoteHost: ObservableObject {
             availableBackends: availableBackends,
             availableModels: availableModels,
             activeSubagents: activeSubagents,
-            systemMetrics: systemMetrics
+            systemMetrics: systemMetrics,
+            screenshotWireLatencyMs: screenshotWireLatencyMs
         )
         do {
             let signed = try EnvelopeSigner.sign(envelope, with: signingKey)

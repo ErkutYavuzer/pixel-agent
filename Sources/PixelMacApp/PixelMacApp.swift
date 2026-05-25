@@ -837,6 +837,13 @@ struct ChatHost: View {
                 let ram = SystemStats.memoryUsagePercent()
                 let metrics = SystemMetricsPayload(cpuUsage: cpu, ramUsage: ram, activeWindow: activeWindowName)
 
+                // Sprint 23 (v0.2.48): stream aktifken son ölçülen wire
+                // latency'i de snapshot'a koy. Stream durunca nil → delta
+                // calculator önceki değerle eşitse skip (önceki ölçüm iOS'ta
+                // stale kalır ama UI gate isStreamingScreenshots'ta).
+                let wireLatency: Int? = screenshotStream.isActive
+                    ? screenshotStream.lastWireLatencyMs
+                    : nil
                 let newSnapshot = HostStatusContent(
                     selectedBackend: selectedBackendRaw,
                     selectedModel: selectedModelID,
@@ -844,7 +851,8 @@ struct ChatHost: View {
                     availableBackends: backendsList,
                     availableModels: modelsMap,
                     activeSubagents: activeSubs,
-                    systemMetrics: metrics
+                    systemMetrics: metrics,
+                    screenshotWireLatencyMs: wireLatency
                 )
 
                 if let delta = HostStatusDeltaCalculator.delta(from: lastSnapshot, to: newSnapshot) {

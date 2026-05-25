@@ -34,7 +34,8 @@ public enum HostStatusDeltaCalculator {
                 availableBackends: new.availableBackends,
                 availableModels: new.availableModels,
                 activeSubagents: new.activeSubagents,
-                systemMetrics: new.systemMetrics
+                systemMetrics: new.systemMetrics,
+                screenshotWireLatencyMs: new.screenshotWireLatencyMs
             )
         }
 
@@ -45,6 +46,13 @@ public enum HostStatusDeltaCalculator {
         let models = old.availableModels == new.availableModels ? nil : new.availableModels
         let subagents = old.activeSubagents == new.activeSubagents ? nil : new.activeSubagents
         let metrics = old.systemMetrics == new.systemMetrics ? nil : new.systemMetrics
+        // Sprint 23 (v0.2.48): wire latency badge. Delta'da nil = "değişmedi";
+        // önceki ölçüm korunur. Stream durduğunda Mac değeri nil'leyemez
+        // (delta nil "unchanged"); iOS UI gate'i isStreamingScreenshots'a
+        // bağlı, dolayısıyla stale değer görünmez.
+        let wireLatency = old.screenshotWireLatencyMs == new.screenshotWireLatencyMs
+            ? nil
+            : new.screenshotWireLatencyMs
 
         let delta = HostStatusDeltaContent(
             selectedBackend: backend,
@@ -53,7 +61,8 @@ public enum HostStatusDeltaCalculator {
             availableBackends: backends,
             availableModels: models,
             activeSubagents: subagents,
-            systemMetrics: metrics
+            systemMetrics: metrics,
+            screenshotWireLatencyMs: wireLatency
         )
         return delta.isEmpty ? nil : delta
     }

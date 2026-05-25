@@ -173,6 +173,14 @@ public struct HostStatusDeltaContent: Sendable, Equatable {
     public let availableModels: [String: [String]]?
     public let activeSubagents: [SubagentStatusPayload]?
     public let systemMetrics: SystemMetricsPayload?
+    /// **Sprint 23 (v0.2.48):** Continuous screenshot stream'in son wire-level
+    /// round-trip latency'si (ms). Sprint 22 `WireLatencyTracker` ölçer; Mac
+    /// 3s periyodik delta loop'unda push'lar. Delta semantics: nil = "değişmedi"
+    /// (önceki değer korunur); 87 = "yeni ölçüm var". Stream durunca Mac
+    /// `lastWireLatencyMs`'i nil'leyebilir ama delta'da nil "unchanged"
+    /// olduğundan iOS eski değeri görmeye devam eder; iOS UI bunu
+    /// `isStreamingScreenshots` ile gate eder.
+    public let screenshotWireLatencyMs: Int?
 
     public init(
         selectedBackend: String? = nil,
@@ -181,7 +189,8 @@ public struct HostStatusDeltaContent: Sendable, Equatable {
         availableBackends: [String]? = nil,
         availableModels: [String: [String]]? = nil,
         activeSubagents: [SubagentStatusPayload]? = nil,
-        systemMetrics: SystemMetricsPayload? = nil
+        systemMetrics: SystemMetricsPayload? = nil,
+        screenshotWireLatencyMs: Int? = nil
     ) {
         self.selectedBackend = selectedBackend
         self.selectedModel = selectedModel
@@ -190,6 +199,7 @@ public struct HostStatusDeltaContent: Sendable, Equatable {
         self.availableModels = availableModels
         self.activeSubagents = activeSubagents
         self.systemMetrics = systemMetrics
+        self.screenshotWireLatencyMs = screenshotWireLatencyMs
     }
 
     /// Hiçbir field set edilmemişse delta boş — push atlanmalı.
@@ -201,6 +211,7 @@ public struct HostStatusDeltaContent: Sendable, Equatable {
             && availableModels == nil
             && activeSubagents == nil
             && systemMetrics == nil
+            && screenshotWireLatencyMs == nil
     }
 }
 
@@ -213,6 +224,10 @@ public struct HostStatusContent: Sendable, Equatable {
     public let availableModels: [String: [String]]
     public let activeSubagents: [SubagentStatusPayload]
     public let systemMetrics: SystemMetricsPayload
+    /// **Sprint 23 (v0.2.48):** Continuous screenshot stream'in son wire-level
+    /// round-trip latency'si (ms). nil = stream aktif değil veya henüz ACK
+    /// gelmedi. iOS Mac Paneli "Ağ: 87 ms" rozet için bu değeri kullanır.
+    public let screenshotWireLatencyMs: Int?
 
     public init(
         selectedBackend: String,
@@ -221,7 +236,8 @@ public struct HostStatusContent: Sendable, Equatable {
         availableBackends: [String],
         availableModels: [String: [String]],
         activeSubagents: [SubagentStatusPayload],
-        systemMetrics: SystemMetricsPayload
+        systemMetrics: SystemMetricsPayload,
+        screenshotWireLatencyMs: Int? = nil
     ) {
         self.selectedBackend = selectedBackend
         self.selectedModel = selectedModel
@@ -230,6 +246,7 @@ public struct HostStatusContent: Sendable, Equatable {
         self.availableModels = availableModels
         self.activeSubagents = activeSubagents
         self.systemMetrics = systemMetrics
+        self.screenshotWireLatencyMs = screenshotWireLatencyMs
     }
 }
 
@@ -419,6 +436,16 @@ extension EnvelopePayload {
         }
     }
 
+    /// Sprint 23 (v0.2.48): hostStatus + hostStatusDelta wire-latency badge
+    /// getter. iOS handler bu değeri okuyup @Published'a yansıtır.
+    public var screenshotWireLatencyMs: Int? {
+        switch self {
+        case .hostStatus(let c): return c.screenshotWireLatencyMs
+        case .hostStatusDelta(let c): return c.screenshotWireLatencyMs
+        default: return nil
+        }
+    }
+
     public var toolCallEvent: ToolCallEventPayload? {
         if case .toolCallEvent(let e) = self { return e }
         return nil
@@ -496,6 +523,8 @@ private enum PayloadKey: String, CodingKey {
     case streamIntervalMs
     /// Sprint 22 (v0.2.47): screenshotPayload / screenshotFrameAck frameID.
     case screenshotFrameID
+    /// Sprint 23 (v0.2.48): hostStatus + hostStatusDelta wire-latency badge field.
+    case screenshotWireLatencyMs
 }
 
 extension EnvelopePayload {
@@ -554,7 +583,8 @@ extension EnvelopePayload {
                 availableModels: try c.decodeIfPresent([String: [String]].self, forKey: .availableModels) ?? [:],
                 activeSubagents: try c.decodeIfPresent([SubagentStatusPayload].self, forKey: .activeSubagents) ?? [],
                 systemMetrics: try c.decodeIfPresent(SystemMetricsPayload.self, forKey: .systemMetrics)
-                    ?? SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: "")
+                    ?? SystemMetricsPayload(cpuUsage: 0, ramUsage: 0, activeWindow: ""),
+                screenshotWireLatencyMs: try c.decodeIfPresent(Int.self, forKey: .screenshotWireLatencyMs)
             )
             return .hostStatus(content)
 
@@ -620,6 +650,7 @@ extension EnvelopePayload {
         case .hostStatusDelta:
             // Sprint 19 (v0.2.44): tüm field'lar opsiyonel — nil = değişmedi.
             // hostStatus key'leri reuse (selectedBackend, selectedModel, vs.).
+            // Sprint 23 (v0.2.48): screenshotWireLatencyMs eklendi.
             let content = HostStatusDeltaContent(
                 selectedBackend: try c.decodeIfPresent(String.self, forKey: .selectedBackend),
                 selectedModel: try c.decodeIfPresent(String.self, forKey: .selectedModel),
@@ -627,7 +658,8 @@ extension EnvelopePayload {
                 availableBackends: try c.decodeIfPresent([String].self, forKey: .availableBackends),
                 availableModels: try c.decodeIfPresent([String: [String]].self, forKey: .availableModels),
                 activeSubagents: try c.decodeIfPresent([SubagentStatusPayload].self, forKey: .activeSubagents),
-                systemMetrics: try c.decodeIfPresent(SystemMetricsPayload.self, forKey: .systemMetrics)
+                systemMetrics: try c.decodeIfPresent(SystemMetricsPayload.self, forKey: .systemMetrics),
+                screenshotWireLatencyMs: try c.decodeIfPresent(Int.self, forKey: .screenshotWireLatencyMs)
             )
             return .hostStatusDelta(content)
 
@@ -684,6 +716,8 @@ extension EnvelopePayload {
             try c.encode(content.availableModels, forKey: .availableModels)
             try c.encode(content.activeSubagents, forKey: .activeSubagents)
             try c.encode(content.systemMetrics, forKey: .systemMetrics)
+            // Sprint 23 (v0.2.48): opsiyonel — nil ise wire format'tan omit.
+            try c.encodeIfPresent(content.screenshotWireLatencyMs, forKey: .screenshotWireLatencyMs)
 
         case .screenshotPayload(let img, let frameID):
             try c.encode(img, forKey: .base64Image)
@@ -737,6 +771,8 @@ extension EnvelopePayload {
             try c.encodeIfPresent(content.availableModels, forKey: .availableModels)
             try c.encodeIfPresent(content.activeSubagents, forKey: .activeSubagents)
             try c.encodeIfPresent(content.systemMetrics, forKey: .systemMetrics)
+            // Sprint 23 (v0.2.48): wire latency badge field.
+            try c.encodeIfPresent(content.screenshotWireLatencyMs, forKey: .screenshotWireLatencyMs)
         }
     }
 }
@@ -904,6 +940,7 @@ extension RemoteEnvelope {
     /// Sadece bir önceki snapshot'tan değişen field'lar gönderilir; iOS
     /// field-by-field merge eder. Boş delta (`isEmpty`) push edilmemeli
     /// (caller sorumluluğu — `HostStatusDeltaCalculator` zaten skip eder).
+    /// **Sprint 23 (v0.2.48):** `screenshotWireLatencyMs` parametresi eklendi.
     public static func hostStatusDelta(
         selectedBackend: String? = nil,
         selectedModel: String? = nil,
@@ -911,7 +948,8 @@ extension RemoteEnvelope {
         availableBackends: [String]? = nil,
         availableModels: [String: [String]]? = nil,
         activeSubagents: [SubagentStatusPayload]? = nil,
-        systemMetrics: SystemMetricsPayload? = nil
+        systemMetrics: SystemMetricsPayload? = nil,
+        screenshotWireLatencyMs: Int? = nil
     ) -> RemoteEnvelope {
         let content = HostStatusDeltaContent(
             selectedBackend: selectedBackend,
@@ -920,7 +958,8 @@ extension RemoteEnvelope {
             availableBackends: availableBackends,
             availableModels: availableModels,
             activeSubagents: activeSubagents,
-            systemMetrics: systemMetrics
+            systemMetrics: systemMetrics,
+            screenshotWireLatencyMs: screenshotWireLatencyMs
         )
         return RemoteEnvelope(type: .hostStatusDelta, payload: .hostStatusDelta(content))
     }
@@ -964,7 +1003,8 @@ extension RemoteEnvelope {
         availableBackends: [String],
         availableModels: [String: [String]],
         activeSubagents: [SubagentStatusPayload],
-        systemMetrics: SystemMetricsPayload
+        systemMetrics: SystemMetricsPayload,
+        screenshotWireLatencyMs: Int? = nil
     ) -> RemoteEnvelope {
         let content = HostStatusContent(
             selectedBackend: selectedBackend,
@@ -973,7 +1013,8 @@ extension RemoteEnvelope {
             availableBackends: availableBackends,
             availableModels: availableModels,
             activeSubagents: activeSubagents,
-            systemMetrics: systemMetrics
+            systemMetrics: systemMetrics,
+            screenshotWireLatencyMs: screenshotWireLatencyMs
         )
         return RemoteEnvelope(type: .hostStatus, payload: .hostStatus(content))
     }
