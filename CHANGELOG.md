@@ -10,7 +10,67 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - v0.2.40 follow-up (kalan): Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune).
+- v0.2.45 follow-up: OCR-based badge placement (Vision framework — text bounding box detection; AX label-aware heuristic'in pratik limiti aşıldığında).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.45] — 2026-05-25
+
+**AX label-aware badge placement — SoM Faz 5 follow-up.** v0.2.38'de iniş yapan `BadgeLayout` (4 köşe + smartCorner + bounds clamping) **geometry-aware** ama element içeriğini bilmiyordu — button text merkezdeyse badge köşede uygundu, link text sol kenardaysa sağ-üst tercih ediliyordu ama bu manuel seçim. v0.2.45 **AX role-based heuristic** ekliyor: `BadgePlacement.labelAware` strategy ile her element için role'e uygun konum otomatik seçilir.
+
+OCR-based çözüm scope dışı tutuldu (Vision framework integrasyonu büyük iş; AX heuristic pratik %80'i kapatıyor — interactive role'ler net mapping'e sahip). v0.2.46+ aday.
+
+**Test:** Mac 837 → **849** (+12 LabelAwarePlacementResolverTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni enum case additive; mevcut placement strategies değişmedi).
+
+### Added — Sprint 20 / Label-aware badge placement
+
+#### `Sources/PixelComputerUse/SoMOptions.swift`
+- **`BadgePlacement.labelAware`** yeni case — strategy resolve deferred to
+  per-element AX role lookup.
+
+#### `Sources/PixelComputerUse/LabelAwarePlacementResolver.swift` (yeni saf helper)
+- **`placement(for role: String)`** static — AX role string'den concrete
+  `BadgePlacement` türetir:
+  - **`topRightOutside`**: AXButton, AXMenuItem, AXCheckBox, AXRadioButton.
+    Button text merkezde/sol-padding'li, sağ-üst dış köşe min çakışma.
+    Checkbox/radio simgesi sol + label sağ → dış köşe badge text üstüne
+    çakışmaz.
+  - **`topRightInside`**: AXLink, AXTextField, AXTextArea, AXPopUpButton,
+    AXComboBox. Link text sol kenarda (browser convention); textField
+    placeholder sol-orta; popup dropdown ok sağda küçük → sağ-üst içeride
+    min text overlap.
+  - **`topLeftOutside`** (fallback): bilinmeyen / decorative role'ler
+    (AXImage, AXGroup, vs.). Sınırlı semantik bilgi → smartCorner pattern.
+
+#### `Sources/PixelComputerUse/SoMRenderer.swift`
+- **Per-element resolve:** `options.badgePlacement == .labelAware` ise her
+  element için `LabelAwarePlacementResolver.placement(for: mark.element.role)`
+  ile concrete placement türetilir, sonra `BadgeLayout.computeBadgeRect`
+  geometry hesabı. Diğer strategies (smartCorner, fixed corners) eski
+  davranış.
+
+#### `Sources/PixelComputerUse/BadgeLayout.swift`
+- **`rawBadgeRect` switch genişletildi:** `.smartCorner, .labelAware` —
+  caller resolve concrete'e çevirir (defensive `topLeftInside` fallback).
+
+#### `Sources/PixelMCPServer/ToolRegistry.swift`
+- **`ui_screenshot.som_options` schema** description güncellendi —
+  `'label_aware'` enum eklendi (snake_case wire): "AX role bazlı: button
+  → topRightOutside, link → topRightInside, vs. — content kapanmama
+  optimization".
+
+### Tests (+12)
+- `Tests/PixelComputerUseTests/LabelAwarePlacementResolverTests.swift`
+  (yeni, 12 test):
+  * Button family → topRightOutside (4 role: button, menuItem, checkbox,
+    radioButton).
+  * Text-leading family → topRightInside (5 role: link, textField,
+    textArea, popUpButton, comboBox).
+  * Unknown/decorative → topLeftOutside fallback (3 role + empty string).
+  * BadgePlacement.labelAware Codable round-trip (SoMOptions wire format
+    uyumu).
+  * BadgePlacement.labelAware.rawValue == "labelAware".
+  * All interactive roles (AXRole.interactiveRoles set) için placement
+    default'a düşmemeli (regression guard — heuristic anlamlı olmalı).
 
 ## [0.2.44] — 2026-05-25
 
