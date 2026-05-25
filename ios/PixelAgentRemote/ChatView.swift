@@ -512,6 +512,7 @@ struct MacPanelDashboardSection: View {
                     // WireLatencyTracker round-trip ölçer; hostStatusDelta
                     // 3sn periyodik push'lar. Renk band: <100ms yeşil,
                     // <300ms turuncu, >=300ms kırmızı.
+                    // Sprint 25 (v0.2.50): Inline sparkline (son 20 frame trendi).
                     if session.isStreamingScreenshots,
                        let latency = session.screenshotWireLatencyMs {
                         HStack(spacing: 6) {
@@ -519,6 +520,11 @@ struct MacPanelDashboardSection: View {
                                 .font(.caption2)
                             Text("Ağ: \(latency) ms")
                                 .font(.caption.monospacedDigit())
+                            WireLatencySparklineView(
+                                latencies: session.wireLatencyHistory,
+                                color: wireLatencyColor(latency)
+                            )
+                            .frame(width: 80, height: 16)
                             Spacer()
                         }
                         .foregroundStyle(wireLatencyColor(latency))

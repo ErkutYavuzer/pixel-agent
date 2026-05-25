@@ -67,7 +67,16 @@ final class RemoteSession: ObservableObject {
     /// envelope'ında geliyor (3sn periyodik delta loop). UI'da Mac Paneli
     /// "Ekran Resmi" section'unda badge olarak gösterilir, görselleştirme
     /// `isStreamingScreenshots` gate'iyle.
+    /// **Sprint 24 (v0.2.49):** Per-frame `screenshotPayload.wireLatencyMs`
+    /// embed yolu ile de güncellenir (~1Hz, hostStatus path'ından daha güncel).
     @Published var screenshotWireLatencyMs: Int? = nil
+    /// **Sprint 25 (v0.2.50):** Son N latency ölçümünün ring buffer'ı —
+    /// Mac Paneli'nde sparkline (trend grafiği) için. Per-frame envelope
+    /// geldiğinde `LatencySparkline.push` ile append; stream durunca
+    /// `stopScreenshotStream` temizler. Sabit `Self.wireLatencyHistoryMax`
+    /// = 20 frame (~20 sn @ 1Hz default).
+    @Published var wireLatencyHistory: [Int] = []
+    static let wireLatencyHistoryMax = 20
     /// C12: Son tool call event'leri (en yeni ilk). Ring buffer ~30 kayıt.
     @Published var recentToolCalls: [ToolCallEventPayload] = []
     /// **Sprint 5 (iOS history viewer):** Mac'ten alınan arşiv listesi.
@@ -362,6 +371,8 @@ final class RemoteSession: ObservableObject {
     /// coordinator task'i cancel eder, push akışı biter.
     /// **Sprint 23 (v0.2.48):** `screenshotWireLatencyMs` da reset — bir
     /// sonraki başlangıçta stale değer briefly görünmesin.
+    /// **Sprint 25 (v0.2.50):** `wireLatencyHistory` ring buffer da temizlenir
+    /// — sparkline boş başlasın.
     func stopScreenshotStream() async {
         guard let transport else { return }
         let envelope = RemoteEnvelope.screenshotStreamStop()
@@ -370,6 +381,7 @@ final class RemoteSession: ObservableObject {
             try await transport.send(signed)
             isStreamingScreenshots = false
             screenshotWireLatencyMs = nil
+            wireLatencyHistory.removeAll()
         } catch {
             lastError = "Screenshot stream durdurulamadı: \(error.localizedDescription)"
         }
@@ -580,8 +592,14 @@ final class RemoteSession: ObservableObject {
             // hostStatus path'i de hâlâ çalışıyor (fallback); en güncel
             // değer kazanır — bu envelope per-frame geldiği için çoğu zaman
             // o.
+            // Sprint 25 (v0.2.50): ring buffer'a da push — sparkline trendi.
             if let latency = envelope.payload?.screenshotWireLatencyMs {
                 self.screenshotWireLatencyMs = latency
+                LatencySparkline.push(
+                    latency,
+                    into: &self.wireLatencyHistory,
+                    maxCount: Self.wireLatencyHistoryMax
+                )
             }
         case .toolCallEvent:
             // C12: Mac MCP bridge bir tool çağırdı — ring buffer'ı en yeni
