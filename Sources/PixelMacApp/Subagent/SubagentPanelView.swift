@@ -232,14 +232,30 @@ struct SubagentDetailSheet: View {
                 .frame(minHeight: 60, maxHeight: 120)
             }
 
-            GroupBox("Çıktı") {
-                ScrollView {
-                    Text(displayedOutput)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            // Faz 5 (v0.2.41): Multi-turn dispatch ise per-turn expand list,
+            // aksi halde tek output bloğu (eski davranış).
+            if let turns = session.multiTurnTurns, !turns.isEmpty {
+                GroupBox("Turn List (\(turns.count))") {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(Array(turns.enumerated()), id: \.offset) { idx, turn in
+                                turnRow(index: idx + 1, turn: turn)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .frame(minHeight: 200, maxHeight: 420)
                 }
-                .frame(minHeight: 180, maxHeight: 400)
+            } else {
+                GroupBox("Çıktı") {
+                    ScrollView {
+                        Text(displayedOutput)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(minHeight: 180, maxHeight: 400)
+                }
             }
 
             HStack {
@@ -268,5 +284,54 @@ struct SubagentDetailSheet: View {
 
     private var displayedOutput: String {
         session.result?.output ?? ""
+    }
+
+    /// Faz 5 (v0.2.41): Single turn row — number + outcome badge + duration +
+    /// expandable output.
+    @ViewBuilder
+    private func turnRow(index: Int, turn: TurnResult) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("Turn \(index)")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.purple.opacity(0.18), in: Capsule())
+                Text(outcomeLabel(for: turn.outcome))
+                    .font(.caption2.bold())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(outcomeColor(for: turn.outcome).opacity(0.18), in: Capsule())
+                    .foregroundStyle(outcomeColor(for: turn.outcome))
+                Spacer()
+                Text("\(String(format: "%.1f", turn.durationSeconds))s")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Text(turn.output.isEmpty ? "(boş)" : turn.output)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(Color(.textBackgroundColor).opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    private func outcomeLabel(for outcome: TurnResult.Outcome) -> String {
+        switch outcome {
+        case .completed: return "OK"
+        case .budgetExceeded(let r): return "Bütçe (\(r.rawValue))"
+        case .cancelled: return "İptal"
+        case .failed: return "Hata"
+        }
+    }
+
+    private func outcomeColor(for outcome: TurnResult.Outcome) -> Color {
+        switch outcome {
+        case .completed: return .green
+        case .budgetExceeded: return .orange
+        case .cancelled: return .gray
+        case .failed: return .red
+        }
     }
 }

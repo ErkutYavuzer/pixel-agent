@@ -23,6 +23,10 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
     /// Streaming sırasında her chunk burada birikir. Terminal status'a geçildiğinde
     /// `result.output` ile aynı olur. UI canlı render için bunu okur.
     var partialOutput: String
+    /// **Faz 5 (v0.2.41):** Multi-turn dispatch ise her turn'ün sonuçları.
+    /// One-shot dispatch'te nil. UI detail sheet bunu görünce per-turn
+    /// expanded list render eder; nil ise tek output bloğu (eski davranış).
+    var multiTurnTurns: [TurnResult]?
 
     init(
         id: SubagentID = SubagentID(),
@@ -33,7 +37,8 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
         startedAt: Date = Date(),
         finishedAt: Date? = nil,
         result: SubagentResult? = nil,
-        partialOutput: String = ""
+        partialOutput: String = "",
+        multiTurnTurns: [TurnResult]? = nil
     ) {
         self.id = id
         self.prompt = prompt
@@ -44,6 +49,7 @@ struct SubagentSession: Identifiable, Equatable, Sendable {
         self.finishedAt = finishedAt
         self.result = result
         self.partialOutput = partialOutput
+        self.multiTurnTurns = multiTurnTurns
     }
 
     /// Prompt'un kart üzerinde gösterilecek kısaltılmış hali (40 karakter).

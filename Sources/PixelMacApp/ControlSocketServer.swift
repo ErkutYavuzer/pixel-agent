@@ -535,8 +535,26 @@ public actor ControlSocketServer {
     }
 
     /// **Faz 4 (v0.2.39):** Multi-turn subagent dispatch'i (follow_ups var).
+    /// **Faz 5 (v0.2.41):** Manager attached ise UI panel'inde turn list
+    /// görünür; yoksa eski stateless yolla (UI'a yansımaz).
     /// Her turn için per-turn output + outcome JSON'a serialize edilir.
     private func dispatchMultiTurn(turns: [String], kind: CLIKind, budget: Budget) async -> BridgeResponse {
+        // Faz 5: Manager attached ise birleşik havuza yönlendir.
+        if let manager = self.manager {
+            let outcome = await manager.dispatchMultiTurnAndWait(
+                turns: turns,
+                backend: kind,
+                budget: budget
+            )
+            switch outcome {
+            case .success(let result):
+                return Self.multiTurnBridgeResponse(from: result, backendKind: kind)
+            case .failure(let error):
+                return .failure(error.errorDescription ?? "\(error)")
+            }
+        }
+
+        // Stateless fallback — Manager-attached-değil durumlar için (test).
         let detector = CLIDetector()
         guard let executablePath = detector.locate(kind) else {
             return .failure("Backend bulunamadı: \(kind.executableName) (PATH veya bilinen lokasyonlarda yok).")

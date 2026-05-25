@@ -39,6 +39,10 @@ final class SubagentManager: ObservableObject {
     /// id varsa resume eder; yoksa edge-case race olmaz çünkü ikisi de MainActor'da serialize.
     private var continuations: [SubagentID: CheckedContinuation<SubagentResult, Never>] = [:]
 
+    /// **Faz 5 (v0.2.41):** Multi-turn dispatch continuation map'i. `finalizeMultiTurn`
+    /// id varsa resume eder; `continuations` (one-shot) ile ayrık tutulur.
+    private var multiTurnContinuations: [SubagentID: CheckedContinuation<MultiTurnSubagentResult, Never>] = [:]
+
     init(
         maxConcurrent: Int = 3,
         backendResolver: @escaping @MainActor (CLIKind) -> (any ChatBackend)?
@@ -114,6 +118,70 @@ final class SubagentManager: ObservableObject {
         }
 
         return .success(id)
+    }
+
+    /// **Faz 5 (v0.2.41):** Multi-turn dispatch — MCP bridge tarafından çağrılır.
+    /// N user prompt sequential; `MultiTurnSubagentRunner.runConversation`
+    /// kullanır. Her turn'ün assistant cevabı history'ye eklenir; shared
+    /// budget tüm turn'lere uygulanır. UI panel'inde tek bir session kartı
+    /// görünür; detail sheet'te turn list expand edilir.
+    ///
+    /// Cap dolu / backend yok hatası one-shot dispatch ile aynı.
+    func dispatchMultiTurnAndWait(
+        turns: [String],
+        backend kind: CLIKind,
+        budget: Budget = .default
+    ) async -> Result<MultiTurnSubagentResult, DispatchError> {
+        guard activeCount < maxConcurrent else {
+            lastCapReachedAt = Date()
+            return .failure(.capReached(maxConcurrent: maxConcurrent))
+        }
+        guard let backend = backendResolver(kind) else {
+            return .failure(.backendUnavailable(kind))
+        }
+        guard !turns.isEmpty else {
+            // Boş turn list — multi-turn olarak değil one-shot olarak yok say.
+            return .success(.completedAllTurns(turns: [], totalDurationSeconds: 0))
+        }
+
+        let id = SubagentID()
+        // Prompt preview: ilk turn'ün metni + turn sayısı annotation.
+        let primary = turns.first ?? ""
+        let promptDisplay: String = turns.count > 1
+            ? "\(primary) (+\(turns.count - 1) turn)"
+            : primary
+        let session = SubagentSession(
+            id: id,
+            prompt: promptDisplay,
+            backendKind: kind,
+            budget: budget,
+            status: .pending,
+            startedAt: Date()
+        )
+        sessions.append(session)
+
+        let runner = MultiTurnSubagentRunner(backend: backend, budget: budget, id: id)
+        runners[id] = Task { [weak self] in
+            await MainActor.run { self?.updateStatus(id: id, to: .running) }
+            let result = await runner.runConversation(turns: turns)
+            await MainActor.run { self?.finalizeMultiTurn(id: id, result: result) }
+        }
+
+        let result = await withCheckedContinuation {
+            (continuation: CheckedContinuation<MultiTurnSubagentResult, Never>) in
+            if let session = sessions.first(where: { $0.id == id }),
+               let turns = session.multiTurnTurns,
+               session.status.isTerminal {
+                // Edge-case: mock backend Task already finalized before we got here.
+                continuation.resume(returning: .completedAllTurns(
+                    turns: turns,
+                    totalDurationSeconds: session.elapsedSeconds()
+                ))
+            } else {
+                multiTurnContinuations[id] = continuation
+            }
+        }
+        return .success(result)
     }
 
     /// MCP bridge tarafından çağrılır. `dispatch` + result'a kadar bekler.
@@ -199,6 +267,67 @@ final class SubagentManager: ObservableObject {
         if let session = finalizedSession {
             onSessionCompleted?(session)
         }
+    }
+
+    /// **Faz 5 (v0.2.41):** Multi-turn dispatch terminal state finalize.
+    /// Per-turn output'lar combine edilir (`[Turn 1]\n... [Turn 2]\n...`);
+    /// session.multiTurnTurns dolu set'lenir → UI detail sheet turn list
+    /// expand etmeyi bilir. Legacy `result: SubagentResult?` field one-shot
+    /// görünümle uyum için doldurulur (combined output).
+    private func finalizeMultiTurn(id: SubagentID, result: MultiTurnSubagentResult) {
+        var finalizedSession: SubagentSession?
+        let combined = Self.combinedOutput(from: result.completedTurns)
+        let totalDuration = result.totalDurationSeconds
+
+        let status: SubagentStatus
+        let legacyResult: SubagentResult
+        switch result {
+        case .completedAllTurns:
+            status = .completed
+            legacyResult = .completed(output: combined, durationSeconds: totalDuration)
+        case .budgetExceededAt(_, let reason, _, _):
+            status = .budgetExceeded(reason)
+            legacyResult = .budgetExceeded(
+                reason: reason,
+                partialOutput: combined,
+                durationSeconds: totalDuration
+            )
+        case .cancelledAt:
+            status = .cancelled
+            legacyResult = .cancelled(partialOutput: combined, durationSeconds: totalDuration)
+        case .failedAt(_, let err, _, _):
+            status = .failed(error: err)
+            legacyResult = .failed(
+                error: err,
+                partialOutput: combined,
+                durationSeconds: totalDuration
+            )
+        }
+
+        if let idx = sessions.firstIndex(where: { $0.id == id }) {
+            sessions[idx].status = status
+            sessions[idx].finishedAt = Date()
+            sessions[idx].result = legacyResult
+            sessions[idx].multiTurnTurns = result.completedTurns
+            sessions[idx].partialOutput = combined
+            finalizedSession = sessions[idx]
+        }
+        runners.removeValue(forKey: id)
+        if let continuation = multiTurnContinuations.removeValue(forKey: id) {
+            continuation.resume(returning: result)
+        }
+        // One-shot callback'i de tetikle (UI listener'ları için unified hook).
+        if let session = finalizedSession {
+            onSessionCompleted?(session)
+        }
+    }
+
+    /// Per-turn output'ları `[Turn N]` prefix + boş satır separator ile birleştir.
+    /// Test edilebilir saf helper.
+    static func combinedOutput(from turns: [TurnResult]) -> String {
+        turns.enumerated().map { idx, turn in
+            "[Turn \(idx + 1)] (\(String(format: "%.1f", turn.durationSeconds))s)\n\(turn.output)"
+        }.joined(separator: "\n\n")
     }
 
     private static func status(from result: SubagentResult) -> SubagentStatus {
