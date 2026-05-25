@@ -510,6 +510,20 @@ final class RemoteSession: ObservableObject {
         }
 
         switch envelope.type {
+        case .userMessage:
+            // **Sprint 33 (v0.2.59):** Mac kullanıcısının composer'a yazdığı
+            // mesaj. iOS'a yansıt. UUID dedup ile iOS-originated mesajların
+            // Mac echo'su tekrar append edilmez (iOS zaten send(text:)'te
+            // local messages array'ine eklemişti).
+            if let text = envelope.payload?.text, !text.isEmpty,
+               let msgIDString = envelope.payload?.messageID,
+               let msgID = UUID(uuidString: msgIDString) {
+                let alreadyExists = messages.contains(where: { $0.id == msgID })
+                if !alreadyExists {
+                    let userMsg = Message(id: msgID, role: .user, text: text)
+                    messages.append(userMsg)
+                }
+            }
         case .assistantChunk:
             if let text = envelope.payload?.text,
                let msgIDString = envelope.payload?.messageID,

@@ -413,6 +413,13 @@ struct ChatHost: View {
                     },
                     onAssistantComplete: { text, messageID in
                         Task { await remoteHost.sendAssistantMessage(text, messageID: messageID) }
+                    },
+                    onUserMessage: { text, messageID in
+                        // Sprint 33 (v0.2.59): Mac user mesajı iOS'a yansıt.
+                        // ChatView incomingRemoteText path'ından gelen iOS-
+                        // originated mesajlar broadcastToRemote=false ile bunu
+                        // tetiklemez (loop önleme).
+                        Task { await remoteHost.sendUserMessage(text, messageID: messageID) }
                     }
                 )
                 // Backend veya model değişiminde ChatViewModel @StateObject

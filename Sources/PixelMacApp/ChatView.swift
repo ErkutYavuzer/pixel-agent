@@ -22,14 +22,16 @@ struct ChatView: View {
         incomingRemoteText: Binding<String?>,
         planMode: Bool = false,
         onAssistantChunk: ((String, String) -> Void)? = nil,
-        onAssistantComplete: ((String, String) -> Void)? = nil
+        onAssistantComplete: ((String, String) -> Void)? = nil,
+        onUserMessage: ((String, String) -> Void)? = nil
     ) {
         _viewModel = StateObject(
             wrappedValue: ChatViewModel(
                 backend: backend,
                 conversationStore: conversationStore,
                 onAssistantChunk: onAssistantChunk,
-                onAssistantComplete: onAssistantComplete
+                onAssistantComplete: onAssistantComplete,
+                onUserMessage: onUserMessage
             )
         )
         self.subagentManager = subagentManager
@@ -79,7 +81,9 @@ struct ChatView: View {
         }
         .onChange(of: incomingRemoteText) { _, newValue in
             guard let text = newValue, !text.isEmpty, !viewModel.isStreaming else { return }
-            viewModel.send(text: text)
+            // Sprint 33 (v0.2.59): iOS-originated user mesajı — iOS zaten kendi
+            // messages array'inde tutuyor; Mac echo'su iOS'ta duplicate olmasın.
+            viewModel.send(text: text, broadcastToRemote: false)
             incomingRemoteText = nil
         }
     }

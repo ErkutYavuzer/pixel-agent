@@ -26,6 +26,11 @@ final class ChatViewModel: ObservableObject {
     let conversationStore: ConversationStore
     var onAssistantChunk: ((String, String) -> Void)?
     var onAssistantComplete: ((String, String) -> Void)?
+    /// **Sprint 33 (v0.2.59):** Mac user mesajı iOS'a yansıması için callback.
+    /// `send(text:broadcastToRemote:)` `broadcastToRemote == true` iken çağrılır.
+    /// iOS-originated mesajların (incomingRemoteText path) iOS'a tekrar
+    /// gönderilmemesi için flag'le kapatılabilir.
+    var onUserMessage: ((String, String) -> Void)?
 
     private var streamTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
@@ -39,12 +44,14 @@ final class ChatViewModel: ObservableObject {
         backend: any ChatBackend,
         conversationStore: ConversationStore,
         onAssistantChunk: ((String, String) -> Void)? = nil,
-        onAssistantComplete: ((String, String) -> Void)? = nil
+        onAssistantComplete: ((String, String) -> Void)? = nil,
+        onUserMessage: ((String, String) -> Void)? = nil
     ) {
         self.backend = backend
         self.conversationStore = conversationStore
         self.onAssistantChunk = onAssistantChunk
         self.onAssistantComplete = onAssistantComplete
+        self.onUserMessage = onUserMessage
     }
 
     func restoreIfNeeded() async {
@@ -105,12 +112,21 @@ final class ChatViewModel: ObservableObject {
         Task { try? await store.newConversation() }
     }
 
-    func send(text: String) {
+    /// **Sprint 33 (v0.2.59):** `broadcastToRemote` flag eklendi — iOS-
+    /// originated mesajlar (`ChatView.incomingRemoteText` path'ı) tekrar
+    /// iOS'a echo edilmesin. Default true: Mac kullanıcısı composer'a
+    /// yazıp gönderdiyse iOS'a yansıt.
+    func send(text: String, broadcastToRemote: Bool = true) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !isStreaming else { return }
 
         let userMsg = Message(role: .user, text: trimmed)
         messages.append(userMsg)
+
+        // Sprint 33: iOS'a user mesajını yansıt.
+        if broadcastToRemote {
+            onUserMessage?(trimmed, userMsg.id.uuidString)
+        }
 
         let assistantMsg = Message(role: .assistant, text: "")
         messages.append(assistantMsg)

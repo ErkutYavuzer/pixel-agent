@@ -243,6 +243,21 @@ public final class RemoteHost: ObservableObject {
         }
     }
 
+    /// **Sprint 33 (v0.2.59):** Mac kullanıcısı composer'a yazıp gönderdiğinde
+    /// mesajı iOS'a da yansıt. iOS handle .userMessage UUID dedup ile aynı
+    /// id'yi tekrar append etmez (iOS-originated mesajlar Mac echo'sunda
+    /// filtrelenir).
+    public func sendUserMessage(_ text: String, messageID: String) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.userMessage(text: text, messageID: messageID)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "User mesajı gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     /// **Sprint 23 (v0.2.48):** `screenshotWireLatencyMs` opsiyonel param
     /// eklendi — iOS Mac Paneli wire latency rozet için.
     public func sendHostStatus(
