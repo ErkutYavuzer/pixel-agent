@@ -10,9 +10,39 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): `hostStatus` delta-only push.
-- v0.2.40 follow-up: Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune); cancellation upstream (iOS disconnect → Mac coordinator auto-stop).
+- v0.2.40 follow-up (kalan): Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune).
 - v0.2.41 follow-up: Per-turn streaming UI (şu an her turn'ün sonuçları finalize sonrası görünür; live chunk akışı yok).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.42] — 2026-05-25
+
+**Stream cancellation upstream — Sprint 15 follow-up.** v0.2.40'ta iniş yapan continuous screenshot stream'in bilinen kısıtı: iOS disconnect olduğunda Mac coordinator task'i ~1 interval gecikmeli stop oluyordu (transport.send fail loop iterasyonunda çıkıyordu). v0.2.42 bunu **single source of truth** ile çözüyor: ChatHost `.onChange(of: remoteHost.isConnected)` handler'ı disconnect anında `screenshotStream.stop()` çağırır → immediate cancel.
+
+**Test:** Mac 811 → **820** (+9 ScreenshotStreamCoordinatorTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
+### Fixed — Sprint 17 / Stream cancellation upstream
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **`.onChange(of: remoteHost.isConnected)`** yeni handler — RemoteHost
+  transport disconnect olunca (iOS uygulamada arka plan, network kopma,
+  manuel disconnect) `screenshotStream.stop()` çağrısı. Önceki davranış:
+  send fail loop iterasyonunda ~1 interval gecikme; yeni: immediate
+  cancel.
+- Guard: `isActive` check ile no-op stop çağrısı önlenir (UI feedback
+  spam'ini engeller — disconnect zaten beklenen event).
+
+### Tests (+9)
+- `Tests/PixelMacAppTests/ScreenshotStreamCoordinatorTests.swift` (yeni,
+  9 test):
+  * Initial state: isActive false, intervalMs 1000 default.
+  * Start sets isActive true; stop sets false.
+  * Stop idempotent (never started + double stop no-op).
+  * Re-start cancels previous (state change observed).
+  * Interval clamping: below min 50→250, above max 99999→5000, valid 2500
+    unchanged.
+  * **Sprint 17:** `testStopImmediatelyTransitionsIsActive` — stop'un
+    syncron olarak isActive false yapması (ChatHost.onChange handler için
+    immediate UI update kontratı).
 
 ## [0.2.41] — 2026-05-25
 
