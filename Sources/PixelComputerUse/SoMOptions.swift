@@ -103,4 +103,12 @@ public enum BadgePlacement: String, Sendable, Equatable, Codable {
     /// her element için role'den concrete placement türetir; sonra image
     /// bounds clamping mevcut pattern.
     case labelAware
+    /// **Faz 5c (v0.2.51):** OCR-based content-aware konum. `Vision` framework
+    /// ile screenshot'taki tüm text bounding box'ları çıkarılır, her element
+    /// için 4 köşe adayı arasından **text ile en az çakışan** seçilir. AX
+    /// heuristic'in pratik limiti aşıldığında (özel layout'lar, custom
+    /// widget'lar) badge gerçek metin alanlarını örtmez. `ScreenshotCapture`
+    /// upfront OCR çağırır; SoMRenderer detected text regions ile çalışır.
+    /// OCR başarısız veya text yoksa `.labelAware` fallback.
+    case contentAware
 }

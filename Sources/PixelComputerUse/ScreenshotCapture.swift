@@ -74,15 +74,26 @@ public enum ScreenshotCapture {
         }
 
         // **Faz 4 (ADR-0031):** `elements` doluysa Set-of-Mark overlay çiz.
+        // **Faz 5c (v0.2.51):** Eğer `options.badgePlacement == .contentAware`
+        // ise OCR upfront — text region'larını çıkar, SoMRenderer'a passla.
+        // OCR async; başarısız olursa boş array (SoMRenderer .labelAware
+        // fallback'ine düşer).
         let finalImage: CGImage
         let marks: [SoMMark]
         if !elements.isEmpty {
+            let textRegions: [CGRect]
+            if options.badgePlacement == .contentAware {
+                textRegions = await OCRTextDetector.detectTextRegions(in: croppedImage)
+            } else {
+                textRegions = []
+            }
             let (annotated, generated) = try SoMRenderer.annotate(
                 image: croppedImage,
                 elements: elements,
                 imageScreenOrigin: croppedLogicalFrame.origin,
                 imageLogicalSize: croppedLogicalFrame.size,
-                options: options
+                options: options,
+                textRegions: textRegions
             )
             finalImage = annotated
             marks = generated

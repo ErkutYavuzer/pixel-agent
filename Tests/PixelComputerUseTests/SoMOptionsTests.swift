@@ -77,10 +77,23 @@ final class SoMOptionsTests: XCTestCase {
     // MARK: - BadgePlacement enum
 
     func testBadgePlacementCodableRoundTrip() throws {
-        for placement: BadgePlacement in [.topLeftInside, .topLeftOutside, .topRightInside, .topRightOutside, .smartCorner] {
+        // Sprint 26 (v0.2.51): .contentAware case eklendi.
+        for placement: BadgePlacement in [
+            .topLeftInside, .topLeftOutside, .topRightInside, .topRightOutside,
+            .smartCorner, .labelAware, .contentAware
+        ] {
             let data = try JSONEncoder().encode(placement)
             let decoded = try JSONDecoder().decode(BadgePlacement.self, from: data)
             XCTAssertEqual(decoded, placement)
         }
+    }
+
+    func testBadgePlacementContentAwareRawValue() {
+        XCTAssertEqual(BadgePlacement.contentAware.rawValue, "contentAware")
+    }
+
+    func testSoMOptionsAcceptsContentAware() {
+        let options = SoMOptions(badgePlacement: .contentAware)
+        XCTAssertEqual(options.badgePlacement, .contentAware)
     }
 }

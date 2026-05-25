@@ -38,6 +38,12 @@ enum SoMRenderer {
     /// - `options`: **Faz 5 (v0.2.38):** Görselleştirme parametreleri — palette,
     ///   outline/badge boyutları, badge placement strategy. `.default` eski
     ///   hardcoded davranışla aynı.
+    /// - `textRegions`: **Faz 5c (v0.2.51):** Image üzerindeki OCR text
+    ///   bounding box'ları (pixel coords, top-left origin). Yalnızca
+    ///   `options.badgePlacement == .contentAware` ise kullanılır. Boş veya
+    ///   nil verilirse `.contentAware` `.labelAware`'a fallback yapar.
+    ///   Caller (ScreenshotCapture) `OCRTextDetector.detectTextRegions` ile
+    ///   önceden hesaplar; SoMRenderer saf-sync kalır.
     /// - Returns: `(annotated CGImage, [SoMMark] in 1-bazlı ID sırasıyla)`.
     ///   Off-screen element'ler atlanır → `marks.count` ≤ `elements.count`.
     static func annotate(
@@ -45,7 +51,8 @@ enum SoMRenderer {
         elements: [UIElement],
         imageScreenOrigin: CGPoint,
         imageLogicalSize: CGSize,
-        options: SoMOptions = .default
+        options: SoMOptions = .default,
+        textRegions: [CGRect] = []
     ) throws -> (CGImage, [SoMMark]) {
         #if canImport(CoreGraphics) && canImport(AppKit)
         let width = image.width
@@ -128,9 +135,17 @@ enum SoMRenderer {
             // placement türetilir (button → topRightOutside, link → topRightInside,
             // vs.). BadgeLayout saf math helper kaldığı için role lookup'ı
             // burada yapılır.
-            let resolvedPlacement: BadgePlacement = (options.badgePlacement == .labelAware)
-                ? LabelAwarePlacementResolver.placement(for: mark.element.role)
-                : options.badgePlacement
+            // **Faz 5c (v0.2.51):** `.contentAware` ise textRegions ile
+            // OCRBadgePlacement.bestPlacement; textRegions boşsa veya hiç
+            // valid candidate yoksa `.labelAware` fallback'i.
+            let resolvedPlacement: BadgePlacement = resolvePlacement(
+                requested: options.badgePlacement,
+                elementRect: rect,
+                badgeSize: badgeSize,
+                imagePixelSize: pixelSize,
+                element: mark.element,
+                textRegions: textRegions
+            )
             guard let badgeRect = BadgeLayout.computeBadgeRect(
                 elementRect: rect,
                 badgeSize: badgeSize,
@@ -162,5 +177,40 @@ enum SoMRenderer {
         #else
         throw ComputerUseError.unsupported(reason: "SoM rendering yalnızca macOS'ta")
         #endif
+    }
+
+    /// **Faz 5c (v0.2.51):** Badge placement strategy resolver. Per-element
+    /// concrete placement döner — `.contentAware` ise text-aware scoring;
+    /// `.labelAware` ise AX role lookup; aksi halde request'i direkt kullan.
+    ///
+    /// `.contentAware` text region veya valid candidate bulamazsa
+    /// `.labelAware` fallback'ine düşer (graceful degradation).
+    static func resolvePlacement(
+        requested: BadgePlacement,
+        elementRect: CGRect,
+        badgeSize: CGFloat,
+        imagePixelSize: CGSize,
+        element: UIElement,
+        textRegions: [CGRect]
+    ) -> BadgePlacement {
+        switch requested {
+        case .contentAware:
+            // OCR text region listesi boş veya scoring sonucu yoksa labelAware
+            // fallback. labelAware da concrete (4 köşeden biri) döner.
+            if !textRegions.isEmpty,
+               let best = OCRBadgePlacement.bestPlacement(
+                   elementRect: elementRect,
+                   badgeSize: badgeSize,
+                   imagePixelSize: imagePixelSize,
+                   textRegions: textRegions
+               ) {
+                return best
+            }
+            return LabelAwarePlacementResolver.placement(for: element.role)
+        case .labelAware:
+            return LabelAwarePlacementResolver.placement(for: element.role)
+        default:
+            return requested
+        }
     }
 }
