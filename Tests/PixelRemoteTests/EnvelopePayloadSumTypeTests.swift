@@ -302,4 +302,60 @@ final class EnvelopePayloadSumTypeTests: XCTestCase {
         XCTAssertNil(payload?["editedTags"])
         XCTAssertNil(payload?["renameClearsTitle"])
     }
+
+    // MARK: - Sprint 15 (v0.2.40): screenshotStream envelope'ları
+
+    func testScreenshotStreamStartRoundTrip() throws {
+        let original = RemoteEnvelope.screenshotStreamStart(intervalMs: 500)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.type, .screenshotStreamStart)
+        guard case .screenshotStreamStart(let ms) = decoded.payload else {
+            XCTFail("expected .screenshotStreamStart")
+            return
+        }
+        XCTAssertEqual(ms, 500)
+    }
+
+    func testScreenshotStreamStartIntervalClampedOnDecode() throws {
+        // Encoder raw değeri yazar; decoder clamp eder (250-5000).
+        // Manuel JSON ile clamp testi.
+        let belowMin = """
+        {"v":2,"id":"x","ts":1,"type":"screenshotStreamStart","payload":{"streamIntervalMs":50}}
+        """.data(using: .utf8)!
+        let env = try JSONDecoder().decode(RemoteEnvelope.self, from: belowMin)
+        XCTAssertEqual(env.payload?.streamIntervalMs, 250)
+
+        let aboveMax = """
+        {"v":2,"id":"x","ts":1,"type":"screenshotStreamStart","payload":{"streamIntervalMs":99999}}
+        """.data(using: .utf8)!
+        let env2 = try JSONDecoder().decode(RemoteEnvelope.self, from: aboveMax)
+        XCTAssertEqual(env2.payload?.streamIntervalMs, 5000)
+    }
+
+    func testScreenshotStreamStartDefaultIntervalWhenMissing() throws {
+        // Field hiç yoksa 1000 default.
+        let raw = """
+        {"v":2,"id":"x","ts":1,"type":"screenshotStreamStart","payload":{}}
+        """.data(using: .utf8)!
+        let env = try JSONDecoder().decode(RemoteEnvelope.self, from: raw)
+        XCTAssertEqual(env.payload?.streamIntervalMs, 1000)
+    }
+
+    func testScreenshotStreamStopHasNoPayload() throws {
+        let original = RemoteEnvelope.screenshotStreamStop()
+        XCTAssertNil(original.payload)
+        let data = try JSONEncoder().encode(original)
+        let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNil(dict?["payload"])
+
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.type, .screenshotStreamStop)
+        XCTAssertNil(decoded.payload)
+    }
+
+    func testStreamIntervalMsGetterForUnrelatedCasesNil() {
+        XCTAssertNil(RemoteEnvelope.ping().payload?.streamIntervalMs)
+        XCTAssertNil(RemoteEnvelope.archiveDelete(archiveID: "x").payload?.streamIntervalMs)
+    }
 }

@@ -465,6 +465,35 @@ struct MacPanelDashboardSection: View {
                         Text("Ekran Resmi")
                             .font(.headline)
                         Spacer()
+                        // Sprint 15 (v0.2.40): Continuous stream toggle.
+                        // Aktifken Mac her 1s'de screenshot push'lar; "Resim Al"
+                        // buton tek-shot için kalır (stream off iken çalışır).
+                        Button {
+                            Task {
+                                if session.isStreamingScreenshots {
+                                    await session.stopScreenshotStream()
+                                } else {
+                                    await session.startScreenshotStream(intervalMs: 1000)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: session.isStreamingScreenshots
+                                      ? "stop.circle.fill"
+                                      : "play.circle.fill")
+                                Text(session.isStreamingScreenshots ? "Durdur" : "Canlı")
+                            }
+                            .font(.caption.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                session.isStreamingScreenshots ? Color.red : Color.green,
+                                in: Capsule()
+                            )
+                        }
+                        .disabled(!session.isConnected)
+
                         Button(action: {
                             Task { await session.requestScreenshot() }
                         }) {
@@ -475,6 +504,7 @@ struct MacPanelDashboardSection: View {
                                 .padding(.vertical, 6)
                                 .background(Color.purple, in: Capsule())
                         }
+                        .disabled(session.isStreamingScreenshots)
                     }
                     
                     if let image = session.latestScreenshot {

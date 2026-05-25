@@ -181,6 +181,8 @@ struct ChatHost: View {
     @State private var configToastDismissTask: Task<Void, Never>?
     @StateObject private var remoteHost: RemoteHost
     @StateObject private var subagentManager: SubagentManager
+    /// Sprint 15 (v0.2.40): iOS continuous screenshot stream task management.
+    @StateObject private var screenshotStream = ScreenshotStreamCoordinator()
 
     /// **v0.2.22:** Model seçimi UserDefaults'a yazılır; boş ise
     /// `CLIBackend.defaultModelID` (env > hardcoded) devreye girer.
@@ -690,6 +692,21 @@ struct ChatHost: View {
             remoteHost.onArchiveDeleteRequested = { idString in
                 guard let url = URL(string: idString) else { return }
                 try? ConversationStore.deleteArchive(at: url)
+            }
+
+            // Sprint 15 (v0.2.40): iOS screenshot stream handler'ları.
+            // Start: coordinator task spawn'lar; her frame için sendScreenshot.
+            // Stop: task cancel + isActive false. Inner closure'ya strong
+            // `host` let snapshot — Swift 6 concurrent capture sending uyumu
+            // ('weak var' captured-in-concurrent-closure hatasından kaçınır).
+            remoteHost.onScreenshotStreamStartRequested = { intervalMs in
+                let host = remoteHost
+                self.screenshotStream.start(intervalMs: intervalMs) { base64 in
+                    await host.sendScreenshot(base64Image: base64)
+                }
+            }
+            remoteHost.onScreenshotStreamStopRequested = {
+                self.screenshotStream.stop()
             }
 
             remoteHost.onClientConfigReceived = { backend, model, plan in

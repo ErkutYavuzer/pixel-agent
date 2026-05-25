@@ -36,6 +36,13 @@ public enum EnvelopeType: String, Sendable, CaseIterable {
     /// JSONL dosyası + sidecar (title + tags) kaldırılır. Mac otomatik
     /// `archiveListResponse` ile güncel liste döner.
     case archiveDelete
+    /// **Sprint 15 (v0.2.40):** iOS → Mac, periyodik screenshot stream
+    /// başlat. Payload `streamIntervalMs` taşır (250-5000 ms arası).
+    /// Mac her interval'da `screenshotPayload` push'lar.
+    case screenshotStreamStart
+    /// **Sprint 15 (v0.2.40):** iOS → Mac, aktif stream'i durdur. Payload
+    /// boş. Mac task'i cancel eder, push akışı biter.
+    case screenshotStreamStop
     /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
     /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
     /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
@@ -211,6 +218,9 @@ public enum EnvelopePayload: Sendable, Equatable {
     /// Sprint 12 (v0.2.37): iOS → Mac mutation. Arşivi kalıcı olarak sil
     /// (JSONL + sidecar). Mac handler `ConversationStore.deleteArchive` çağırır.
     case archiveDelete(archiveID: String)
+    /// Sprint 15 (v0.2.40): iOS → Mac, screenshot stream başlat.
+    /// `intervalMs` 250-5000 arası clamp edilir.
+    case screenshotStreamStart(intervalMs: Int)
 }
 
 // MARK: - Backward-compat field getters
@@ -350,6 +360,12 @@ extension EnvelopePayload {
         }
     }
 
+    /// Sprint 15 (v0.2.40): `screenshotStreamStart` interval getter (ms).
+    public var streamIntervalMs: Int? {
+        if case .screenshotStreamStart(let ms) = self { return ms }
+        return nil
+    }
+
     /// Sprint 10: `archiveRename` payload'unda yeni başlık (nil → sıfırla).
     public var renameNewTitle: String? {
         if case .archiveRename(_, let title) = self { return title }
@@ -386,6 +402,8 @@ private enum PayloadKey: String, CodingKey {
     /// hep field encode edip null değer atayarak yapılmalı). Bu key true
     /// → kullanıcı bilerek "title kaldır" diyor demektir.
     case renameClearsTitle
+    /// Sprint 15 (v0.2.40): screenshot stream interval (ms).
+    case streamIntervalMs
 }
 
 extension EnvelopePayload {
@@ -494,7 +512,13 @@ extension EnvelopePayload {
             let id = try c.decodeIfPresent(String.self, forKey: .mutationArchiveID) ?? ""
             return .archiveDelete(archiveID: id)
 
-        case .ping, .ready, .archiveListRequest, .unknown:
+        case .screenshotStreamStart:
+            // Default 1000ms; clamp 250-5000 ms (sub-250ms aşırı yük, >5s anlamsız).
+            let raw = try c.decodeIfPresent(Int.self, forKey: .streamIntervalMs) ?? 1000
+            let clamped = max(250, min(5000, raw))
+            return .screenshotStreamStart(intervalMs: clamped)
+
+        case .ping, .ready, .archiveListRequest, .screenshotStreamStop, .unknown:
             // Empty payload type'lar — nil dönmeli (RemoteEnvelope.payload = nil).
             return nil
         }
@@ -580,6 +604,9 @@ extension EnvelopePayload {
 
         case .archiveDelete(let id):
             try c.encode(id, forKey: .mutationArchiveID)
+
+        case .screenshotStreamStart(let intervalMs):
+            try c.encode(intervalMs, forKey: .streamIntervalMs)
         }
     }
 }
@@ -725,6 +752,22 @@ extension RemoteEnvelope {
             type: .archiveDelete,
             payload: .archiveDelete(archiveID: archiveID)
         )
+    }
+
+    /// Sprint 15 (v0.2.40): iOS → Mac. Periyodik screenshot stream başlat.
+    /// `intervalMs` 250-5000 arası clamp edilir (sub-250 aşırı yük, >5s anlamsız).
+    /// Mac her interval'da `screenshotPayload` envelope push'lar.
+    public static func screenshotStreamStart(intervalMs: Int = 1000) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .screenshotStreamStart,
+            payload: .screenshotStreamStart(intervalMs: intervalMs)
+        )
+    }
+
+    /// Sprint 15 (v0.2.40): iOS → Mac. Aktif screenshot stream'i durdur.
+    /// Payload yok.
+    public static func screenshotStreamStop() -> RemoteEnvelope {
+        RemoteEnvelope(type: .screenshotStreamStop)
     }
 
     /// Handshake'in ilk envelope'u: gönderen tarafın public key'ini taşır.

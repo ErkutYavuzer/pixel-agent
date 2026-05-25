@@ -76,6 +76,10 @@ final class RemoteSession: ObservableObject {
     /// (TimelineView). nil → şu an deneme yapılmıyor (loop bekleme arası
     /// veya bağlantı aktif).
     @Published var nextReconnectAt: Date? = nil
+    /// **Sprint 15 (v0.2.40):** Continuous screenshot stream aktif mi.
+    /// UI toggle bu state'i `startScreenshotStream` / `stopScreenshotStream`
+    /// ile değiştirir; Mac side bağımsız state tutar, iOS optimistic.
+    @Published var isStreamingScreenshots: Bool = false
 
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
@@ -127,6 +131,10 @@ final class RemoteSession: ObservableObject {
         // Sprint 11 (A): Successful connection veya manual disconnect →
         // pending countdown bitsin (banner clean state).
         nextReconnectAt = nil
+        // Sprint 15 (v0.2.40): Stream state temizle — disconnect sonrası
+        // Mac side coordinator zaten task'i cancel eder (transport down),
+        // iOS UI'da "Live" toggle otomatik off görünmeli.
+        isStreamingScreenshots = false
     }
 
     func connect(pairing: PairingInfo) async {
@@ -321,6 +329,40 @@ final class RemoteSession: ObservableObject {
             try await transport.send(signed)
         } catch {
             lastError = "Arşiv silme isteği gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
+    /// **Sprint 15 (v0.2.40):** iOS → Mac. Continuous screenshot stream
+    /// başlat. Mac her `intervalMs`'de bir screenshot çekip
+    /// `screenshotPayload` envelope push'lar; `latestScreenshot` her tick'te
+    /// güncellenir. UI toggle aktiflerken bu çağrı yapılır, `isStreaming-
+    /// Screenshots` optimistic true set'lenir.
+    ///
+    /// `intervalMs` 250-5000 arası clamp edilir (envelope decoder + Mac
+    /// coordinator). Default 1000ms (1Hz, bandwidth-friendly).
+    func startScreenshotStream(intervalMs: Int = 1000) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.screenshotStreamStart(intervalMs: intervalMs)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+            isStreamingScreenshots = true
+        } catch {
+            lastError = "Screenshot stream başlatılamadı: \(error.localizedDescription)"
+        }
+    }
+
+    /// **Sprint 15 (v0.2.40):** iOS → Mac. Aktif stream'i durdur. Mac
+    /// coordinator task'i cancel eder, push akışı biter.
+    func stopScreenshotStream() async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.screenshotStreamStop()
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+            isStreamingScreenshots = false
+        } catch {
+            lastError = "Screenshot stream durdurulamadı: \(error.localizedDescription)"
         }
     }
 

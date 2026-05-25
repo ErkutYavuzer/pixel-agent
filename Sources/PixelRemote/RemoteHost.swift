@@ -32,6 +32,13 @@ public final class RemoteHost: ObservableObject {
     /// **Sprint 12 (v0.2.37):** iOS bir arşivi kalıcı olarak silmek istediğinde
     /// çağrılır. Caller `ConversationStore.deleteArchive` çağırmalı.
     public var onArchiveDeleteRequested: ((_ id: String) async -> Void)?
+    /// **Sprint 15 (v0.2.40):** iOS continuous screenshot stream başlat
+    /// istediğinde çağrılır. Caller her interval'da `sendScreenshot`'a
+    /// görüntü push'lamalı (Task management caller responsibility).
+    public var onScreenshotStreamStartRequested: ((_ intervalMs: Int) async -> Void)?
+    /// **Sprint 15 (v0.2.40):** iOS aktif stream'i durdurmak istediğinde
+    /// çağrılır. Caller varsa aktif task'i cancel etmeli.
+    public var onScreenshotStreamStopRequested: (() async -> Void)?
 
     public var relayURL: String
 
@@ -391,6 +398,21 @@ public final class RemoteHost: ObservableObject {
                         await self.sendArchiveListResponse(entries: entries)
                     }
                 }
+            }
+        case .screenshotStreamStart:
+            // Sprint 15 (v0.2.40): iOS stream başlat isteği.
+            let intervalMs = envelope.payload?.streamIntervalMs ?? 1000
+            Task { [weak self] in
+                guard let self else { return }
+                guard let startHandler = await self.onScreenshotStreamStartRequested else { return }
+                await startHandler(intervalMs)
+            }
+        case .screenshotStreamStop:
+            // Sprint 15 (v0.2.40): iOS stream durdurma isteği.
+            Task { [weak self] in
+                guard let self else { return }
+                guard let stopHandler = await self.onScreenshotStreamStopRequested else { return }
+                await stopHandler()
             }
         default:
             break
