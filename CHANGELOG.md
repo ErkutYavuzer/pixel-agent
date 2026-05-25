@@ -12,6 +12,41 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2.45 follow-up: OCR-based badge placement (Vision framework — text bounding box detection; AX label-aware heuristic'in pratik limiti aşıldığında).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 
+## [0.2.50] — 2026-05-25
+
+**Wire latency timeline grafiği — Sprint 24 follow-up.** v0.2.49 per-frame latency embed ile iOS badge ~1Hz spot değer gösteriyordu — ancak spike'lar görsel olarak yakalanamıyordu. v0.2.50 son 20 frame'in (~20 sn @ 1Hz) latency trendini **inline sparkline** olarak badge'in yanında çizer. Saf normalize helper (`LatencySparkline.points`) min-max auto-scaling + uniform x spacing + defensive edge case'ler (boş, tek nokta, tüm eşit). View katmanı SwiftUI `Path` + `GeometryReader` ile çizer.
+
+**Test:** Mac 883 → **897** (+14 LatencySparkline: empty/single/all-same edge cases, two-point min-max, monotonic, x spacing uniform, custom min-max bounds, y orientation, push ring buffer 5 case'i, NormalizedPoint Equatable). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni saf helper additive, yeni @Published field additive).
+
+### Added — Sprint 25 / Wire latency timeline grafiği
+
+#### `Sources/PixelRemote/LatencySparkline.swift` (yeni saf helper)
+- **`LatencySparkline`** enum static funcs:
+  - **`points(latencies:minLatency:maxLatency:) -> [NormalizedPoint]`** — 0-1 normalize koordinatlar. Empty → boş; tek nokta → (0.5, 0.5); tüm eşit → midline; çoklu → uniform x + linear y normalize. Custom bounds opsiyonel (sabit eşik istenirse).
+  - **`push(_:into:maxCount:)`** — ring buffer; append + maxCount'u aşan en eski entry'leri trim. Defensive maxCount=0 ve oversized buffer durumlarında doğru çalışır.
+- **`NormalizedPoint`** struct (x, y: Double; Sendable + Equatable) — 0-1 koordinat. View katmanı SwiftUI top-down için `1 - y` ile flip eder.
+- **Tasarım kararı:** SwiftUI/CoreGraphics bağımlılığı yok — saf math. View katmanı `proxy.size` ile çarpıp `CGPoint`'e çevirir.
+
+#### `ios/PixelAgentRemote/RemoteSession.swift`
+- **`@Published var wireLatencyHistory: [Int] = []`** yeni field.
+- **`Self.wireLatencyHistoryMax = 20`** static sabit (~20 sn @ 1Hz).
+- **`.screenshotPayload`** handler: latency varsa `LatencySparkline.push` ile ring buffer'a append.
+- **`stopScreenshotStream`** ek olarak `wireLatencyHistory.removeAll()` — bir sonraki başlangıçta sparkline boş başlasın.
+
+#### `ios/PixelAgentRemote/WireLatencySparklineView.swift` (yeni)
+- **`WireLatencySparklineView`** SwiftUI `Path` + `GeometryReader`. `LatencySparkline.points` normalize koordinatları + `proxy.size` ile çarpım + Y flip. `StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)`. Accessibility label "Latency trend grafiği".
+
+#### `ios/PixelAgentRemote/ChatView.swift` (Mac Paneli "Ekran Resmi" badge)
+- Wire latency capsule içine **inline `WireLatencySparklineView`** (80×16 frame) eklendi — badge'in renk eşiğiyle aynı renkte stroke. Trend grafiği "Ağ: X ms" metninin sağında.
+
+### Tests
+- `Tests/PixelRemoteTests/LatencySparklineTests.swift` — **14 yeni**: edge cases (empty/single/all-same), normalize (two-point/monotonic/uniform-spacing), custom bounds, y orientation convention, ring buffer (push below/at/beyond max, oversized buffer trim, maxCount=0 defensive), NormalizedPoint Equatable.
+
+### Notes — Sprint 25
+- **Sparkline genişliği** sabit 80pt; kullanıcı tercihine açılabilir (v0.3 adayı). Yükseklik 16pt (caption typography'siyle uyumlu).
+- **Y konvansiyonu:** Helper y=0 alt, y=1 üst döner; SwiftUI top-down (y=0 üst) için view katmanı `1 - y` flip eder — düşük latency aşağıda, yüksek latency yukarıda gözükür.
+- **Auto-scaling:** Default'ta sparkline'ın min/max'ı history içindeki değerlere göre — küçük varyasyonlar görsel olarak büyütülür. Caller sabit eşik istiyorsa `minLatency`/`maxLatency` parametreleri ile override edebilir.
+
 ## [0.2.49] — 2026-05-25
 
 **Per-frame wire latency embed — Sprint 23 follow-up.** v0.2.48 wire latency badge'i `hostStatusDelta` 3 sn periyodik push'una bağlıydı — kullanıcı interval ortasında bir spike görse 3 sn beklerdi. v0.2.49 Mac coordinator önceki frame'in ACK round-trip ölçümünü her `screenshotPayload` envelope'una **embed eder**; iOS Mac Paneli badge stream rate'inde (~1Hz, kullanıcı tercihine göre 250 ms-5 sn) güncellenir. hostStatus path fallback kalır (eski Mac'ler için).

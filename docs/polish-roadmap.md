@@ -362,6 +362,19 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 24 tamamlandı — Per-frame wire latency embed.** Sprint 23'ün 3 sn hostStatus delta lag'i giderildi. Mac coordinator her `screenshotPayload` envelope'una önceki frame'in ACK round-trip ölçümünü embed eder; iOS Mac Paneli badge stream rate'inde (~1Hz default) güncellenir. hostStatus path fallback olarak kalır (eski Mac uyumu için). Mac test 880 → 883 (+3 EnvelopePayloadSumType: round-trip, getter cross-case, frameID/latency independence). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (additive opsiyonel field). Bandwidth: per-frame ~10 byte ek — ihmal edilebilir.
 
+## Sprint 25 — "Wire latency timeline grafiği" (v0.2.50)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | saf helper | `LatencySparkline.points` (0-1 normalize) + `push` (ring buffer); SwiftUI bağımsız |
+| ✅ | iOS state | `@Published wireLatencyHistory: [Int]` ring buffer, max 20 frame |
+| ✅ | iOS view | `WireLatencySparklineView` SwiftUI Path + GeometryReader, badge yanında 80×16 inline |
+| ✅ | iOS wire | `.screenshotPayload` handler `LatencySparkline.push`; stopScreenshotStream removeAll |
+| ✅ | tests | 14 sparkline test: edge cases, normalize, ring buffer, NormalizedPoint Equatable |
+| ⏸ | v0.2.51+ | Sparkline genişliği user preference; OCR-based SoM badge placement (Sprint 20 follow-up); test isolation refactor |
+
+**25 May 2026: Sprint 25 tamamlandı — Wire latency timeline grafiği.** Sprint 24 spot değer (badge) yanına son 20 frame'in trendi inline sparkline olarak eklendi. Saf normalize helper (`Sources/PixelRemote/LatencySparkline.swift`) SwiftUI/CG bağımsız — view katmanı `proxy.size`'a çarpıp Y'yi flip eder. Mac test 883 → 897 (+14). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
