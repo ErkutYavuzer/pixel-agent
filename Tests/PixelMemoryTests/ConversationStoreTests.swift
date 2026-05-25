@@ -97,6 +97,69 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertNil(entries[0].customTitle)
     }
 
+    // MARK: - Sprint 7 (B2) — tags
+
+    func testSetTagsReflectsInListAllArchives() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-claude.jsonl")
+        try await store.append(Message(role: .user, text: "tagged"))
+        try await store.newConversation()
+
+        var entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertTrue(entries[0].tags.isEmpty)
+
+        try await store.setTags(["work", "important"], for: entries[0].id)
+        entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries[0].tags, ["work", "important"])
+    }
+
+    func testSetTagsStaticOverloadWorks() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-codex.jsonl")
+        try await store.append(Message(role: .user, text: "via static"))
+        try await store.newConversation()
+
+        let entries = try ConversationStore.listAllArchives(directory: testDir)
+        try ConversationStore.setTags(["x"], for: entries[0].id, directory: testDir)
+        let refreshed = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(refreshed[0].tags, ["x"])
+    }
+
+    func testSetTagsNilOrEmptyClears() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-gemini.jsonl")
+        try await store.append(Message(role: .user, text: "clear"))
+        try await store.newConversation()
+
+        var entries = try ConversationStore.listAllArchives(directory: testDir)
+        try await store.setTags(["a", "b"], for: entries[0].id)
+        try await store.setTags(nil, for: entries[0].id)
+        entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertTrue(entries[0].tags.isEmpty)
+
+        try await store.setTags(["a"], for: entries[0].id)
+        try await store.setTags([], for: entries[0].id)
+        entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertTrue(entries[0].tags.isEmpty)
+    }
+
+    func testListAllTagsReturnsUnion() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-claude.jsonl")
+        try await store.append(Message(role: .user, text: "first"))
+        try await store.newConversation()
+        try await Task.sleep(for: .milliseconds(50))
+        try await store.append(Message(role: .user, text: "second"))
+        try await store.newConversation()
+
+        let entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries.count, 2)
+        try await store.setTags(["work", "urgent"], for: entries[0].id)
+        try await store.setTags(["personal", "work"], for: entries[1].id)
+
+        XCTAssertEqual(
+            ConversationStore.listAllTags(directory: testDir),
+            ["personal", "urgent", "work"]
+        )
+    }
+
     func testListAllArchivesPreservesUntitledEntries() async throws {
         let store = try ConversationStore(directory: testDir, fileName: "conversation-claude.jsonl")
         try await store.append(Message(role: .user, text: "first"))

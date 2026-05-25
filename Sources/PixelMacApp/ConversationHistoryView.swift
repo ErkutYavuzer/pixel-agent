@@ -26,6 +26,12 @@ struct ConversationHistoryView: View {
     @State private var renameTarget: ArchivedConversationEntry?
     @State private var renameDraft: String = ""
 
+    /// Sprint 7 (B2): Tag sheet state + sidebar filter state.
+    @State private var editTagsTarget: ArchivedConversationEntry?
+    @State private var editTagsDraft: [String] = []
+    @State private var activeTagFilter: Set<String> = []
+    @State private var availableTags: [String] = []
+
     var body: some View {
         NavigationSplitView {
             sidebar
@@ -49,6 +55,16 @@ struct ConversationHistoryView: View {
                 onCancel: { renameTarget = nil }
             )
         }
+        .sheet(item: $editTagsTarget) { entry in
+            EditTagsSheet(
+                entry: entry,
+                draft: $editTagsDraft,
+                onCommit: {
+                    applyTags(for: entry, tags: editTagsDraft)
+                    editTagsTarget = nil
+                }
+            )
+        }
     }
 
     private func applyRename(for entry: ArchivedConversationEntry, title: String?) {
@@ -61,24 +77,47 @@ struct ConversationHistoryView: View {
         }
     }
 
+    private func applyTags(for entry: ArchivedConversationEntry, tags: [String]) {
+        let normalized = TagNormalizer.normalize(tags)
+        do {
+            try ConversationStore.setTags(normalized.isEmpty ? nil : normalized, for: entry.id)
+            Task { await reload() }
+        } catch {
+            loadError = "Etiket kaydedilirken hata: \(error.localizedDescription)"
+        }
+    }
+
+    /// Sidebar filter uygulanmış entry listesi (groupedByKind bunu kullanır).
+    private var filteredEntries: [ArchivedConversationEntry] {
+        TagFilter.apply(entries: entries, activeTags: activeTagFilter)
+    }
+
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        Group {
-            if entries.isEmpty && !isLoading {
-                emptyState
-            } else {
-                List(selection: $selectedID) {
-                    ForEach(groupedByKind, id: \.kind) { group in
-                        Section(header: Text(kindDisplayName(group.kind))) {
-                            ForEach(group.entries) { entry in
-                                row(for: entry)
-                                    .tag(entry.id)
+        VStack(spacing: 0) {
+            if !availableTags.isEmpty {
+                tagFilterBar
+                Divider()
+            }
+            Group {
+                if entries.isEmpty && !isLoading {
+                    emptyState
+                } else if filteredEntries.isEmpty {
+                    filteredEmptyState
+                } else {
+                    List(selection: $selectedID) {
+                        ForEach(groupedByKind, id: \.kind) { group in
+                            Section(header: Text(kindDisplayName(group.kind))) {
+                                ForEach(group.entries) { entry in
+                                    row(for: entry)
+                                        .tag(entry.id)
+                                }
                             }
                         }
                     }
+                    .listStyle(.sidebar)
                 }
-                .listStyle(.sidebar)
             }
         }
         .frame(minWidth: 260, idealWidth: 300)
@@ -100,6 +139,63 @@ struct ConversationHistoryView: View {
             }
             loadSelected(entry: entry)
         }
+    }
+
+    /// Sprint 7: Etiket filter chip bar (sidebar üstü). availableTags varsa görünür.
+    @ViewBuilder
+    private var tagFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(availableTags, id: \.self) { tag in
+                    let selected = activeTagFilter.contains(tag)
+                    Button {
+                        if selected { activeTagFilter.remove(tag) }
+                        else { activeTagFilter.insert(tag) }
+                    } label: {
+                        Text("#\(tag)")
+                            .font(.caption)
+                            .foregroundStyle(selected ? Color.white : .primary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        selected ? Color.purple : Color.purple.opacity(0.15),
+                        in: Capsule()
+                    )
+                }
+                if !activeTagFilter.isEmpty {
+                    Button {
+                        activeTagFilter = []
+                    } label: {
+                        Label("Temizle", systemImage: "xmark.circle")
+                            .labelStyle(.titleAndIcon)
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+        }
+    }
+
+    private var filteredEmptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "tag.slash")
+                .font(.system(size: 28))
+                .foregroundStyle(.secondary)
+            Text("Filtreyle eşleşen konuşma yok")
+                .font(.callout)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Button("Filtreyi temizle") { activeTagFilter = [] }
+                .controlSize(.small)
+        }
+        .padding(30)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {
@@ -140,6 +236,14 @@ struct ConversationHistoryView: View {
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
+
+            // Sprint 7: Tag inline line — kısa & truncated.
+            if !entry.tags.isEmpty {
+                Text(tagInlineSummary(entry.tags))
+                    .font(.caption2)
+                    .foregroundStyle(.purple.opacity(0.85))
+                    .lineLimit(1)
+            }
         }
         .padding(.vertical, 2)
         .contextMenu {
@@ -156,7 +260,30 @@ struct ConversationHistoryView: View {
                     Label("Başlığı sıfırla", systemImage: "arrow.uturn.backward")
                 }
             }
+            Divider()
+            Button {
+                editTagsDraft = entry.tags
+                editTagsTarget = entry
+            } label: {
+                Label("Etiketleri düzenle…", systemImage: "tag")
+            }
+            if !entry.tags.isEmpty {
+                Button(role: .destructive) {
+                    applyTags(for: entry, tags: [])
+                } label: {
+                    Label("Tüm etiketleri sıfırla", systemImage: "tag.slash")
+                }
+            }
         }
+    }
+
+    /// Sprint 7: Row'da gösterilen kısa tag özeti. İlk 3 tag + fazlası "+N" suffix.
+    nonisolated private func tagInlineSummary(_ tags: [String]) -> String {
+        let visible = tags.prefix(3).map { "#\($0)" }.joined(separator: " ")
+        if tags.count > 3 {
+            return "\(visible) +\(tags.count - 3)"
+        }
+        return visible
     }
 
     // MARK: - Detail (read-only message viewer)
@@ -254,6 +381,10 @@ struct ConversationHistoryView: View {
         defer { isLoading = false }
         do {
             entries = try ConversationStore.listAllArchives()
+            // Sprint 7: filter chip bar listesini güncelle.
+            availableTags = ConversationStore.listAllTags()
+            // Aktif filter'da artık var olmayan tag'leri at (silinmiş arşiv vb.).
+            activeTagFilter = activeTagFilter.intersection(Set(availableTags))
             // Auto-select first
             if selectedID == nil, let first = entries.first {
                 selectedID = first.id
@@ -261,6 +392,8 @@ struct ConversationHistoryView: View {
         } catch {
             loadError = "Arşiv listelenirken hata: \(error.localizedDescription)"
             entries = []
+            availableTags = []
+            activeTagFilter = []
         }
     }
 
@@ -293,7 +426,7 @@ struct ConversationHistoryView: View {
     }
 
     private var groupedByKind: [KindGroup] {
-        let byKind = Dictionary(grouping: entries, by: { $0.backendKind })
+        let byKind = Dictionary(grouping: filteredEntries, by: { $0.backendKind })
         // Sıra: Claude → Codex → Gemini → diğerleri alfabetik.
         let priorityOrder = ["claude", "codex", "gemini"]
         var groups: [KindGroup] = []

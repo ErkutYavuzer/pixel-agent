@@ -646,7 +646,8 @@ struct ChatHost: View {
                         archivedAt: entry.archivedAt.timeIntervalSince1970,
                         messageCount: entry.messageCount,
                         firstUserSnippet: entry.firstUserSnippet,
-                        customTitle: entry.customTitle
+                        customTitle: entry.customTitle,
+                        tags: entry.tags.isEmpty ? nil : entry.tags
                     )
                 }
             }

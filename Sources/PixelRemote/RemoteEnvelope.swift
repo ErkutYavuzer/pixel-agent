@@ -54,6 +54,10 @@ public struct ArchiveEntryPayload: Codable, Sendable, Equatable, Identifiable {
     /// iOS UI önce bunu, sonra `firstUserSnippet`'ı kullanır. Eski client'lar
     /// bu field'ı yok sayar (Codable opsiyonel — additive).
     public let customTitle: String?
+    /// Sprint 7 (B2): Mac'te kullanıcı verirse tag listesi (normalize:
+    /// lowercase, trim, dedup, sorted). Boş = etiket yok. Eski client'lar
+    /// bu field'ı yok sayar (Codable opsiyonel — additive).
+    public let tags: [String]?
 
     public init(
         id: String,
@@ -61,7 +65,8 @@ public struct ArchiveEntryPayload: Codable, Sendable, Equatable, Identifiable {
         archivedAt: Double,
         messageCount: Int,
         firstUserSnippet: String?,
-        customTitle: String? = nil
+        customTitle: String? = nil,
+        tags: [String]? = nil
     ) {
         self.id = id
         self.backendKind = backendKind
@@ -69,6 +74,7 @@ public struct ArchiveEntryPayload: Codable, Sendable, Equatable, Identifiable {
         self.messageCount = messageCount
         self.firstUserSnippet = firstUserSnippet
         self.customTitle = customTitle
+        self.tags = tags
     }
 }
 

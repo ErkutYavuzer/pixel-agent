@@ -130,6 +130,39 @@ public actor ConversationStore {
         )
     }
 
+    /// Sprint 7 (B2): Bir archived dosyaya tag listesi set/clear et.
+    /// Caller `TagNormalizer` ile sanitize etmeli (lowercase/trim/dedup).
+    /// Boş veya nil → sidecar'dan kaldırılır.
+    public func setTags(_ tags: [String]?, for url: URL) throws {
+        try ArchiveTagsStore.setTags(
+            tags,
+            for: url.lastPathComponent,
+            directory: archiveDirectory
+        )
+    }
+
+    /// Sprint 7 (B2): View'lar instance olmadan da tag edebilsin.
+    public nonisolated static func setTags(
+        _ tags: [String]?,
+        for url: URL,
+        directory: URL? = nil
+    ) throws {
+        let baseDir = directory ?? defaultDirectory()
+        let archiveDir = baseDir.appendingPathComponent("archive", isDirectory: true)
+        try ArchiveTagsStore.setTags(
+            tags,
+            for: url.lastPathComponent,
+            directory: archiveDir
+        )
+    }
+
+    /// Sprint 7 (B2): Tüm arşivlerin tag union'u (sidebar filter chip'leri için).
+    public nonisolated static func listAllTags(directory: URL? = nil) -> [String] {
+        let baseDir = directory ?? defaultDirectory()
+        let archiveDir = baseDir.appendingPathComponent("archive", isDirectory: true)
+        return ArchiveTagsStore.allTags(directory: archiveDir)
+    }
+
     /// B2: Belirli bir archived dosyadan mesajları oku. URL store'un kendi
     /// archive dizininde olmalı (defensive boundary değil — caller dikkat etsin).
     public func loadMessages(fromArchive url: URL) throws -> [Message] {
@@ -164,6 +197,8 @@ public actor ConversationStore {
 
         // Sprint 6 (B2): Sidecar titles dict'i bir kere yükle, loop'ta lookup et.
         let titles = ArchiveTitleStore.load(directory: archiveDir)
+        // Sprint 7 (B2): Tags sidecar'ı da bir kere yükle.
+        let tagsByFile = ArchiveTagsStore.load(directory: archiveDir)
 
         let decoder = JSONDecoder()
         var entries: [ArchivedConversationEntry] = []
@@ -188,7 +223,8 @@ public actor ConversationStore {
                 archivedAt: parsed.date,
                 messageCount: messages.count,
                 firstUserSnippet: ArchivedConversationParser.firstUserSnippet(messages: messages),
-                customTitle: titles[filename]
+                customTitle: titles[filename],
+                tags: tagsByFile[filename] ?? []
             )
             entries.append(entry)
         }

@@ -20,6 +20,9 @@ public struct ArchivedConversationEntry: Identifiable, Equatable, Sendable {
     /// Sprint 6 (B2): kullanıcı verirse `ArchiveTitleStore` sidecar'ından gelir;
     /// yoksa nil. UI önce bunu, sonra `firstUserSnippet`'ı, sonra "(başlıksız)" gösterir.
     public let customTitle: String?
+    /// Sprint 7 (B2): kullanıcı verirse `ArchiveTagsStore` sidecar'ından gelir
+    /// (normalize edilmiş: lowercase, trim, dedup, sorted). Boş = tag yok.
+    public let tags: [String]
 
     public init(
         id: URL,
@@ -27,7 +30,8 @@ public struct ArchivedConversationEntry: Identifiable, Equatable, Sendable {
         archivedAt: Date,
         messageCount: Int,
         firstUserSnippet: String?,
-        customTitle: String? = nil
+        customTitle: String? = nil,
+        tags: [String] = []
     ) {
         self.id = id
         self.backendKind = backendKind
@@ -35,6 +39,7 @@ public struct ArchivedConversationEntry: Identifiable, Equatable, Sendable {
         self.messageCount = messageCount
         self.firstUserSnippet = firstUserSnippet
         self.customTitle = customTitle
+        self.tags = tags
     }
 }
 
