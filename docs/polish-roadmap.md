@@ -167,6 +167,17 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 8 tamamlandı — EnvelopePayload sum-type.** v0.2.32'ye kadar 20 opsiyonel field'lı flat struct'tı; şimdi 15 case'lı sum type, derleyici hangi case'in hangi data taşıdığını biliyor. Wire format değişmedi (eski sürümler uyumlu). 15 yeni test (+15 EnvelopePayloadSumTypeTests). Caller migration zorunlu değil.
 
+## Sprint 9 — "iOS tag chip UI" (v0.2.34)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | iOS parity | IOSArchiveTitleResolver saf helper (Mac paraleli) |
+| ✅ | iOS row | customTitle fallback + rename rozet (pencil.circle.fill) |
+| ✅ | iOS row | Tag inline preview `#x #y #z +N` |
+| ✅ | iOS detail | Navigation title = display title, tag chip ScrollView |
+
+**25 May 2026: Sprint 9 tamamlandı — iOS visual parity.** v0.2.31 rename + v0.2.32 tag wire field'ları artık iOS UI'da görünür. **Read-only** — iOS'tan düzenleme v0.2.35+ adayı (`clientAction` envelope ile Mac'e dispatch edilebilir). iOS xcodebuild simulator BUILD SUCCEEDED.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

@@ -10,10 +10,54 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.32 follow-up: iOS UI'da tag görünümü (şu an wire-only; iOS read-only chip listing eklenebilir).
-- v0.2.33 follow-up: A items polish (scroll spring/asymmetric bubble/reconnect countdown).
+- v0.2.34 follow-up: iOS'tan rename/tag düzenlemesi (şu an readonly görselleştirme — `clientAction` envelope ile Mac'e dispatch edilebilir); A items polish (scroll spring/asymmetric bubble/reconnect countdown).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
-- Bilinen pre-existing flake: `PixelComputerUseTests.IMEChunkingTests` ve `PixelMCPServerTests.JSONValueTests.testNestedSubscript` ardışık `swift test` çalıştırmada bazen SIGBUS atıyor; izole çalıştırmada geçiyor. v0.2.33 refactor'üyle alakasız.
+- Bilinen pre-existing flake: `PixelComputerUseTests.IMEChunkingTests` ve `PixelMCPServerTests.JSONValueTests.testNestedSubscript` ardışık `swift test` çalıştırmada bazen SIGBUS atıyor; izole çalıştırmada geçiyor.
+
+## [0.2.34] — 2026-05-25
+
+**iOS tag chip UI — Sprint 9.** v0.2.31'de iniş yapan conversation rename (`customTitle` wire field) ve v0.2.32'de iniş yapan conversation tag (`tags` wire field) iOS history viewer'da görselleştirildi. iOS şu ana kadar Mac wire'ından gelen `customTitle` ve `tags` field'larını alıyordu ama UI'da göstermiyordu — sadece veri katmanı kompleydi. Bu release görsel paritedeki son adım: iOS row + detail view artık Mac'te ne görünüyorsa onu gösteriyor. **Read-only** — iOS'tan rename/tag düzenlemesi v0.2.35+ adayı (`clientAction` envelope ile dispatch edilebilir). Mac side test sayısı değişmedi (745); iOS Xcode simulator BUILD SUCCEEDED. Breaking change yok.
+
+### Added — Sprint 9 / iOS visual parity
+
+#### `ios/PixelAgentRemote/ArchiveDisplayHelpers.swift` (yeni, saf enum)
+- `IOSArchiveTitleResolver` — Mac'in `ArchiveTitleResolver` (`PixelMemory`'i
+  kullanır) iOS karşılığı. iOS `PixelMemory`'i bağımlı değil; yalnız
+  `PixelRemote.ArchiveEntryPayload`'a erişimi var. View'dan ayrık →
+  gelecekte iOS test target eklenirse doğrudan test edilebilir.
+- `displayTitle(for:)` — düşüş zinciri: `customTitle` (trim) >
+  `firstUserSnippet` (trim) > `"(başlıksız)"`. Mac tarafıyla birebir aynı.
+- `tagInlineSummary(_:)` — Row'da gösterilen kısa tag özeti: ilk 3 tag
+  `#x #y #z` + fazlası `+N`. Boş/nil tag listesinde boş string. Mac'in
+  `tagInlineSummary` paralelliği.
+
+#### `ios/PixelAgentRemote/ConversationHistoryViewIOS.swift`
+- **Row:** `Text(entry.firstUserSnippet ?? "(başlıksız)")` →
+  `Text(IOSArchiveTitleResolver.displayTitle(for: entry))` — customTitle
+  varsa onu, yoksa snippet'i, yoksa placeholder'ı gösterir.
+- **Rename rozeti:** customTitle varsa başlığın yanında mor 0.7 alpha
+  `pencil.circle.fill` ikon (Mac'le paralel).
+- **Tag inline preview:** Tarih/mesaj sayısı satırının altında mor 0.85
+  alpha caption, `IOSArchiveTitleResolver.tagInlineSummary(entry.tags)`
+  ile (boş listede satır gizli).
+- **ArchiveDetailView:**
+  * Navigation title artık entry.firstUserSnippet ?? "Sohbet" yerine
+    `IOSArchiveTitleResolver.displayTitle(for: entry)` — customTitle
+    varsa header'da görünür.
+  * loadActionBar altında, mesaj content'inden önce yatay scrollable
+    **tag chip listesi** (varsa). Capsule mor 0.18 alpha; readonly
+    (düzenleme v0.2.35+ adayı).
+
+### Migration / Behavior notları
+- Eski Mac sürümleri (`ArchiveEntryPayload.customTitle = nil` ve
+  `tags = nil` gönderen) iOS'ta hâlâ snippet/başlıksız fallback'le
+  doğru görünür — wire opsiyonel field'lar additive.
+- iOS test target henüz yok (Mac SPM testTarget pattern'i ekleyebilen
+  Xcode UI test target gerekir); helper'lar saf + View'dan ayrık olduğu
+  için ileride eklenebilir.
+- iOS xcodebuild simulator BUILD SUCCEEDED (yeni `ArchiveDisplayHelpers.swift`
+  xcodegen tarafından project'e otomatik eklendi — project.yml `path:
+  PixelAgentRemote` glob).
 
 ## [0.2.33] — 2026-05-25
 
