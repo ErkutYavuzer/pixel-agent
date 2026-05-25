@@ -8,10 +8,87 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ## [Unreleased]
 
 ### Notes
-- v0.2 kalan: Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
+- v0.2 kalan: App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.38 follow-up: test isolation refactor (flake'ı yapısal çöz); SoM Faz 5 follow-up (badge'i element rect dışına content-aware kaydırma için OCR/AX label-aware logic — şimdi sadece 4 köşe + bounds clamping).
+- v0.2.39 follow-up: Subagent Faz 5 (UI panel'inde multi-turn turn list görselleştirme — Manager attached multi-turn dispatch path); SoM Faz 5 follow-up (OCR/AX label-aware badge placement).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.39] — 2026-05-25
+
+**Subagent Faz 4 — Multi-turn workflow + Settings UI.** v0.2.7'de iniş yapan Subagent Faz 1-3 (Budget + Runner + UI panel + dispatch_subagent MCP) **one-shot**'tu — tek prompt, tek result. Vision model "tıkla → screenshot → özetle" gibi multi-step workflow için her adımı ayrı dispatch_subagent çağrısı gerekiyordu (history yok). Ayrıca subagent davranışı (budget, cap, default backend) kod sabiti — kullanıcı değiştiremiyordu.
+
+Faz 4 iki eksiği kapatıyor:
+
+1. **Multi-turn workflow** — yeni `MultiTurnSubagentRunner` actor. `runConversation(turns:)` N user prompt sequential olarak çalıştırır; her turn'ün assistant cevabı history'ye eklenir + sonraki turn full history ile backend'e gider. Shared budget tüm turn'lere uygulanır (kümülatif elapsed). `dispatch_subagent` MCP tool'unda yeni `follow_ups: [string]?` parametre.
+2. **Settings UI** — yeni Mac Settings "Subagent" sekmesi (5. tab). Max duration / max output bytes / parallel cap / default backend yapılandırılabilir; UserDefaults persistence (`SubagentSettings` + `SubagentSettingsStore`).
+
+**Test:** Mac 783 → **797** (+14: 6 MultiTurnSubagentRunner + 8 SubagentSettings). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni runner additive, yeni MCP param opsiyonel, yeni Settings sekme; v0.2.7 one-shot API hâlâ çalışır).
+
+### Added — Sprint 14 / Subagent Faz 4
+
+#### `Sources/PixelSubagent/MultiTurnSubagentRunner.swift` (yeni public actor)
+- **`runConversation(turns:system:options:)`** — N user prompt sequential.
+  Her turn için: cancellation + remaining budget check, `Message(role:.user)`
+  history'ye ekle, `Self.runSingleTurn` çağır (worker + per-turn watchdog
+  race, deadline = remaining budget), assistant cevabı history'ye ekle,
+  outcome'a göre devam veya early exit.
+- **`TurnResult`** — output + durationSeconds + outcome
+  (completed/budgetExceeded(reason)/cancelled/failed(error)).
+- **`MultiTurnSubagentResult`** — 4 case: completedAllTurns,
+  budgetExceededAt(turnIndex+reason), cancelledAt(turnIndex),
+  failedAt(turnIndex+error). Her case `completedTurns: [TurnResult]`
+  + `totalDurationSeconds` getter'ları.
+- **`TurnOutputBuffer`** private actor — Swift 6 strict concurrency
+  (sending closure'a `self` reference yerine actor isolation; static
+  `runSingleTurn(backend:budget:...)` pattern).
+- **`AgentContext.currentSubagentID`** TaskLocal tüm turn'ler süresince bağlı.
+
+#### `Sources/PixelMacApp/SubagentSettings.swift` (yeni public struct + store)
+- **`SubagentSettings`** struct — maxDurationSeconds (clamp ≥5),
+  maxOutputBytes (nil veya ≥1024), maxParallelCap (clamp 1-10),
+  defaultBackend (string raw). Init'te validation; `.default` (60s / nil /
+  3 / "claude").
+- **`SubagentSettingsStore`** enum — UserDefaults-backed
+  load/save/reset. `noOutputLimitSentinel = -1` (Int? → Int conversion
+  için sentinel; @AppStorage Int? doğrudan desteklemiyor).
+
+#### `Sources/PixelMacApp/SettingsView.swift` (Subagent tab eklendi)
+- **`SettingsTab.subagent`** yeni case (5. tab) — `person.2.crop.square.stack`
+  ikon + "Subagent" başlık.
+- **`SubagentSettingsTab`** struct — Form:
+  * "Bütçe" section: Stepper maxDurationSeconds (5...600), Picker
+    maxOutputBytes (nil/4KB/16KB/64KB/256KB), Stepper maxParallelCap (1-10).
+  * "Backend" section: Picker defaultBackend (Claude/Codex/Gemini).
+  * "Reset/Kaydet" row: tüm key'leri sıfırla veya `.save()`.
+
+#### MCP wire (`Sources/PixelMCPServer/ToolRegistry.swift` + `Sources/PixelMacApp/ControlSocketServer.swift`)
+- **`dispatch_subagent` schema** yeni opsiyonel field: `follow_ups:
+  [string]?` — prompt ilk turn, follow_ups sequential. Description'da
+  status enum + turns array açıklaması.
+- **`ControlSocketServer.dispatchSubagent`** handler: `follow_ups` array
+  ise yeni `dispatchMultiTurn` path (manager bypass — UI panel'inde
+  v0.2.39'da görünmez; v0.3+ Faz 5 adayı).
+- **`dispatchMultiTurn`** + **`multiTurnBridgeResponse`** static helper
+  — `MultiTurnSubagentRunner.runConversation` çağrısı; sonuç JSON'a
+  serialize: `status` ("completed_all_turns"/"budget_exceeded_at"/
+  "failed_at"/"cancelled_at"), `backend`, `total_duration_seconds`,
+  `turns` array (per-turn output/duration/outcome/detail),
+  opsiyonel `failed_turn_index` + `error`.
+
+### Tests (+14)
+- `Tests/PixelSubagentTests/MultiTurnSubagentRunnerTests.swift` (yeni, 6
+  test): 3 turn sequential happy path, history accumulation (her
+  send'de history.count = [1, 3, 5] beklenir — N user + (N-1) assistant
+  + 1 yeni user), empty turns → completed immediately, isFullySucceeded
+  4 case truth table, completedTurns getter 4 case, totalDurationSeconds
+  getter 4 case. Mock backends: `ScriptedMockBackend` (sequential
+  pre-scripted output) + `HistoryCapturingBackend` (`callHistorySizes`
+  her send'de kaydedilir).
+- `Tests/PixelMacAppTests/SubagentSettingsTests.swift` (yeni, 8 test):
+  default values, maxDuration/maxParallelCap/maxOutputBytes clamping,
+  UserDefaults load empty → defaults, save+load round-trip, nil output
+  bytes sentinel persistence, reset clears all keys. UserDefaults
+  isolation (suiteName UUID per test).
 
 ## [0.2.38] — 2026-05-25
 
