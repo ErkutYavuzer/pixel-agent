@@ -524,6 +524,17 @@ final class RemoteSession: ObservableObject {
                     messages.append(userMsg)
                 }
             }
+        case .conversationSync:
+            // **Sprint 33 (v0.2.60):** Mac aktif conversation snapshot.
+            // iOS messages array'ini bu liste ile **replace** et — Mac
+            // backend (claude/codex/gemini) değiştiğinde aktif sohbete
+            // senkron olur. Tek-yön replace; iOS local optimistic mesajlar
+            // (mac henüz işlememişse) bu replace ile kaybolabilir — kullanıcı
+            // yeniden gönderebilir.
+            if let snapshot = envelope.payload?.conversationMessages {
+                self.messages = snapshot
+                self.mascotState = .idle
+            }
         case .assistantChunk:
             if let text = envelope.payload?.text,
                let msgIDString = envelope.payload?.messageID,

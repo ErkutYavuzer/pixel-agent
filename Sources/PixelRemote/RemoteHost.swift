@@ -258,6 +258,21 @@ public final class RemoteHost: ObservableObject {
         }
     }
 
+    /// **Sprint 33 (v0.2.60):** Aktif conversation tam snapshot — backend/model
+    /// değişimi veya conversation reset sonrası iOS messages'ını replace eder.
+    /// Mac per-backend ConversationStore'una göre claude/codex/gemini ayrı
+    /// sohbet; iOS bu sayede aktif backend'in sohbetini görür.
+    public func sendConversationSync(_ messages: [Message]) async {
+        guard let transport = activeTransport else { return }
+        let envelope = RemoteEnvelope.conversationSync(messages: messages)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Conversation sync gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     /// **Sprint 23 (v0.2.48):** `screenshotWireLatencyMs` opsiyonel param
     /// eklendi — iOS Mac Paneli wire latency rozet için.
     public func sendHostStatus(

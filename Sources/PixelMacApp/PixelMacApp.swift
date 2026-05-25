@@ -420,6 +420,12 @@ struct ChatHost: View {
                         // originated mesajlar broadcastToRemote=false ile bunu
                         // tetiklemez (loop önleme).
                         Task { await remoteHost.sendUserMessage(text, messageID: messageID) }
+                    },
+                    onSnapshotBroadcast: { messages in
+                        // Sprint 33 (v0.2.60): Backend/model değişimi sonrası
+                        // (.id rebuild → restoreIfNeeded), newConversation
+                        // veya archive load → iOS'a aktif conversation snapshot.
+                        Task { await remoteHost.sendConversationSync(messages) }
                     }
                 )
                 // Backend veya model değişiminde ChatViewModel @StateObject

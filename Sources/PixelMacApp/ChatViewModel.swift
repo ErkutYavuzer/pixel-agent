@@ -31,6 +31,13 @@ final class ChatViewModel: ObservableObject {
     /// iOS-originated mesajların (incomingRemoteText path) iOS'a tekrar
     /// gönderilmemesi için flag'le kapatılabilir.
     var onUserMessage: ((String, String) -> Void)?
+    /// **Sprint 33 (v0.2.60):** Aktif conversation tam snapshot — iOS'un
+    /// messages array'ini replace etmesi için. Mac per-backend
+    /// ConversationStore'una göre claude/codex/gemini ayrı sohbet; iOS
+    /// backend değiştikçe Mac'in aktif sohbetini görmek ister. Trigger
+    /// noktaları: `restoreIfNeeded` sonu (initial + ChatView .id rebuild),
+    /// `newConversation` sonu.
+    var onSnapshotBroadcast: (([Message]) -> Void)?
 
     private var streamTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
@@ -45,13 +52,15 @@ final class ChatViewModel: ObservableObject {
         conversationStore: ConversationStore,
         onAssistantChunk: ((String, String) -> Void)? = nil,
         onAssistantComplete: ((String, String) -> Void)? = nil,
-        onUserMessage: ((String, String) -> Void)? = nil
+        onUserMessage: ((String, String) -> Void)? = nil,
+        onSnapshotBroadcast: (([Message]) -> Void)? = nil
     ) {
         self.backend = backend
         self.conversationStore = conversationStore
         self.onAssistantChunk = onAssistantChunk
         self.onAssistantComplete = onAssistantComplete
         self.onUserMessage = onUserMessage
+        self.onSnapshotBroadcast = onSnapshotBroadcast
     }
 
     func restoreIfNeeded() async {
@@ -94,6 +103,10 @@ final class ChatViewModel: ObservableObject {
         } catch {
             streamError = "Mesaj geçmişi yüklenemedi: \(error.localizedDescription)"
         }
+        // Sprint 33 (v0.2.60): iOS'a aktif conversation snapshot yayını.
+        // ChatView .id() rebuild path'inde (backend/model değişimi) burası
+        // tetiklenir → iOS Mac'in aktif sohbetiyle senkron olur.
+        onSnapshotBroadcast?(messages)
     }
 
     /// **Sprint 4:** `.system` mesajının screenshot placeholder olup olmadığını
@@ -110,6 +123,9 @@ final class ChatViewModel: ObservableObject {
         mascotState = .idle
         DockBadge.clear()
         Task { try? await store.newConversation() }
+        // Sprint 33 (v0.2.60): iOS'a temizlenmiş snapshot yayını —
+        // iOS messages array'ini de boşaltır.
+        onSnapshotBroadcast?(messages)
     }
 
     /// **Sprint 33 (v0.2.59):** `broadcastToRemote` flag eklendi — iOS-

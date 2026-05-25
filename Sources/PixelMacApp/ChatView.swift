@@ -23,7 +23,8 @@ struct ChatView: View {
         planMode: Bool = false,
         onAssistantChunk: ((String, String) -> Void)? = nil,
         onAssistantComplete: ((String, String) -> Void)? = nil,
-        onUserMessage: ((String, String) -> Void)? = nil
+        onUserMessage: ((String, String) -> Void)? = nil,
+        onSnapshotBroadcast: (([Message]) -> Void)? = nil
     ) {
         _viewModel = StateObject(
             wrappedValue: ChatViewModel(
@@ -31,7 +32,8 @@ struct ChatView: View {
                 conversationStore: conversationStore,
                 onAssistantChunk: onAssistantChunk,
                 onAssistantComplete: onAssistantComplete,
-                onUserMessage: onUserMessage
+                onUserMessage: onUserMessage,
+                onSnapshotBroadcast: onSnapshotBroadcast
             )
         )
         self.subagentManager = subagentManager

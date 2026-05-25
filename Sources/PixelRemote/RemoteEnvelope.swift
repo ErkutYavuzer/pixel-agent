@@ -55,6 +55,12 @@ public enum EnvelopeType: String, Sendable, CaseIterable {
     /// Eski iOS sürümleri frameID görmez ACK göndermez → Mac local latency
     /// fallback'ine düşer (Sprint 21 davranışı).
     case screenshotFrameAck
+    /// **Sprint 33 (v0.2.60):** Mac → iOS. Aktif conversation'ın tam mesaj
+    /// listesi snapshot'ı. Mac backend/model değiştiğinde (per-backend
+    /// ConversationStore farklı), conversation restore sonrası, newConversation
+    /// veya archive load sonrası tetiklenir. iOS messages array'ini bu
+    /// snapshot ile replace eder — Mac ile aynı sohbeti görür.
+    case conversationSync
     /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
     /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
     /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
@@ -307,6 +313,8 @@ public enum EnvelopePayload: Sendable, Equatable {
     /// Sprint 22 (v0.2.47): iOS → Mac. Mac'in `screenshotPayload` frame'inin
     /// `frameID`'sini yansıtır; round-trip wire latency ölçümü için.
     case screenshotFrameAck(frameID: String)
+    /// Sprint 33 (v0.2.60): Mac → iOS. Aktif conversation tam snapshot.
+    case conversationSync(messages: [Message])
 }
 
 // MARK: - Backward-compat field getters
@@ -475,6 +483,12 @@ extension EnvelopePayload {
         return nil
     }
 
+    /// Sprint 33 (v0.2.60): conversationSync mesajları getter.
+    public var conversationMessages: [Message]? {
+        if case .conversationSync(let messages) = self { return messages }
+        return nil
+    }
+
     /// Sprint 10/12: `archiveRename` / `archiveSetTags` / `archiveDelete`
     /// ortak `archiveID` getter.
     public var mutationArchiveID: String? {
@@ -522,6 +536,8 @@ private enum PayloadKey: String, CodingKey {
     case archiveEntries, archiveLoadID, archiveMessages
     // Sprint 10 (v0.2.35): iOS → Mac mutation envelope'ları.
     case mutationArchiveID, renameNewTitle, editedTags
+    /// Sprint 33 (v0.2.60): conversationSync mesaj listesi wire field.
+    case conversationMessages
     /// `renameNewTitle` nil olarak gönderilmek istendiğinde explicit sentinel
     /// (decoder JSON `null`'ı opsiyonel field yokluğu olarak okuyamıyor;
     /// "field var ama null" ile "field hiç yok" ayrımı encoder side'da
@@ -609,6 +625,11 @@ extension EnvelopePayload {
             // (RemoteHost.handle) boş ID için consume çağrısını skip eder.
             let id = try c.decodeIfPresent(String.self, forKey: .screenshotFrameID) ?? ""
             return .screenshotFrameAck(frameID: id)
+
+        case .conversationSync:
+            // Sprint 33 (v0.2.60): tam mesaj snapshot.
+            let msgs = try c.decodeIfPresent([Message].self, forKey: .conversationMessages) ?? []
+            return .conversationSync(messages: msgs)
 
         case .toolCallEvent:
             guard let event = try c.decodeIfPresent(ToolCallEventPayload.self, forKey: .toolCallEvent) else {
@@ -740,6 +761,10 @@ extension EnvelopePayload {
 
         case .screenshotFrameAck(let id):
             try c.encode(id, forKey: .screenshotFrameID)
+
+        case .conversationSync(let messages):
+            // Sprint 33 (v0.2.60): tam mesaj snapshot encode.
+            try c.encode(messages, forKey: .conversationMessages)
 
         case .toolCallEvent(let event):
             try c.encode(event, forKey: .toolCallEvent)
@@ -1062,5 +1087,11 @@ extension RemoteEnvelope {
             type: .screenshotFrameAck,
             payload: .screenshotFrameAck(frameID: frameID)
         )
+    }
+
+    /// Sprint 33 (v0.2.60): Mac → iOS. Aktif conversation tam snapshot.
+    /// iOS messages array'ini bu liste ile **replace** eder.
+    public static func conversationSync(messages: [Message]) -> RemoteEnvelope {
+        RemoteEnvelope(type: .conversationSync, payload: .conversationSync(messages: messages))
     }
 }
