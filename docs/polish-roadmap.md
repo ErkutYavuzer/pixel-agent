@@ -254,6 +254,18 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 15 tamamlandı — iOS continuous screenshot streaming.** v0.2.25 release notlarındaki eksik kapatıldı: iOS Mac Paneli'nde "Canlı" toggle ile Mac her 1s'de screenshot push'lar (250-5000 ms clamp). Tek-shot mode hâlâ çalışır. Mac test 797 → 802 (+5). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 16 — "Subagent Faz 5 UI panel multi-turn turn list" (v0.2.41)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | data | SubagentSession.multiTurnTurns: [TurnResult]? field |
+| ✅ | manager | SubagentManager.dispatchMultiTurnAndWait + finalizeMultiTurn + combinedOutput helper |
+| ✅ | wire | ControlSocketServer.dispatchMultiTurn: manager attached path |
+| ✅ | UI | SubagentDetailSheet turn list expansion (per-turn outcome badge + duration + output) |
+| ⏸ | v0.2.42+ | Per-turn live streaming (chunk akışı UI'da, finalize öncesi) |
+
+**25 May 2026: Sprint 16 tamamlandı — Subagent Faz 5.** v0.2.39 multi-turn runner UI panel'inde görünür hale geldi. Manager attached path açıldı: dispatch_subagent --follow-ups artık UI'da tek session kartı + detail sheet per-turn expandable list (outcome badge + duration + output) gösterir. Mac test 802 → 811 (+9 SubagentMultiTurnManagerTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

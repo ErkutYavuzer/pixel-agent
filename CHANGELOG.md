@@ -10,9 +10,75 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): `hostStatus` delta-only push.
-- v0.2.40 follow-up: Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune); cancellation upstream (iOS disconnect → Mac coordinator auto-stop, şu an transport fail loop iterasyonunda).
-- v0.2.39 follow-up: Subagent Faz 5 UI panel multi-turn turn list görselleştirme.
+- v0.2.40 follow-up: Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune); cancellation upstream (iOS disconnect → Mac coordinator auto-stop).
+- v0.2.41 follow-up: Per-turn streaming UI (şu an her turn'ün sonuçları finalize sonrası görünür; live chunk akışı yok).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.41] — 2026-05-25
+
+**Subagent Faz 5 — UI panel multi-turn turn list.** v0.2.39'da iniş yapan `MultiTurnSubagentRunner` MCP üzerinden çağrılabiliyordu ama UI panel'inde görünmüyordu (manager bypass stateless yolu). Faz 5 manager attached path açıyor: multi-turn dispatch artık `SubagentManager.dispatchMultiTurnAndWait` üzerinden geçer, UI'da tek bir session kartı görünür, detail sheet'te per-turn expandable list (outcome badge + duration + output).
+
+**Test:** Mac 802 → **811** (+9 SubagentMultiTurnManagerTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni method additive, eski one-shot path korundu).
+
+### Added — Sprint 16 / Subagent Faz 5
+
+#### `Sources/PixelMacApp/Subagent/SubagentSession.swift`
+- **`multiTurnTurns: [TurnResult]?`** yeni opsiyonel field. One-shot dispatch'te
+  nil; multi-turn dispatch'te `finalizeMultiTurn` doldurur. UI detail sheet
+  bunu görünce per-turn expand list render eder; nil ise tek output bloğu
+  (eski davranış).
+
+#### `Sources/PixelMacApp/Subagent/SubagentManager.swift`
+- **`dispatchMultiTurnAndWait(turns:backend:budget:)`** yeni method —
+  manager attached multi-turn dispatch:
+  * Cap dolu/backend yok hatası one-shot ile aynı.
+  * Empty turns array → immediate completion (session yaratılmaz).
+  * Prompt preview: tek turn `"prompt"`, çoklu `"prompt (+N turn)"`.
+  * `MultiTurnSubagentRunner.runConversation` Task'e spawn; tamamlanınca
+    `finalizeMultiTurn` çağrısı.
+- **`finalizeMultiTurn(id:result:)`** private — `MultiTurnSubagentResult`'tan:
+  * SubagentStatus + legacy `SubagentResult` map'ler
+    (completedAllTurns → .completed, budgetExceededAt → .budgetExceeded,
+    vb.).
+  * `session.multiTurnTurns = result.completedTurns` set.
+  * `partialOutput = combinedOutput(...)` — UI tek satır gösterimi için.
+  * `multiTurnContinuations` resume + `onSessionCompleted` callback
+    (unified hook).
+- **`combinedOutput(from: [TurnResult])`** static helper — test edilebilir
+  saf: `[Turn N] (Xs)\n<output>` format, `\n\n` separator.
+- **`multiTurnContinuations: [SubagentID: CheckedContinuation<MultiTurnSubagentResult, Never>]`**
+  yeni continuation map (one-shot `continuations` ile ayrık).
+
+#### `Sources/PixelMacApp/ControlSocketServer.swift`
+- **`dispatchMultiTurn`** Faz 5 update: manager attached ise
+  `manager.dispatchMultiTurnAndWait` çağrısı (UI panel'de görünür);
+  yoksa eski stateless yol (Manager-attached-değil test durumları).
+
+#### `Sources/PixelMacApp/Subagent/SubagentPanelView.swift`
+- **`SubagentDetailSheet`** Faz 5 update: `session.multiTurnTurns` dolu
+  ise `GroupBox("Turn List (\(count))")` per-turn render (eski "Çıktı"
+  bloğu yerine); aksi halde eski davranış.
+- **`turnRow(index:turn:)`** yeni private @ViewBuilder:
+  * Header: "Turn N" badge (mor capsule) + outcome label badge (yeşil/
+    turuncu/gri/kırmızı capsule renkle) + duration (sağ tarafta).
+  * Body: turn output (monospaced caption, textBackgroundColor rounded
+    rect; boş ise "(boş)" placeholder).
+- **`outcomeLabel(for:)`** + **`outcomeColor(for:)`** helper'lar —
+  `TurnResult.Outcome` → display string + Color.
+
+### Tests (+9)
+- `Tests/PixelMacAppTests/SubagentMultiTurnManagerTests.swift` (yeni, 9 test):
+  * `combinedOutput` empty/single/multiple (numbering + separator coverage).
+  * `dispatchMultiTurnAndWait` happy path (3 turn, session.multiTurnTurns
+    + partialOutput format'ı doğrulanır).
+  * Empty turns immediate completion (session yaratılmaz).
+  * Backend unavailable → `.backendUnavailable` failure.
+  * Cap reached → `.capReached` failure (cap=1 bir one-shot ile doldurulur,
+    sonra multi-turn dispatch fail).
+  * Prompt preview multi-turn annotation `"(+N turn)"`, single turn
+    annotation yok. Mock backends: ScriptedMockBackend (multi-turn için
+    sequential output), SlowMockBackend (cap-reached test için, 5s
+    `.done` yield etmez).
 
 ## [0.2.40] — 2026-05-25
 
