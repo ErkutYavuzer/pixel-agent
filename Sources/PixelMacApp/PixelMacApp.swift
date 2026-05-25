@@ -772,6 +772,15 @@ struct ChatHost: View {
             let max = subagentManager.maxConcurrent
             showConfigToast(message: "⚠️ Subagent havuzu dolu (\(max)/\(max) aktif). Bir tanesi bitince tekrar deneyin.")
         }
+        // Sprint 17 (v0.2.42): Stream cancellation upstream — RemoteHost
+        // transport disconnect olunca (iOS uygulamada arka plan, network
+        // kopma, manuel disconnect) coordinator task'i hemen cancel.
+        // Önceki davranış: send fail loop iterasyonunda ~1 interval gecikme.
+        .onChange(of: remoteHost.isConnected) { _, isConnected in
+            if !isConnected && screenshotStream.isActive {
+                screenshotStream.stop()
+            }
+        }
         .task {
             while !Task.isCancelled {
                 do {
