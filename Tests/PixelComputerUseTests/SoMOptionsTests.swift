@@ -96,4 +96,60 @@ final class SoMOptionsTests: XCTestCase {
         let options = SoMOptions(badgePlacement: .contentAware)
         XCTAssertEqual(options.badgePlacement, .contentAware)
     }
+
+    // MARK: - Sprint 27 (v0.2.52): OCRCropMode
+
+    func testOCRCropModeRawValuesSnakeCase() {
+        // MCP convention: enum raw value snake_case (wire docs ile tutarlı).
+        XCTAssertEqual(OCRCropMode.wholeImage.rawValue, "whole_image")
+        XCTAssertEqual(OCRCropMode.perElement.rawValue, "per_element")
+    }
+
+    func testOCRCropModeCodableRoundTrip() throws {
+        for mode in [OCRCropMode.wholeImage, .perElement] {
+            let data = try JSONEncoder().encode(mode)
+            let decoded = try JSONDecoder().decode(OCRCropMode.self, from: data)
+            XCTAssertEqual(decoded, mode)
+        }
+    }
+
+    func testSoMOptionsDefaultOCRCropMode() {
+        // Default `.wholeImage` (Sprint 26 davranışı korunur — backward compat).
+        let options = SoMOptions()
+        XCTAssertEqual(options.ocrCropMode, .wholeImage)
+    }
+
+    func testSoMOptionsAcceptsPerElement() {
+        let options = SoMOptions(badgePlacement: .contentAware, ocrCropMode: .perElement)
+        XCTAssertEqual(options.ocrCropMode, .perElement)
+    }
+
+    func testSoMOptionsCodableRoundTripWithCropMode() throws {
+        let original = SoMOptions(
+            badgePlacement: .contentAware,
+            ocrCropMode: .perElement
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(SoMOptions.self, from: data)
+        XCTAssertEqual(decoded.badgePlacement, .contentAware)
+        XCTAssertEqual(decoded.ocrCropMode, .perElement)
+    }
+
+    func testSoMOptionsBackwardCompatDecodeWithoutCropMode() throws {
+        // Sprint 26 wire format (ocr_crop_mode field yok) → default .wholeImage.
+        let oldJSON = """
+        {
+            "palette": [],
+            "outlineWidth": 4,
+            "badgeSize": 36,
+            "fontSize": 20,
+            "textColor": {"red": 1, "green": 1, "blue": 1, "alpha": 1},
+            "badgePlacement": "contentAware"
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SoMOptions.self, from: oldJSON)
+        XCTAssertEqual(decoded.badgePlacement, .contentAware)
+        XCTAssertEqual(decoded.ocrCropMode, .wholeImage,
+            "Eski JSON field eksikse default .wholeImage'a düşmeli")
+    }
 }

@@ -26,6 +26,10 @@ public struct SoMOptions: Sendable, Equatable, Codable {
     public let textColor: SoMColor
     /// Badge'in element'e göre yerleşim stratejisi.
     public let badgePlacement: BadgePlacement
+    /// **Faz 5c follow-up (v0.2.52):** `.contentAware` placement için OCR
+    /// crop modu. Sadece `badgePlacement == .contentAware` iken anlamlı —
+    /// diğer modlarda yoksayılır.
+    public let ocrCropMode: OCRCropMode
 
     public init(
         palette: [SoMColor] = SoMColor.defaultPalette,
@@ -33,7 +37,8 @@ public struct SoMOptions: Sendable, Equatable, Codable {
         badgeSize: Double = 36,
         fontSize: Double = 20,
         textColor: SoMColor = .white,
-        badgePlacement: BadgePlacement = .topLeftInside
+        badgePlacement: BadgePlacement = .topLeftInside,
+        ocrCropMode: OCRCropMode = .wholeImage
     ) {
         // Empty palette guard — caller mantık hatasından korunmak için.
         self.palette = palette.isEmpty ? SoMColor.defaultPalette : palette
@@ -42,11 +47,75 @@ public struct SoMOptions: Sendable, Equatable, Codable {
         self.fontSize = max(6, fontSize)
         self.textColor = textColor
         self.badgePlacement = badgePlacement
+        self.ocrCropMode = ocrCropMode
+    }
+
+    // MARK: - Codable (manuel) — yeni `ocrCropMode` field eski JSON'da
+    // yoksa default `.wholeImage`'a düşer. Sprint 26 wire format'ı bozulmaz.
+
+    private enum CodingKeys: String, CodingKey {
+        case palette, outlineWidth, badgeSize, fontSize, textColor,
+             badgePlacement, ocrCropMode
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let palette = try c.decodeIfPresent([SoMColor].self, forKey: .palette)
+            ?? SoMColor.defaultPalette
+        let outlineWidth = try c.decodeIfPresent(Double.self, forKey: .outlineWidth) ?? 4
+        let badgeSize = try c.decodeIfPresent(Double.self, forKey: .badgeSize) ?? 36
+        let fontSize = try c.decodeIfPresent(Double.self, forKey: .fontSize) ?? 20
+        let textColor = try c.decodeIfPresent(SoMColor.self, forKey: .textColor) ?? .white
+        let badgePlacement = try c.decodeIfPresent(BadgePlacement.self, forKey: .badgePlacement)
+            ?? .topLeftInside
+        let ocrCropMode = try c.decodeIfPresent(OCRCropMode.self, forKey: .ocrCropMode)
+            ?? .wholeImage
+        self.init(
+            palette: palette,
+            outlineWidth: outlineWidth,
+            badgeSize: badgeSize,
+            fontSize: fontSize,
+            textColor: textColor,
+            badgePlacement: badgePlacement,
+            ocrCropMode: ocrCropMode
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(palette, forKey: .palette)
+        try c.encode(outlineWidth, forKey: .outlineWidth)
+        try c.encode(badgeSize, forKey: .badgeSize)
+        try c.encode(fontSize, forKey: .fontSize)
+        try c.encode(textColor, forKey: .textColor)
+        try c.encode(badgePlacement, forKey: .badgePlacement)
+        try c.encode(ocrCropMode, forKey: .ocrCropMode)
     }
 
     /// Eski hardcoded davranışı korur — v0.2.37'ye kadar SoMRenderer bu değerleri
     /// kullanıyordu.
     public static let `default` = SoMOptions()
+}
+
+/// **Faz 5c follow-up (v0.2.52):** OCR pass scope strategy'si.
+///
+/// - `.wholeImage` (default): Tek Vision pass tüm screenshot üzerinde — N
+///   element için 1 pass. Vision overhead amortize olur; çok element varsa
+///   wall-clock daha hızlı (~100-300ms typical retina).
+/// - `.perElement`: Her element için ayrı Vision pass üzerinde
+///   `ElementRegionExpander.expandedRect` crop'u. Element başına ~50-150ms,
+///   N pass = N × overhead. Az element (1-3) ve element'ler çok küçükse
+///   wall-clock daha hızlı; ayrıca scoring scope'ı element neighborhood'una
+///   sınırlı (uzak text'in noise'u yok). Çoğunluk case için `.wholeImage`
+///   daha iyi; `.perElement` özel layout senaryoları için opt-in.
+///
+/// **Wire format:** Raw value explicit snake_case (MCP convention) — Swift
+/// property camelCase, wire string snake_case. `BadgePlacement` raw'ı
+/// camelCase (Sprint 26 ile shipped); yeni enum'larda snake_case raw value
+/// MCP doc'lar ile tutarlı olmaya başlıyor.
+public enum OCRCropMode: String, Sendable, Equatable, Codable {
+    case wholeImage = "whole_image"
+    case perElement = "per_element"
 }
 
 /// RGBA renk — `CGColor`'ı doğrudan Codable yapmak zor olduğu için saf struct.

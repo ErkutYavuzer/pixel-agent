@@ -78,12 +78,21 @@ public enum ScreenshotCapture {
         // ise OCR upfront — text region'larını çıkar, SoMRenderer'a passla.
         // OCR async; başarısız olursa boş array (SoMRenderer .labelAware
         // fallback'ine düşer).
+        // **Faz 5c follow-up (v0.2.52):** `options.ocrCropMode` ile
+        // `.wholeImage` (tek pass, default) veya `.perElement` (her element
+        // için crop edilmiş region'da ayrı pass) seçimi.
         let finalImage: CGImage
         let marks: [SoMMark]
         if !elements.isEmpty {
             let textRegions: [CGRect]
             if options.badgePlacement == .contentAware {
-                textRegions = await OCRTextDetector.detectTextRegions(in: croppedImage)
+                textRegions = await collectTextRegions(
+                    for: elements,
+                    in: croppedImage,
+                    options: options,
+                    imageScreenOrigin: croppedLogicalFrame.origin,
+                    imageLogicalSize: croppedLogicalFrame.size
+                )
             } else {
                 textRegions = []
             }
@@ -117,6 +126,49 @@ public enum ScreenshotCapture {
     }
 
     #if canImport(ScreenCaptureKit) && canImport(AppKit)
+
+    /// **Faz 5c follow-up (v0.2.52):** OCR text region toplama strateji
+    /// dispatcher. `options.ocrCropMode`'a göre:
+    /// - `.wholeImage`: tek Vision pass tüm image üzerinde (Sprint 26 path).
+    /// - `.perElement`: her element için `ElementRegionExpander`
+    ///   ile crop edilmiş region'da ayrı pass. Sonuçlar union'lanır
+    ///   (deduplication yok — SoMRenderer scoring CGRect overlap'le iş
+    ///   görür, duplicate region'lar score'u şişirmez çünkü `min` arama
+    ///   yapılır, tüm adayların score'u eşit oranda etkilenir).
+    private static func collectTextRegions(
+        for elements: [UIElement],
+        in image: CGImage,
+        options: SoMOptions,
+        imageScreenOrigin: CGPoint,
+        imageLogicalSize: CGSize
+    ) async -> [CGRect] {
+        switch options.ocrCropMode {
+        case .wholeImage:
+            return await OCRTextDetector.detectTextRegions(in: image)
+        case .perElement:
+            let pixelSize = CGSize(width: Double(image.width), height: Double(image.height))
+            let badgeSize = CGFloat(options.badgeSize)
+            var union: [CGRect] = []
+            for element in elements {
+                // MarkLayout ile element image içindeki konumunu hesapla
+                // (SoMRenderer'ın yaptığı dönüşümün aynısı).
+                guard let elementRectInImage = MarkLayout.computeMarkRect(
+                    elementFrame: element.frame.cgRect,
+                    imageScreenOrigin: imageScreenOrigin,
+                    imageLogicalSize: imageLogicalSize,
+                    imagePixelSize: pixelSize
+                ) else { continue }
+                guard let cropRect = ElementRegionExpander.expandedRect(
+                    elementRect: elementRectInImage,
+                    badgeSize: badgeSize,
+                    imagePixelSize: pixelSize
+                ) else { continue }
+                let regions = await OCRTextDetector.detectTextRegions(in: image, cropRect: cropRect)
+                union.append(contentsOf: regions)
+            }
+            return union
+        }
+    }
 
     private static func fetchContent() async throws -> SCShareableContent {
         do {

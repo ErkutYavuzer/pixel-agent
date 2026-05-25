@@ -37,8 +37,36 @@ public enum OCRTextDetector {
         #if canImport(Vision)
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let regions = performDetection(on: image)
+                let regions = performDetection(on: image, cropOffset: .zero)
                 continuation.resume(returning: regions)
+            }
+        }
+        #else
+        return []
+        #endif
+    }
+
+    /// **Faz 5c follow-up (v0.2.52):** Image'ın belirli bir bölgesinde OCR.
+    /// Per-element crop mode için: element + badge alanı civarındaki text'i
+    /// çıkar. Sonuç koordinatları image-global'a translate edilir (`cropRect`
+    /// origin'i eklenerek), böylece caller union/filter işlemlerinde flat
+    /// liste kullanabilir.
+    ///
+    /// - Parameter image: source CGImage.
+    /// - Parameter cropRect: image-global pixel coords (top-left origin).
+    ///   `ElementRegionExpander.expandedRect`'ten gelir. `image.cropping(to:)`
+    ///   ile crop edilir.
+    /// - Returns: Image-global text bbox'ları. Crop edilemezse veya OCR
+    ///   başarısız → boş array (best-effort, Sprint 26 davranışı).
+    public static func detectTextRegions(in image: CGImage, cropRect: CGRect) async -> [CGRect] {
+        #if canImport(Vision)
+        guard let cropped = image.cropping(to: cropRect) else {
+            return []
+        }
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let localRegions = performDetection(on: cropped, cropOffset: cropRect.origin)
+                continuation.resume(returning: localRegions)
             }
         }
         #else
@@ -48,8 +76,10 @@ public enum OCRTextDetector {
 
     #if canImport(Vision)
     /// Senkron Vision performans — background queue'dan çağrılır.
-    /// Hata durumunda boş array (best-effort).
-    private static func performDetection(on image: CGImage) -> [CGRect] {
+    /// Hata durumunda boş array (best-effort). `cropOffset` ile crop modunda
+    /// sonuç koordinatları image-global'a translate edilir (whole-image
+    /// modunda `.zero` geçilir, no-op).
+    private static func performDetection(on image: CGImage, cropOffset: CGPoint) -> [CGRect] {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .fast
         request.usesLanguageCorrection = false
@@ -72,8 +102,8 @@ public enum OCRTextDetector {
             // Vision'ın normalize box'ı: origin bottom-left, 0-1.
             let n = observation.boundingBox
             // Image pixel space, top-left origin'e çevir.
-            let x = n.origin.x * imageW
-            let y = (1.0 - n.origin.y - n.height) * imageH
+            let x = n.origin.x * imageW + cropOffset.x
+            let y = (1.0 - n.origin.y - n.height) * imageH + cropOffset.y
             let w = n.width * imageW
             let h = n.height * imageH
             // Defensive: negatif boyut filtre (corrupt observation).

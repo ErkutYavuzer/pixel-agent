@@ -545,7 +545,7 @@ public enum BuiltInTools {
                 ]),
                 "som_options": .object([
                     "type": .string("object"),
-                    "description": .string("Faz 5 (v0.2.38) + 5b (v0.2.45) + 5c (v0.2.51): SoM renderer override — palette, outline_width, badge_size, font_size, text_color, badge_placement. Boş bırakırsan default değerler (geri uyumlu eski davranış). badge_placement: 'top_left_inside' (default) | 'top_left_outside' | 'top_right_inside' | 'top_right_outside' | 'smart_corner' | 'label_aware' (AX role bazlı: button → topRightOutside, link → topRightInside, vs. — content kapanmama optimization) | 'content_aware' (Vision OCR ile gerçek text bbox'larını çıkarıp en az çakışan köşe seçilir; özel layout'larda label_aware'in pratik limiti aşıldığında. OCR başarısız ise label_aware fallback'i)."),
+                    "description": .string("Faz 5 (v0.2.38) + 5b (v0.2.45) + 5c (v0.2.51-52): SoM renderer override — palette, outline_width, badge_size, font_size, text_color, badge_placement, ocr_crop_mode. Boş bırakırsan default değerler (geri uyumlu eski davranış). badge_placement: 'top_left_inside' (default) | 'top_left_outside' | 'top_right_inside' | 'top_right_outside' | 'smart_corner' | 'label_aware' (AX role bazlı) | 'content_aware' (Vision OCR ile en az çakışan köşe; OCR başarısız ise label_aware fallback). ocr_crop_mode: 'whole_image' (default, tek Vision pass — çok element varsa hızlı) | 'per_element' (her element için crop edilmiş region'da ayrı pass — az element + küçük rect'lerde scoping/locality). Sadece content_aware iken anlamlı."),
                 ]),
             ]),
         ]),
