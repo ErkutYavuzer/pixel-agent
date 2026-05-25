@@ -11,6 +11,65 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 
+## [0.2.54] — 2026-05-25
+
+**Sprint 29 — Small UX tuning bundle.** Üç bağımsız küçük iyileştirme tek release:
+
+1. **OCR confidence threshold** — Vision `.fast` mode low-confidence noise filter. `SoMOptions.ocrMinConfidence: Double` (0.0-1.0, default 0.0 backward-compat). MCP wire `ocr_min_confidence`.
+2. **OCR cancellation propagation** — `Task.isCancelled` guard'lar `OCRTextDetector`'da (pre-dispatch + post-dispatch + closure içi); `ParallelCropDetection.detect` cancellation honor eder (collection loop'unda erken çıkış + `group.cancelAll()`).
+3. **Sparkline genişliği user preference** — iOS Mac Paneli wire latency badge yanındaki trend grafiğinin genişliği kullanıcı ayarı. `SettingsTabView` "Görselleştirme" section'a slider (40-160pt, step 8). `@AppStorage` ile shared, default 80pt (Sprint 25 hardcoded'un eşi).
+
+**Test:** Mac 938 → **945** (+7: 5 SoMOptions confidence — default 0/custom/clamp range/Codable round-trip/backward-compat decode; 2 ParallelCropDetection cancellation smoke). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (3 item'ın tümü additive opsiyonel + backward-compat defaults).
+
+### Added — Sprint 29 / Small UX tuning bundle
+
+#### 1. OCR confidence threshold
+
+**`Sources/PixelComputerUse/SoMOptions.swift`**
+- **`ocrMinConfidence: Double = 0.0`** yeni field — `init` 0.0-1.0 clamp eder (defensive bozuk input). Sadece `.contentAware` placement iken kullanılır.
+- **Manuel Codable:** `decodeIfPresent` ile eski JSON'da yoksa default 0.0 (backward-compat).
+
+**`Sources/PixelComputerUse/OCRTextDetector.swift`**
+- **`detectTextRegions(in:minConfidence:)`** + **`detectTextRegions(in:cropRect:minConfidence:)`** — `minConfidence` opsiyonel param default 0.0.
+- **`performDetection(on:cropOffset:minConfidence:)`** — `observation.confidence >= Float(minConfidence)` ile compactMap filter.
+
+**`Sources/PixelComputerUse/ScreenshotCapture.swift`**
+- `collectTextRegions` `options.ocrMinConfidence`'i her detector çağrısına geçirir (whole-image + per-element).
+
+**`Sources/PixelMCPServer/ToolRegistry.swift`**
+- `ui_screenshot.som_options` schema'sına `ocr_min_confidence` parametresi eklendi (0.0-1.0, default 0.0; 0.5 ortalama, 0.8 sıkı).
+
+#### 2. OCR cancellation propagation
+
+**`Sources/PixelComputerUse/OCRTextDetector.swift`**
+- **Pre-dispatch guard:** `if Task.isCancelled { return [] }` — Vision pass'i hiç başlatma.
+- **Post-dispatch guard:** Background queue'ya geçildikten sonra ikinci check — outer cancel queue gecikmesinden sonra hâlâ sonucu yutmasın.
+
+**`Sources/PixelComputerUse/ParallelCropDetection.swift`**
+- **Pre-spawn guard:** Cancellation check, `TaskGroup` spawn'lanmaz.
+- **Collection loop check:** `for await regions in group` içinde `Task.isCancelled` → `group.cancelAll()` + `break`. Kalan child task'lar `withTaskGroup` exit'inde implicit cancel.
+- **Child task closure:** OCR closure içinde `Task.isCancelled` propagation (Vision interruptible değil ama next checkpoint'te bail out).
+
+#### 3. Sparkline width user preference
+
+**`ios/PixelAgentRemote/SparklinePreferences.swift` (yeni saf helper)**
+- **`SparklinePreferences` enum** constants — `widthKey` UserDefaults key, `defaultWidth: 80`, `minWidth: 40`, `maxWidth: 160`, `clamped(_:)` defensive.
+
+**`ios/PixelAgentRemote/SettingsTabView.swift`**
+- **`displaySection`** yeni Form section "Görselleştirme" — `Slider` 40-160pt, step 8; `Label` waveform.path icon + "Xpt" monospaced caption. `@AppStorage(SparklinePreferences.widthKey)` ile shared.
+
+**`ios/PixelAgentRemote/ChatView.swift`**
+- **`MacPanelDashboardSection`** `@AppStorage(SparklinePreferences.widthKey)` field; wire latency badge HStack'inde sparkline frame `SparklinePreferences.clamped(sparklineWidth)` ile.
+
+### Tests
+- `Tests/PixelComputerUseTests/SoMOptionsTests.swift` — **+5** Sprint 29: default 0.0 confidence, accept custom 0.5, clamp -0.5/1.5 → 0.0/1.0, full Codable round-trip with confidence, **backward-compat decode without ocrMinConfidence field**.
+- `Tests/PixelComputerUseTests/ParallelCropDetectionTests.swift` — **+2** Sprint 29 cancellation: pre-cancel task returns empty/partial; mid-flight cancellation bounded.
+
+### Notes — Sprint 29
+- **3-in-1 bundle:** Üç ortak temaya bağlı olmayan küçük UX item single release'te toplandı (CHANGELOG/tag/tap maliyetini amortize). Sprint 1/2/3 paterniyle aynı.
+- **Cancellation caveat:** Vision `perform()` mid-call interruptible değil; cancellation guard'lar pre/post Vision; orta-Vision cancel olursa o pass tamamlanır (sonuç yutulur). `.fast` mode pass'leri ~50-300ms, kabul edilebilir.
+- **`@AppStorage` cross-view sharing:** `SettingsTabView` slider ↔ `ChatView` MacPanelDashboardSection aynı UserDefaults key — değişiklik anında badge re-render.
+
 ## [0.2.53] — 2026-05-25
 
 **Parallel per-element Vision — Sprint 27 follow-up.** v0.2.52 `.perElement` modu sequential loop kullanıyordu — N element için N × ~50-150ms wall-clock. v0.2.53 `withTaskGroup` ile her crop rect için konkurrent `Task` spawn'lar; wall-clock max(per-element) seviyesine düşer. 5 element × 100ms test: sequential ~500ms+ → parallel ~300ms+ (Neural Engine ve CPU scheduler latency dahil). Çoğu vision agent senaryosunda `.perElement` artık `.wholeImage` ile rekabet edebilir hale geldi.

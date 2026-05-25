@@ -417,6 +417,19 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 28 tamamlandı — Parallel per-element Vision.** Sprint 27 sequential per-element loop'u `withTaskGroup` ile parallel'e geçti. 5 element × 100ms test: sequential 500ms+ → parallel ~300ms+. CPU path'inde gerçek paralelizm; Neural Engine internal serialize ederse worst case sequential (regresyon yok). Mac test 928 → 938 (+10). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (orchestration internal; union ordering Sprint 26'dan beri deterministic değildi).
 
+## Sprint 29 — "Small UX tuning bundle" (v0.2.54)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | OCR | `SoMOptions.ocrMinConfidence: Double` + `OCRTextDetector` filter — `.fast` mode noise reduction |
+| ✅ | OCR | Cancellation propagation: `Task.isCancelled` guards (`OCRTextDetector` pre/post dispatch; `ParallelCropDetection` collection loop + `group.cancelAll()`) |
+| ✅ | iOS UX | Sparkline genişliği user preference — `SparklinePreferences` saf helper + `SettingsTabView` "Görselleştirme" slider + `ChatView` `@AppStorage` wire |
+| ✅ | MCP | `ui_screenshot.som_options.ocr_min_confidence` schema |
+| ⏸ | v0.2.55+ | Test isolation refactor (LAN SIGBUS flake yapısal çöz) |
+| ⏸ | v0.2.55+ | Demo GIF + Apple Developer signing (kullanıcı aksiyonu) |
+
+**25 May 2026: Sprint 29 tamamlandı — 3-in-1 small UX tuning bundle.** Üç bağımsız küçük item (OCR confidence threshold, OCR cancellation propagation, iOS sparkline width preference) tek release'te toplandı. Sprint 1/2/3 bundle paterniyle aynı. Mac test 938 → 945 (+7: 5 SoMOptions confidence + 2 ParallelCropDetection cancellation). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (3 item'ın tümü additive + backward-compat defaults).
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
