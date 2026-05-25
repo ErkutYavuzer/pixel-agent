@@ -24,6 +24,13 @@ struct ChatComposer: View {
     /// binding'i. Halo yeşile döner, kullanıcı dosyayı bırakabileceğini bilir.
     @State private var isDropTargeted: Bool = false
 
+    /// **Sprint 32 (v0.2.58):** Her send sonrası increment edilen counter —
+    /// `.id()` modifier'i değişince SwiftUI TextField'ı tamamen yeniden
+    /// inşa eder; NSTextField internal buffer'ı resetlenir. macOS
+    /// `TextField(axis: .vertical)` binding sync bug için bilinen en
+    /// garantili workaround. Defocus-refocus tek başına yetmedi.
+    @State private var sendCounter: Int = 0
+
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -76,6 +83,10 @@ struct ChatComposer: View {
                     handleDrop(providers: providers)
                     return true
                 }
+                // **Sprint 32 (v0.2.58):** sendCounter değişince TextField
+                // tamamen rebuild olur — NSTextField internal buffer reset.
+                // macOS axis-vertical TextField binding sync bug workaround'u.
+                .id("composer-\(sendCounter)")
 
             if isStreaming {
                 Button("Durdur", action: onCancel)
@@ -104,24 +115,29 @@ struct ChatComposer: View {
     /// trackpad'inde "yolladım" hissi alır. Onsubmit ve Gönder butonu
     /// her ikisi de buradan geçer.
     ///
-    /// **Sprint 32 (v0.2.57):** `TextField(axis: .vertical)` macOS'ta bilinen
-    /// bir SwiftUI bug var — focus active iken parent'in `draft = ""`
-    /// yazması NSTextField internal buffer'a yansımıyor; kullanıcının her
-    /// mesaj sonrası eski metni elle silmesi gerekiyordu. Workaround:
-    /// send'den hemen önce briefly defocus → commit + clear cycle, sonra
-    /// asyncAfter ile refocus (kullanıcı bir sonraki mesaja klavyeden
-    /// devam edebilsin).
+    /// **Sprint 32 (v0.2.57-58):** `TextField(axis: .vertical)` macOS'ta
+    /// bilinen bir SwiftUI bug var — focus active iken parent'in
+    /// `draft = ""` yazması NSTextField internal buffer'a yansımıyor;
+    /// kullanıcının her mesaj sonrası eski metni elle silmesi gerekiyordu.
+    ///
+    /// **v0.2.57 ilk denedim:** Defocus → onSend → refocus. Yetmedi —
+    /// bazı SwiftUI sürümlerinde defocus async tamamlanıyor + binding
+    /// commit cycle'ı henüz değişmemiş NSTextField buffer'a yazıyor.
+    ///
+    /// **v0.2.58 garantili çözüm:** `sendCounter` increment + TextField
+    /// `.id()` modifier'i — SwiftUI tamamen yeniden inşa eder, NSTextField
+    /// instance'ı silinir, yeni boş binding'le yeni instance yaratılır.
+    /// Focus rebuild sonrasında manuel restore.
     private func performSend() {
         guard canSend else { return }
         performHaptic()
         let wasFocused = isComposerFocused
-        if wasFocused {
-            isComposerFocused = false
-        }
         onSend()
+        // Critical: parent draft = "" set ettikten sonra .id() değişimi
+        // TextField'i baştan inşa et — eski NSTextField buffer'ı yok.
+        sendCounter &+= 1
         if wasFocused {
-            // Çok kısa bir defer — SwiftUI bir render cycle'da binding clear'ı
-            // işlesin, sonra alanı tekrar fokusla.
+            // Rebuild sonrası focus restore — kullanıcı klavyeden devam.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                 isComposerFocused = true
             }
