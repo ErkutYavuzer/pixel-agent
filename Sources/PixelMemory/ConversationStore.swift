@@ -103,6 +103,33 @@ public actor ConversationStore {
         try data.write(to: fileURL)
     }
 
+    /// Sprint 6 (B2): Bir archived dosyaya kullanıcı başlığı set/clear et.
+    /// `nil` veya whitespace-only → sidecar'dan kaldırılır (snippet fallback'e döner).
+    public func renameArchive(at url: URL, title: String?) throws {
+        try ArchiveTitleStore.setTitle(
+            title,
+            for: url.lastPathComponent,
+            directory: archiveDirectory
+        )
+    }
+
+    /// Sprint 6 (B2): View'lar instance olmadan da rename edebilsin —
+    /// `listAllArchives` gibi static. Sidecar atomic write olduğu için
+    /// thread-safe; aynı anda iki yerden yazımda last-write-wins.
+    public nonisolated static func renameArchive(
+        at url: URL,
+        title: String?,
+        directory: URL? = nil
+    ) throws {
+        let baseDir = directory ?? defaultDirectory()
+        let archiveDir = baseDir.appendingPathComponent("archive", isDirectory: true)
+        try ArchiveTitleStore.setTitle(
+            title,
+            for: url.lastPathComponent,
+            directory: archiveDir
+        )
+    }
+
     /// B2: Belirli bir archived dosyadan mesajları oku. URL store'un kendi
     /// archive dizininde olmalı (defensive boundary değil — caller dikkat etsin).
     public func loadMessages(fromArchive url: URL) throws -> [Message] {
@@ -135,6 +162,9 @@ public actor ConversationStore {
             options: [.skipsHiddenFiles]
         )
 
+        // Sprint 6 (B2): Sidecar titles dict'i bir kere yükle, loop'ta lookup et.
+        let titles = ArchiveTitleStore.load(directory: archiveDir)
+
         let decoder = JSONDecoder()
         var entries: [ArchivedConversationEntry] = []
         for url in urls {
@@ -157,7 +187,8 @@ public actor ConversationStore {
                 backendKind: parsed.kind,
                 archivedAt: parsed.date,
                 messageCount: messages.count,
-                firstUserSnippet: ArchivedConversationParser.firstUserSnippet(messages: messages)
+                firstUserSnippet: ArchivedConversationParser.firstUserSnippet(messages: messages),
+                customTitle: titles[filename]
             )
             entries.append(entry)
         }

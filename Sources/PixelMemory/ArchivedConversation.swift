@@ -17,19 +17,24 @@ public struct ArchivedConversationEntry: Identifiable, Equatable, Sendable {
     public let messageCount: Int
     /// İlk user mesajının ilk 60 karakteri — sidebar'da hızlı tanıma için.
     public let firstUserSnippet: String?
+    /// Sprint 6 (B2): kullanıcı verirse `ArchiveTitleStore` sidecar'ından gelir;
+    /// yoksa nil. UI önce bunu, sonra `firstUserSnippet`'ı, sonra "(başlıksız)" gösterir.
+    public let customTitle: String?
 
     public init(
         id: URL,
         backendKind: String,
         archivedAt: Date,
         messageCount: Int,
-        firstUserSnippet: String?
+        firstUserSnippet: String?,
+        customTitle: String? = nil
     ) {
         self.id = id
         self.backendKind = backendKind
         self.archivedAt = archivedAt
         self.messageCount = messageCount
         self.firstUserSnippet = firstUserSnippet
+        self.customTitle = customTitle
     }
 }
 

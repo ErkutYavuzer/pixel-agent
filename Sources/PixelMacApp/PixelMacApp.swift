@@ -645,7 +645,8 @@ struct ChatHost: View {
                         backendKind: entry.backendKind,
                         archivedAt: entry.archivedAt.timeIntervalSince1970,
                         messageCount: entry.messageCount,
-                        firstUserSnippet: entry.firstUserSnippet
+                        firstUserSnippet: entry.firstUserSnippet,
+                        customTitle: entry.customTitle
                     )
                 }
             }

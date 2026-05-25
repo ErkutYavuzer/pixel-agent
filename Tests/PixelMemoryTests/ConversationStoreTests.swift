@@ -51,6 +51,73 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertEqual(loaded.map(\.text), ["msg 7", "msg 8", "msg 9"])
     }
 
+    // MARK: - Sprint 6 (B2) — rename
+    //
+    // `listAllArchives` parser kind'lı filename bekler (`conversation-<kind>-<stamp>.jsonl`);
+    // bu yüzden bu testler `fileName: "conversation-claude.jsonl"` ile init eder.
+
+    func testRenameArchiveReflectsInListAllArchives() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-claude.jsonl")
+        try await store.append(Message(role: .user, text: "rename me"))
+        try await store.newConversation()
+
+        var entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertNil(entries[0].customTitle)
+
+        try await store.renameArchive(at: entries[0].id, title: "Custom başlık")
+
+        entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries[0].customTitle, "Custom başlık")
+        XCTAssertEqual(entries[0].backendKind, "claude")
+    }
+
+    func testRenameArchiveStaticOverloadWorks() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-codex.jsonl")
+        try await store.append(Message(role: .user, text: "static test"))
+        try await store.newConversation()
+
+        var entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries.count, 1)
+        try ConversationStore.renameArchive(at: entries[0].id, title: "Via static", directory: testDir)
+        entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries[0].customTitle, "Via static")
+    }
+
+    func testRenameArchiveWithNilClearsTitle() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-gemini.jsonl")
+        try await store.append(Message(role: .user, text: "clear me"))
+        try await store.newConversation()
+
+        var entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries.count, 1)
+        try await store.renameArchive(at: entries[0].id, title: "First")
+        try await store.renameArchive(at: entries[0].id, title: nil)
+        entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertNil(entries[0].customTitle)
+    }
+
+    func testListAllArchivesPreservesUntitledEntries() async throws {
+        let store = try ConversationStore(directory: testDir, fileName: "conversation-claude.jsonl")
+        try await store.append(Message(role: .user, text: "first"))
+        try await store.newConversation()
+        // ms timestamp collision'ı önle.
+        try await Task.sleep(for: .milliseconds(50))
+        try await store.append(Message(role: .user, text: "second"))
+        try await store.newConversation()
+
+        let entries = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(entries.count, 2)
+        guard entries.count == 2 else { return }
+        try await store.renameArchive(at: entries[0].id, title: "Only first")
+
+        let refreshed = try ConversationStore.listAllArchives(directory: testDir)
+        XCTAssertEqual(refreshed.count, 2)
+        let titled = refreshed.filter { $0.customTitle != nil }
+        XCTAssertEqual(titled.count, 1)
+        XCTAssertEqual(titled.first?.customTitle, "Only first")
+    }
+
     func testNewConversationArchivesAndEmpties() async throws {
         let store = try ConversationStore(directory: testDir)
         try await store.append(Message(role: .user, text: "before"))

@@ -22,6 +22,10 @@ struct ConversationHistoryView: View {
     @State private var loadError: String?
     @State private var isLoading: Bool = false
 
+    /// Sprint 6 (B2): Rename sheet state.
+    @State private var renameTarget: ArchivedConversationEntry?
+    @State private var renameDraft: String = ""
+
     var body: some View {
         NavigationSplitView {
             sidebar
@@ -37,6 +41,24 @@ struct ConversationHistoryView: View {
         }
         .frame(minWidth: 720, idealWidth: 860, minHeight: 480, idealHeight: 560)
         .task { await reload() }
+        .sheet(item: $renameTarget) { entry in
+            RenameArchiveSheet(
+                entry: entry,
+                draft: $renameDraft,
+                onSave: { applyRename(for: entry, title: renameDraft) },
+                onCancel: { renameTarget = nil }
+            )
+        }
+    }
+
+    private func applyRename(for entry: ArchivedConversationEntry, title: String?) {
+        do {
+            try ConversationStore.renameArchive(at: entry.id, title: title)
+            renameTarget = nil
+            Task { await reload() }
+        } catch {
+            loadError = "Yeniden adlandırma başarısız: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Sidebar
@@ -100,9 +122,17 @@ struct ConversationHistoryView: View {
     @ViewBuilder
     private func row(for entry: ArchivedConversationEntry) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(entry.firstUserSnippet ?? "(başlıksız)")
-                .font(.subheadline)
-                .lineLimit(2)
+            HStack(spacing: 4) {
+                Text(ArchiveTitleResolver.displayTitle(for: entry))
+                    .font(.subheadline)
+                    .lineLimit(2)
+                if entry.customTitle != nil {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.purple.opacity(0.7))
+                        .help("Yeniden adlandırılmış")
+                }
+            }
             HStack(spacing: 6) {
                 Text(Self.dateFormatter.string(from: entry.archivedAt))
                 Text("·")
@@ -112,6 +142,21 @@ struct ConversationHistoryView: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+        .contextMenu {
+            Button {
+                renameDraft = entry.customTitle ?? ""
+                renameTarget = entry
+            } label: {
+                Label("Yeniden adlandır…", systemImage: "pencil")
+            }
+            if entry.customTitle != nil {
+                Button(role: .destructive) {
+                    applyRename(for: entry, title: nil)
+                } label: {
+                    Label("Başlığı sıfırla", systemImage: "arrow.uturn.backward")
+                }
+            }
+        }
     }
 
     // MARK: - Detail (read-only message viewer)

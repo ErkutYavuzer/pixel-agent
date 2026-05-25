@@ -50,19 +50,25 @@ public struct ArchiveEntryPayload: Codable, Sendable, Equatable, Identifiable {
     public let messageCount: Int
     /// İlk user mesajının kısa preview'ı (60 char). nil olabilir.
     public let firstUserSnippet: String?
+    /// Sprint 6 (B2): Mac'te kullanıcı verirse sidecar'dan; yoksa nil.
+    /// iOS UI önce bunu, sonra `firstUserSnippet`'ı kullanır. Eski client'lar
+    /// bu field'ı yok sayar (Codable opsiyonel — additive).
+    public let customTitle: String?
 
     public init(
         id: String,
         backendKind: String,
         archivedAt: Double,
         messageCount: Int,
-        firstUserSnippet: String?
+        firstUserSnippet: String?,
+        customTitle: String? = nil
     ) {
         self.id = id
         self.backendKind = backendKind
         self.archivedAt = archivedAt
         self.messageCount = messageCount
         self.firstUserSnippet = firstUserSnippet
+        self.customTitle = customTitle
     }
 }
 
