@@ -30,6 +30,13 @@ public struct SoMOptions: Sendable, Equatable, Codable {
     /// crop modu. Sadece `badgePlacement == .contentAware` iken anlamlı —
     /// diğer modlarda yoksayılır.
     public let ocrCropMode: OCRCropMode
+    /// **Faz 5c follow-up (v0.2.54):** Vision OCR'da minimum text confidence
+    /// threshold (0.0-1.0). Bu değerin altındaki text observations filtre
+    /// edilir. Default 0.0 — tümü kabul edilir (Sprint 26 davranışı, backward
+    /// compat). 0.5 ortalama bir filtre; 0.8 sıkı (sadece kesin text).
+    /// `.fast` recognition level low-confidence noise üretebildiği için
+    /// yükseltmek scoring quality'sini artırır.
+    public let ocrMinConfidence: Double
 
     public init(
         palette: [SoMColor] = SoMColor.defaultPalette,
@@ -38,7 +45,8 @@ public struct SoMOptions: Sendable, Equatable, Codable {
         fontSize: Double = 20,
         textColor: SoMColor = .white,
         badgePlacement: BadgePlacement = .topLeftInside,
-        ocrCropMode: OCRCropMode = .wholeImage
+        ocrCropMode: OCRCropMode = .wholeImage,
+        ocrMinConfidence: Double = 0.0
     ) {
         // Empty palette guard — caller mantık hatasından korunmak için.
         self.palette = palette.isEmpty ? SoMColor.defaultPalette : palette
@@ -48,14 +56,15 @@ public struct SoMOptions: Sendable, Equatable, Codable {
         self.textColor = textColor
         self.badgePlacement = badgePlacement
         self.ocrCropMode = ocrCropMode
+        self.ocrMinConfidence = min(1.0, max(0.0, ocrMinConfidence))
     }
 
-    // MARK: - Codable (manuel) — yeni `ocrCropMode` field eski JSON'da
-    // yoksa default `.wholeImage`'a düşer. Sprint 26 wire format'ı bozulmaz.
+    // MARK: - Codable (manuel) — yeni field'lar eski JSON'da yoksa default'a
+    // düşer. Sprint 26+ wire format'ı bozulmaz.
 
     private enum CodingKeys: String, CodingKey {
         case palette, outlineWidth, badgeSize, fontSize, textColor,
-             badgePlacement, ocrCropMode
+             badgePlacement, ocrCropMode, ocrMinConfidence
     }
 
     public init(from decoder: Decoder) throws {
@@ -70,6 +79,8 @@ public struct SoMOptions: Sendable, Equatable, Codable {
             ?? .topLeftInside
         let ocrCropMode = try c.decodeIfPresent(OCRCropMode.self, forKey: .ocrCropMode)
             ?? .wholeImage
+        let ocrMinConfidence = try c.decodeIfPresent(Double.self, forKey: .ocrMinConfidence)
+            ?? 0.0
         self.init(
             palette: palette,
             outlineWidth: outlineWidth,
@@ -77,7 +88,8 @@ public struct SoMOptions: Sendable, Equatable, Codable {
             fontSize: fontSize,
             textColor: textColor,
             badgePlacement: badgePlacement,
-            ocrCropMode: ocrCropMode
+            ocrCropMode: ocrCropMode,
+            ocrMinConfidence: ocrMinConfidence
         )
     }
 
@@ -90,6 +102,7 @@ public struct SoMOptions: Sendable, Equatable, Codable {
         try c.encode(textColor, forKey: .textColor)
         try c.encode(badgePlacement, forKey: .badgePlacement)
         try c.encode(ocrCropMode, forKey: .ocrCropMode)
+        try c.encode(ocrMinConfidence, forKey: .ocrMinConfidence)
     }
 
     /// Eski hardcoded davranışı korur — v0.2.37'ye kadar SoMRenderer bu değerleri

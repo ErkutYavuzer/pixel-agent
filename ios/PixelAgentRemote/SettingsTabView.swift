@@ -9,12 +9,18 @@ import SwiftUI
 struct SettingsTabView: View {
     @EnvironmentObject var session: RemoteSession
     @State private var showConfirmForget: Bool = false
+    /// **Sprint 29 (v0.2.54):** Wire latency sparkline genişliği user
+    /// preference. Default `SparklinePreferences.defaultWidth` = 80; range
+    /// 40-160pt (slider).
+    @AppStorage(SparklinePreferences.widthKey)
+    private var sparklineWidth: Double = SparklinePreferences.defaultWidth
 
     var body: some View {
         Form {
             connectionSection
             pairingSection
             macInfoSection
+            displaySection
             appSection
             actionsSection
         }
@@ -112,6 +118,35 @@ struct SettingsTabView: View {
                  destination: URL(string: "https://github.com/ErkutYavuzer/pixel-agent")!)
         } header: {
             Text("Uygulama")
+        }
+    }
+
+    /// **Sprint 29 (v0.2.54):** Görselleştirme tercihleri — Mac Paneli badge'in
+    /// yanındaki latency sparkline genişliği.
+    private var displaySection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Label("Sparkline genişliği", systemImage: "waveform.path")
+                        .font(.body)
+                    Spacer()
+                    Text("\(Int(sparklineWidth))pt")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Slider(
+                    value: $sparklineWidth,
+                    in: SparklinePreferences.minWidth...SparklinePreferences.maxWidth,
+                    step: 8
+                )
+            }
+            .accessibilityElement(children: .combine)
+        } header: {
+            Text("Görselleştirme")
+        } footer: {
+            Text("Mac Paneli'nde wire latency badge'inin yanındaki trend grafiği genişliği.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 

@@ -34,11 +34,19 @@ public enum ParallelCropDetection {
     ///   Production: `OCRTextDetector.detectTextRegions(in:cropRect:)`
     ///   wrapper. Test: mock closure (deterministic veya gecikme injection).
     /// - Returns: tüm task sonuçlarının union'u (sıra non-deterministic).
+    ///
+    /// **v0.2.54 cancellation:** Outer Task cancel olursa:
+    /// - Dispatch öncesi check → empty array, TaskGroup spawn'lanmaz.
+    /// - Collection loop sırasında check → erken çıkış, kalan task'lar
+    ///   `withTaskGroup` exit'inde otomatik cancel.
+    /// - Her bir child task `Task.isCancelled` check'i `ocr` closure'una
+    ///   düşer (OCRTextDetector kendi guard'ı var).
     public static func detect(
         cropRects: [CGRect],
         ocr: @escaping @Sendable (CGRect) async -> [CGRect]
     ) async -> [CGRect] {
         guard !cropRects.isEmpty else { return [] }
+        if Task.isCancelled { return [] }
 
         return await withTaskGroup(of: [CGRect].self) { group in
             for rect in cropRects {
@@ -46,6 +54,12 @@ public enum ParallelCropDetection {
             }
             var union: [CGRect] = []
             for await regions in group {
+                if Task.isCancelled {
+                    // Erken çıkış — withTaskGroup exit kalan child'ları
+                    // implicit cancel eder.
+                    group.cancelAll()
+                    break
+                }
                 union.append(contentsOf: regions)
             }
             return union

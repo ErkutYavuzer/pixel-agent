@@ -145,9 +145,14 @@ public enum ScreenshotCapture {
         imageScreenOrigin: CGPoint,
         imageLogicalSize: CGSize
     ) async -> [CGRect] {
+        // **v0.2.54:** options.ocrMinConfidence Vision filter eşiği.
+        let minConfidence = options.ocrMinConfidence
         switch options.ocrCropMode {
         case .wholeImage:
-            return await OCRTextDetector.detectTextRegions(in: image)
+            return await OCRTextDetector.detectTextRegions(
+                in: image,
+                minConfidence: minConfidence
+            )
         case .perElement:
             let pixelSize = CGSize(width: Double(image.width), height: Double(image.height))
             let badgeSize = CGFloat(options.badgeSize)
@@ -173,7 +178,11 @@ public enum ScreenshotCapture {
             // CGImage CFType (effectively Sendable for read-only ops);
             // closure'a strong capture.
             return await ParallelCropDetection.detect(cropRects: cropRects) { rect in
-                await OCRTextDetector.detectTextRegions(in: image, cropRect: rect)
+                await OCRTextDetector.detectTextRegions(
+                    in: image,
+                    cropRect: rect,
+                    minConfidence: minConfidence
+                )
             }
         }
     }

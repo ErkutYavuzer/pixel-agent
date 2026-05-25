@@ -353,7 +353,11 @@ struct SubagentCard: View {
 
 struct MacPanelDashboardSection: View {
     @EnvironmentObject var session: RemoteSession
-    
+    /// **Sprint 29 (v0.2.54):** Wire latency sparkline genişliği user
+    /// preference — SettingsTabView'dan @AppStorage ile paylaşılır.
+    @AppStorage(SparklinePreferences.widthKey)
+    private var sparklineWidth: Double = SparklinePreferences.defaultWidth
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -513,6 +517,8 @@ struct MacPanelDashboardSection: View {
                     // 3sn periyodik push'lar. Renk band: <100ms yeşil,
                     // <300ms turuncu, >=300ms kırmızı.
                     // Sprint 25 (v0.2.50): Inline sparkline (son 20 frame trendi).
+                    // Sprint 29 (v0.2.54): Sparkline genişliği user preference
+                    // (`@AppStorage` SettingsTabView'dan); 40-160pt clamp.
                     if session.isStreamingScreenshots,
                        let latency = session.screenshotWireLatencyMs {
                         HStack(spacing: 6) {
@@ -524,7 +530,7 @@ struct MacPanelDashboardSection: View {
                                 latencies: session.wireLatencyHistory,
                                 color: wireLatencyColor(latency)
                             )
-                            .frame(width: 80, height: 16)
+                            .frame(width: SparklinePreferences.clamped(sparklineWidth), height: 16)
                             Spacer()
                         }
                         .foregroundStyle(wireLatencyColor(latency))

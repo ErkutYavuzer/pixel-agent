@@ -152,4 +152,55 @@ final class SoMOptionsTests: XCTestCase {
         XCTAssertEqual(decoded.ocrCropMode, .wholeImage,
             "Eski JSON field eksikse default .wholeImage'a düşmeli")
     }
+
+    // MARK: - Sprint 29 (v0.2.54): OCR confidence threshold
+
+    func testSoMOptionsDefaultOCRMinConfidenceIsZero() {
+        // Backward compat: Sprint 26-28 davranışı = tümünü kabul.
+        let options = SoMOptions()
+        XCTAssertEqual(options.ocrMinConfidence, 0.0)
+    }
+
+    func testSoMOptionsAcceptsCustomConfidence() {
+        let options = SoMOptions(ocrMinConfidence: 0.5)
+        XCTAssertEqual(options.ocrMinConfidence, 0.5)
+    }
+
+    func testSoMOptionsConfidenceClampsToValidRange() {
+        // Defensive: -0.5 → 0.0, 1.5 → 1.0.
+        XCTAssertEqual(SoMOptions(ocrMinConfidence: -0.5).ocrMinConfidence, 0.0)
+        XCTAssertEqual(SoMOptions(ocrMinConfidence: 1.5).ocrMinConfidence, 1.0)
+        XCTAssertEqual(SoMOptions(ocrMinConfidence: 0.7).ocrMinConfidence, 0.7)
+    }
+
+    func testSoMOptionsCodableRoundTripWithConfidence() throws {
+        let original = SoMOptions(
+            badgePlacement: .contentAware,
+            ocrCropMode: .perElement,
+            ocrMinConfidence: 0.65
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(SoMOptions.self, from: data)
+        XCTAssertEqual(decoded.ocrMinConfidence, 0.65)
+        XCTAssertEqual(decoded.ocrCropMode, .perElement)
+        XCTAssertEqual(decoded.badgePlacement, .contentAware)
+    }
+
+    func testSoMOptionsBackwardCompatDecodeWithoutConfidence() throws {
+        // Sprint 27 wire format (ocrMinConfidence field yok) → default 0.0.
+        let oldJSON = """
+        {
+            "palette": [],
+            "outlineWidth": 4,
+            "badgeSize": 36,
+            "fontSize": 20,
+            "textColor": {"red": 1, "green": 1, "blue": 1, "alpha": 1},
+            "badgePlacement": "contentAware",
+            "ocrCropMode": "per_element"
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SoMOptions.self, from: oldJSON)
+        XCTAssertEqual(decoded.ocrMinConfidence, 0.0,
+            "Eski JSON field eksikse default 0.0'a düşmeli")
+    }
 }
