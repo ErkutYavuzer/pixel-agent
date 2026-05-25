@@ -9,9 +9,79 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: App Store signing.
-- v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.39 follow-up: Subagent Faz 5 (UI panel'inde multi-turn turn list görselleştirme — Manager attached multi-turn dispatch path); SoM Faz 5 follow-up (OCR/AX label-aware badge placement).
+- v0.2.25 follow-up adayları (hâlâ açık): `hostStatus` delta-only push.
+- v0.2.40 follow-up: Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune); cancellation upstream (iOS disconnect → Mac coordinator auto-stop, şu an transport fail loop iterasyonunda).
+- v0.2.39 follow-up: Subagent Faz 5 UI panel multi-turn turn list görselleştirme.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.40] — 2026-05-25
+
+**iOS continuous screenshot streaming.** v0.2.25 release notlarında "iOS continuous screenshot streaming yok (şu an tek-shot request/response)" deniyordu. v0.2.40 bu eksiği kapatıyor: iOS Mac Paneli'nde "Canlı" toggle ile Mac her N ms'de bir screenshot push'lar; UI otomatik güncellenir.
+
+**Test:** Mac 797 → **802** (+5 EnvelopePayloadSumTypeTests screenshot stream cases). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni envelope case'leri additive, eski sürümler `EnvelopeType.unknown` fallback ile yutar).
+
+### Added — Sprint 15 / Continuous screenshot stream
+
+#### Protokol (`Sources/PixelRemote/RemoteEnvelope.swift`)
+- **EnvelopeType +2 case:**
+  * `screenshotStreamStart` — iOS → Mac, periyodik stream başlat.
+  * `screenshotStreamStop` — iOS → Mac, aktif stream'i durdur (payload yok).
+- **EnvelopePayload enum +1 case:**
+  * `.screenshotStreamStart(intervalMs: Int)` — interval ms.
+- **PayloadKey +1 wire key:** `streamIntervalMs`.
+- **Decoder clamping:** intervalMs 250-5000 ms arası clamp edilir (sub-250
+  aşırı CPU/network, >5s anlamsız refresh).
+- **Default:** 1000ms (1Hz, bandwidth-friendly).
+- **Backward-compat getter:** `streamIntervalMs: Int?`.
+- **Factory metotları:** `screenshotStreamStart(intervalMs:)` (default 1000),
+  `screenshotStreamStop()`.
+
+#### Mac (`Sources/PixelRemote/RemoteHost.swift` + `Sources/PixelMacApp/`)
+- **RemoteHost callbacks:**
+  * `onScreenshotStreamStartRequested: ((Int) async -> Void)?`
+  * `onScreenshotStreamStopRequested: (() async -> Void)?`
+  * `handle(...)` inbound switch'e 2 yeni branch.
+- **`Sources/PixelMacApp/ScreenshotStreamCoordinator.swift` (yeni public class):**
+  * `@MainActor ObservableObject` — ChatHost `@StateObject`.
+  * `start(intervalMs:sendImage:)` — önceki task cancel + clamp + Task spawn
+    + while !cancelled loop: ScreenshotCapture.capture → JPEG quality 0.5 →
+    base64 → sendImage callback → sleep(interval).
+  * `stop()` — task cancel + isActive false.
+  * `@Published isActive: Bool` + `intervalMs: Int` UI binding için.
+- **`ChatHost` wire-up (PixelMacApp.swift):** screenshotStream @StateObject;
+  handler'lar `coordinator.start` (host snapshot let — Swift 6 sending
+  uyumu) ve `coordinator.stop`. Strong `host` let snapshot outer
+  closure'da concurrent capture sorununu çözer.
+
+#### iOS (`ios/PixelAgentRemote/`)
+- **RemoteSession:**
+  * `@Published var isStreamingScreenshots: Bool = false` — UI binding.
+  * `startScreenshotStream(intervalMs:)` async — envelope sign+send +
+    optimistic isStreamingScreenshots = true.
+  * `stopScreenshotStream()` async — envelope sign+send + isStreaming false.
+  * `cleanActiveConnection`'da disconnect → isStreaming false (UI toggle
+    otomatik off görünür).
+- **ChatView Mac Paneli "Ekran Resmi" section:**
+  * Yeni "Canlı"/"Durdur" toggle buton (`play.circle.fill` yeşil /
+    `stop.circle.fill` kırmızı).
+  * "Resim Al" tek-shot buton stream aktifken disabled (mantıksız çift istek).
+  * Toggle `!session.isConnected` ise disabled.
+
+### Tests (+5)
+- `Tests/PixelRemoteTests/EnvelopePayloadSumTypeTests.swift` (+5 yeni test):
+  screenshotStreamStart round-trip, decoder clamping (50→250, 99999→5000),
+  default 1000 when missing, screenshotStreamStop nil payload, streamIntervalMs
+  getter nil for unrelated cases.
+- `Tests/PixelRemoteTests/RemoteEnvelopeTests.testEnvelopeTypeContainsAllExpectedCases`:
+  hardcoded set'e 2 yeni case (screenshotStreamStart/Stop).
+
+### Bilinen kısıtlar
+- **Cancellation upstream**: iOS disconnect olunca Mac coordinator task'i
+  doğrudan cancel olmuyor (transport.send fail edip loop iterasyonunda
+  çıkar; ~1 interval gecikme). v0.2.41 follow-up: RemoteHost disconnect →
+  coordinator.stop().
+- **Adaptive rate**: interval sabit (UI'dan 1000ms hardcoded). Mac CPU/
+  bandwidth telemetrisine göre auto-tune yok. v0.2.41+ adayı.
 
 ## [0.2.39] — 2026-05-25
 
