@@ -29,6 +29,9 @@ public final class RemoteHost: ObservableObject {
     /// **Sprint 10 (v0.2.35):** iOS bir arşivin tag listesini değiştirmek
     /// istediğinde çağrılır. `tags` nil veya boş → tüm tag'ler kaldırılır.
     public var onArchiveSetTagsRequested: ((_ id: String, _ tags: [String]?) async -> Void)?
+    /// **Sprint 12 (v0.2.37):** iOS bir arşivi kalıcı olarak silmek istediğinde
+    /// çağrılır. Caller `ConversationStore.deleteArchive` çağırmalı.
+    public var onArchiveDeleteRequested: ((_ id: String) async -> Void)?
 
     public var relayURL: String
 
@@ -369,6 +372,20 @@ public final class RemoteHost: ObservableObject {
                     guard let tagsHandler = await self.onArchiveSetTagsRequested else { return }
                     await tagsHandler(id, tags)
                     // Otomatik refresh.
+                    if let listHandler = await self.onArchiveListRequested {
+                        let entries = await listHandler()
+                        await self.sendArchiveListResponse(entries: entries)
+                    }
+                }
+            }
+        case .archiveDelete:
+            // Sprint 12 (v0.2.37): iOS delete dispatch'i.
+            if let id = envelope.payload?.mutationArchiveID, !id.isEmpty {
+                Task { [weak self] in
+                    guard let self else { return }
+                    guard let deleteHandler = await self.onArchiveDeleteRequested else { return }
+                    await deleteHandler(id)
+                    // Otomatik refresh — iOS'ta entry kaybolsun.
                     if let listHandler = await self.onArchiveListRequested {
                         let entries = await listHandler()
                         await self.sendArchiveListResponse(entries: entries)

@@ -163,6 +163,25 @@ public actor ConversationStore {
         return ArchiveTagsStore.allTags(directory: archiveDir)
     }
 
+    /// Sprint 12 (v0.2.37): Bir arşivi kalıcı olarak sil — JSONL dosyası +
+    /// sidecar entry'ler (title + tags). Idempotent (dosya yoksa hata atmaz).
+    /// View'lar instance olmadan da silebilsin diye static.
+    public nonisolated static func deleteArchive(at url: URL, directory: URL? = nil) throws {
+        let baseDir = directory ?? defaultDirectory()
+        let archiveDir = baseDir.appendingPathComponent("archive", isDirectory: true)
+        let filename = url.lastPathComponent
+
+        // 1. Sidecar entry'lerini temizle (her ikisi için "nil set" = remove key).
+        //    setTitle/setTags atomic write yapar; dosya yoksa graceful.
+        try? ArchiveTitleStore.setTitle(nil, for: filename, directory: archiveDir)
+        try? ArchiveTagsStore.setTags(nil, for: filename, directory: archiveDir)
+
+        // 2. JSONL dosyasını sil. Idempotent — dosya zaten yoksa hata atmaz.
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
     /// B2: Belirli bir archived dosyadan mesajları oku. URL store'un kendi
     /// archive dizininde olmalı (defensive boundary değil — caller dikkat etsin).
     public func loadMessages(fromArchive url: URL) throws -> [Message] {

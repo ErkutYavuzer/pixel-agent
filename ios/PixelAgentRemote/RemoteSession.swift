@@ -309,6 +309,21 @@ final class RemoteSession: ObservableObject {
         }
     }
 
+    /// **Sprint 12 (v0.2.37):** iOS → Mac. Bir arşivi kalıcı olarak sil
+    /// (JSONL + sidecar). Geri alınamaz; UI confirmation alert göstermeli.
+    /// Mac handler işlem sonrası otomatik `archiveListResponse` döner —
+    /// entry list'ten kaybolur.
+    func deleteArchive(id: String) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.archiveDelete(archiveID: id)
+        do {
+            let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
+            try await transport.send(signed)
+        } catch {
+            lastError = "Arşiv silme isteği gönderilemedi: \(error.localizedDescription)"
+        }
+    }
+
     func disconnect(forget: Bool = true) async {
         reconnectTask?.cancel()
         reconnectTask = nil

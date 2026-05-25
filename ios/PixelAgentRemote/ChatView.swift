@@ -679,42 +679,49 @@ struct ZoomableImageView: UIViewRepresentable {
 struct MessageRow: View {
     let message: Message
 
+    private var alignment: IOSBubbleAlignment {
+        IOSBubbleAlignment.from(role: message.role)
+    }
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            if message.role == .user {
+            if alignment != .leading {
                 Spacer()
-                Text(message.text)
-                    .font(.body)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color.blue)
-                    .foregroundStyle(.white)
-                    .clipShape(BubbleShape(isUser: true))
-                    .shadow(color: .blue.opacity(0.15), radius: 3, x: 0, y: 1)
-                    .textSelection(.enabled)
-            } else if message.role == .assistant {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(message.text)
-                        .font(.body)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .foregroundStyle(.primary)
-                        .clipShape(BubbleShape(isUser: false))
-                        .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
-                        .textSelection(.enabled)
-                }
-                Spacer()
-            } else {
-                Spacer()
-                Text(message.text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 4)
+            }
+            bubbleBody
+            if alignment != .trailing {
                 Spacer()
             }
         }
         .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
+    }
+
+    /// Sprint 12 (v0.2.37): Hardcoded color/shape değerleri `IOSBubbleStyle`
+    /// helper'ına taşındı (Mac `BubbleStyle` paraleli, testable). System
+    /// rolünde bubble değil sade caption render.
+    @ViewBuilder
+    private var bubbleBody: some View {
+        if message.role == .system {
+            Text(message.text)
+                .font(.caption)
+                .foregroundStyle(IOSBubbleColors.foreground(for: .system))
+                .padding(.vertical, 4)
+        } else {
+            Text(message.text)
+                .font(.body)
+                .padding(.horizontal, IOSBubbleMetrics.horizontalPadding)
+                .padding(.vertical, IOSBubbleMetrics.verticalPadding)
+                .background(IOSBubbleColors.background(for: message.role))
+                .foregroundStyle(IOSBubbleColors.foreground(for: message.role))
+                .clipShape(BubbleShape(isUser: message.role == .user))
+                .shadow(
+                    color: IOSBubbleColors.shadowColor(for: message.role),
+                    radius: IOSBubbleColors.shadowRadius(for: message.role),
+                    x: 0,
+                    y: 1
+                )
+                .textSelection(.enabled)
+        }
     }
 }
 

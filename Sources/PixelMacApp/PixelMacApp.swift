@@ -686,6 +686,12 @@ struct ChatHost: View {
                 )
             }
 
+            // Sprint 12 (v0.2.37): iOS archive delete dispatch handler'ı.
+            remoteHost.onArchiveDeleteRequested = { idString in
+                guard let url = URL(string: idString) else { return }
+                try? ConversationStore.deleteArchive(at: url)
+            }
+
             remoteHost.onClientConfigReceived = { backend, model, plan in
                 guard let kind = CLIKind(rawValue: backend) else { return }
                 let oldBackend = self.selectedKind.rawValue

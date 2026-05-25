@@ -269,4 +269,37 @@ final class EnvelopePayloadSumTypeTests: XCTestCase {
         XCTAssertNil(RemoteEnvelope.archiveSetTags(archiveID: "x", tags: nil).payload?.editedTags)
         XCTAssertNil(RemoteEnvelope.archiveRename(archiveID: "x", newTitle: "y").payload?.editedTags)
     }
+
+    // MARK: - Sprint 12 (v0.2.37): archiveDelete envelope
+
+    func testArchiveDeleteRoundTrip() throws {
+        let original = RemoteEnvelope.archiveDelete(archiveID: "file://path.jsonl")
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded.type, .archiveDelete)
+        guard case .archiveDelete(let id) = decoded.payload else {
+            XCTFail("expected .archiveDelete")
+            return
+        }
+        XCTAssertEqual(id, "file://path.jsonl")
+    }
+
+    func testArchiveDeleteMutationIDGetter() {
+        let env = RemoteEnvelope.archiveDelete(archiveID: "url-1")
+        XCTAssertEqual(env.payload?.mutationArchiveID, "url-1")
+        // Diğer mutation getter'ları nil dönmeli.
+        XCTAssertNil(env.payload?.renameNewTitle)
+        XCTAssertNil(env.payload?.editedTags)
+    }
+
+    func testArchiveDeleteEncodesOnlyArchiveID() throws {
+        let env = RemoteEnvelope.archiveDelete(archiveID: "x")
+        let data = try JSONEncoder().encode(env)
+        let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let payload = dict?["payload"] as? [String: Any]
+        XCTAssertEqual(payload?["mutationArchiveID"] as? String, "x")
+        XCTAssertNil(payload?["renameNewTitle"])
+        XCTAssertNil(payload?["editedTags"])
+        XCTAssertNil(payload?["renameClearsTitle"])
+    }
 }

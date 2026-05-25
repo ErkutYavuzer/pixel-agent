@@ -12,6 +12,9 @@ struct ConversationHistoryViewIOS: View {
     @EnvironmentObject var session: RemoteSession
     @Environment(\.dismiss) private var dismiss
 
+    /// Sprint 12 (v0.2.37): Swipe-to-delete + confirmation dialog state.
+    @State private var pendingDeleteEntry: ArchiveEntryPayload?
+
     var body: some View {
         NavigationStack {
             content
@@ -56,11 +59,41 @@ struct ConversationHistoryViewIOS: View {
                             } label: {
                                 row(for: entry)
                             }
+                            // Sprint 12 (v0.2.37): swipe-to-delete + onay alert.
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    pendingDeleteEntry = entry
+                                } label: {
+                                    Label("Sil", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                 }
             }
             .listStyle(.insetGrouped)
+            .confirmationDialog(
+                "Bu arşivi sil?",
+                isPresented: Binding(
+                    get: { pendingDeleteEntry != nil },
+                    set: { if !$0 { pendingDeleteEntry = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: pendingDeleteEntry
+            ) { entry in
+                Button("Sil", role: .destructive) {
+                    Task {
+                        await session.deleteArchive(id: entry.id)
+                        pendingDeleteEntry = nil
+                    }
+                }
+                Button("İptal", role: .cancel) {
+                    pendingDeleteEntry = nil
+                }
+            } message: { entry in
+                let title = IOSArchiveTitleResolver.displayTitle(for: entry)
+                Text("\"\(title)\" geri alınamaz şekilde silinecek.")
+            }
         }
     }
 

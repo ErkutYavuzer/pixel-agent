@@ -32,6 +32,10 @@ public enum EnvelopeType: String, Sendable, CaseIterable {
     /// **Sprint 10 (v0.2.35):** iOS → Mac, bir arşivin tag listesini ayarla.
     /// `tags` nil veya boş → tüm tag'ler kaldırılır.
     case archiveSetTags
+    /// **Sprint 12 (v0.2.37):** iOS → Mac, bir arşivi kalıcı olarak sil.
+    /// JSONL dosyası + sidecar (title + tags) kaldırılır. Mac otomatik
+    /// `archiveListResponse` ile güncel liste döner.
+    case archiveDelete
     /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
     /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
     /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
@@ -204,6 +208,9 @@ public enum EnvelopePayload: Sendable, Equatable {
     case archiveRename(archiveID: String, newTitle: String?)
     /// Sprint 10 (v0.2.35): iOS → Mac mutation. `tags` nil → tüm tag'leri kaldır.
     case archiveSetTags(archiveID: String, tags: [String]?)
+    /// Sprint 12 (v0.2.37): iOS → Mac mutation. Arşivi kalıcı olarak sil
+    /// (JSONL + sidecar). Mac handler `ConversationStore.deleteArchive` çağırır.
+    case archiveDelete(archiveID: String)
 }
 
 // MARK: - Backward-compat field getters
@@ -332,11 +339,13 @@ extension EnvelopePayload {
         return nil
     }
 
-    /// Sprint 10: `archiveRename` / `archiveSetTags` ortak `archiveID` getter.
+    /// Sprint 10/12: `archiveRename` / `archiveSetTags` / `archiveDelete`
+    /// ortak `archiveID` getter.
     public var mutationArchiveID: String? {
         switch self {
         case .archiveRename(let id, _): return id
         case .archiveSetTags(let id, _): return id
+        case .archiveDelete(let id): return id
         default: return nil
         }
     }
@@ -481,6 +490,10 @@ extension EnvelopePayload {
             let tags = try c.decodeIfPresent([String].self, forKey: .editedTags)
             return .archiveSetTags(archiveID: id, tags: tags)
 
+        case .archiveDelete:
+            let id = try c.decodeIfPresent(String.self, forKey: .mutationArchiveID) ?? ""
+            return .archiveDelete(archiveID: id)
+
         case .ping, .ready, .archiveListRequest, .unknown:
             // Empty payload type'lar — nil dönmeli (RemoteEnvelope.payload = nil).
             return nil
@@ -564,6 +577,9 @@ extension EnvelopePayload {
             // tags nil → field omit (decoder nil olarak okur → "kaldır")
             // tags == [] → explicit boş array yine "kaldır" semantiği
             try c.encodeIfPresent(tags, forKey: .editedTags)
+
+        case .archiveDelete(let id):
+            try c.encode(id, forKey: .mutationArchiveID)
         }
     }
 }
@@ -699,6 +715,15 @@ extension RemoteEnvelope {
         RemoteEnvelope(
             type: .archiveSetTags,
             payload: .archiveSetTags(archiveID: archiveID, tags: tags)
+        )
+    }
+
+    /// Sprint 12 (v0.2.37): iOS → Mac. Bir arşivi kalıcı olarak sil
+    /// (JSONL + sidecar entry'leri).
+    public static func archiveDelete(archiveID: String) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .archiveDelete,
+            payload: .archiveDelete(archiveID: archiveID)
         )
     }
 
