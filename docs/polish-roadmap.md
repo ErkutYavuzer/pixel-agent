@@ -108,6 +108,40 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **24 May 2026: Sprint 3 tamamlandı — Persistent State + iOS Parity paketi.** 4 commit (7f6665a, 102332a, 0350b12, ve C12 commit'i). Test sayısı: 574 → 606 (+32). PixelAgent.app + iOS BUILD SUCCEEDED. Sonraki adım: v0.2.28 release tag (Sprint 3 bundle).
 
+## Sprint 4 — "Persistence Follow-up" (v0.2.29)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | C2/C3 follow-up | Screenshot disk persistence |
+| ✅ | B2 follow-up | "Bu sohbete devam et" archive load |
+| ✅ | C7 follow-up | Connection-lost pulse animation (Mac) |
+| ✅ | C11 | Screenshot → composer prefill prompt |
+| ✅ | forward-compat | `EnvelopeType.unknown` sentinel |
+
+**v0.2.29 release** (commit `6d49cbc`) — Sprint 4 paketlemesi.
+
+## Sprint 5 — "Cross-Platform Parity" (v0.2.30)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | C7 parity | iOS connection-lost pulse |
+| ✅ | A-polish | Mascot subtle animations |
+| ✅ | Composer | Drag-drop file context |
+| ✅ | B2 parity | iOS conversation history viewer |
+
+**v0.2.30 release** (commit `df4592c`) — 4 atomic item, Mac↔iOS UX simetrisi. Test: 631 → 675 (+44).
+
+## Sprint 6 — "Persistence + Polish" (v0.2.31)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | C2/C3 follow-up | SoM marks JSONL sidecar persistence |
+| ✅ | new | iOS → Mac archive load handler |
+| ✅ | B kategorisi | MCP setup wizard (auto config edit) |
+| ✅ | B2 power | Conversation rename (sidecar, contextMenu, sheet) |
+
+**25 May 2026: Sprint 6 tamamlandı — Persistence + Polish paketi.** 4 commit (69bb2f6, a976c20, b0a0482, ve bu release commit'i). Test: 698 → 718 (+20). Sprint 6 "tag/etiketleme" ayağı kasıtlı v0.3'e ertelendi (rename scope odağı korundu). Apple Developer ID + notarization + demo GIF kullanıcı aksiyonu olarak Sprint 6 dışında bekliyor.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

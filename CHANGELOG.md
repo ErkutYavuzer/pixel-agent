@@ -9,8 +9,66 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
-- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopePayload` sum-type refactor (20 opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- Sprint 6 adayları: SoM marks JSONL sidecar (Sprint 4 / C2-C3 follow-up); Conversation rename/tag (B2 power-feature); Mac MCP setup wizard (B kategorisi); Apple Developer ID + notarization; demo GIF recording.
+- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopePayload` sum-type refactor (20+ opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
+- Sprint 6 kalan: Conversation **tag** ayağı (rename v0.2.31'de iniş yaptı, tag/etiketleme v0.3'e ertelendi); Apple Developer ID + notarization (kullanıcı aksiyonu); demo GIF recording (kullanıcı aksiyonu).
+
+## [0.2.31] — 2026-05-25
+
+**Sprint 6 "Persistence + Polish" — paket kapanışı.** Sprint 5 release sonrası 4 atomic item: SoM marks JSONL sidecar persistence (`69bb2f6`), iOS → Mac archive load handler (`a976c20`), MCP setup wizard config file editor (`b0a0482`), ve bu release'le birlikte **konuşma yeniden adlandırma (rename)**. **718 test yeşil** (+20 bu release'te). Breaking change yok — sidecar persistence + opsiyonel wire field additive.
+
+### Added — Sprint 6 / B2 Conversation Rename
+
+#### Mac sidebar'da arşivlenmiş konuşmaya kullanıcı başlığı (`Sources/PixelMemory/`)
+- `ArchiveTitleStore.swift` (yeni, saf enum, public): sidecar persistence —
+  `archive/titles.json` flat dict `[filename: title]`. Filename değişmiyor
+  (parser kırılmasın); başlıklar ayrı dosyada.
+  * `load(directory:)` — sidecar yoksa veya bozuksa `[:]` (UI fallback davranır).
+  * `save(_:directory:)` — atomic write, pretty + sortedKeys (diff-friendly).
+  * `setTitle(_:for:directory:)` — title nil veya whitespace-only ise key kaldırılır.
+- `ArchivedConversation.swift`: `ArchivedConversationEntry.customTitle: String?`
+  yeni field; init default `nil` — additive, backward-compat.
+- `ConversationStore.swift`:
+  * `renameArchive(at:title:)` actor method — sidecar update.
+  * `renameArchive(at:title:directory:)` nonisolated static overload —
+    `listAllArchives` gibi, view'lar instance olmadan çağırabilir.
+  * `listAllArchives` her run'da sidecar dict'i bir kere yükler, entry'ye
+    `customTitle: titles[filename]` enjekte eder.
+
+#### Mac UI: sağ-tık menu + rename sheet (`Sources/PixelMacApp/`)
+- `ArchiveTitleResolver.swift` (yeni, saf enum, public): saf display
+  zinciri — `customTitle` (trim) > `firstUserSnippet` (trim) > `"(başlıksız)"`.
+  View'dan ayrık → testable.
+- `RenameArchiveSheet.swift` (yeni, struct view): modal sheet, başlık
+  TextField + Save/Cancel. Plain Enter Save, Escape Cancel. `@FocusState`
+  ile auto-focus. Snippet'i de altta gösterir (hangi konuşma bağlamı için).
+- `ConversationHistoryView.swift`:
+  * Row'da `ArchiveTitleResolver.displayTitle(for:)` + customTitle varsa
+    yanına mor `pencil.circle.fill` rozet.
+  * `.contextMenu` — "Yeniden adlandır…" + (customTitle varsa) "Başlığı
+    sıfırla" (destructive).
+  * `@State renameTarget: ArchivedConversationEntry?` + `renameDraft: String`.
+  * `.sheet(item: $renameTarget)` ile RenameArchiveSheet sunulur; Save
+    `ConversationStore.renameArchive(...)` çağırır + listeyi reload eder.
+
+#### Wire protokolü (`Sources/PixelRemote/RemoteEnvelope.swift`)
+- `ArchiveEntryPayload.customTitle: String?` opsiyonel field — eski iOS
+  client'lar Codable additive olduğu için sorunsuz decode eder, yeni
+  client'lar başlığı görür ve listede gösterir.
+- Mac handler (`PixelMacApp.swift`): `ArchivedConversationEntry → payload`
+  dönüşümünde `customTitle: entry.customTitle` geçirilir.
+
+### Tests (+20)
+- `Tests/PixelMemoryTests/ArchiveTitleStoreTests.swift` (yeni, 9 test):
+  empty/corrupt graceful, save+load round-trip, setTitle add/trim/nil/
+  empty/whitespace-only remove, nonexistent key noop.
+- `Tests/PixelMemoryTests/ConversationStoreTests.swift` (4 yeni test):
+  rename actor + static overload, nil-clears, untitled preservation
+  (sidecar yokken backward-compat). Testler kind'lı filename
+  (`conversation-claude.jsonl`) kullanır çünkü `listAllArchives` parser
+  kind segment'ini bekler.
+- `Tests/PixelMacAppTests/ArchiveTitleResolverTests.swift` (yeni, 8 test):
+  fallback zinciri (custom > snippet > placeholder), trim, edge cases
+  (empty/whitespace), placeholder constant stability.
 
 ## [0.2.30] — 2026-05-25
 
