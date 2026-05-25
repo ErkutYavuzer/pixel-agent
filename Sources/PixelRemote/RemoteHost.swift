@@ -278,9 +278,19 @@ public final class RemoteHost: ObservableObject {
     /// gelirse iliştirilir; tek-shot (manual) screenshot çağrılarında nil
     /// kalır. iOS yeni sürümleri non-nil frameID görürse `screenshotFrameAck`
     /// envelope'u ile geri yansıtır (round-trip wire latency).
-    public func sendScreenshot(base64Image: String, frameID: String? = nil) async {
+    /// **Sprint 24 (v0.2.49):** `wireLatencyMs` opsiyonel — coordinator önceki
+    /// frame'in ACK round-trip ölçümünü embed eder (per-frame badge update).
+    public func sendScreenshot(
+        base64Image: String,
+        frameID: String? = nil,
+        wireLatencyMs: Int? = nil
+    ) async {
         guard let transport = activeTransport else { return }
-        let envelope = RemoteEnvelope.screenshotPayload(base64Image: base64Image, frameID: frameID)
+        let envelope = RemoteEnvelope.screenshotPayload(
+            base64Image: base64Image,
+            frameID: frameID,
+            wireLatencyMs: wireLatencyMs
+        )
         do {
             let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
             try await transport.send(signed)

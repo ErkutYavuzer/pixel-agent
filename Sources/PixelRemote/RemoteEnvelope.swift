@@ -281,7 +281,13 @@ public enum EnvelopePayload: Sendable, Equatable {
     /// her tick için UUID üretip iliştirir; iOS ACK'lerinin Mac-side
     /// pendingFrames map'iyle eşleşmesi için. Tek-shot (manual) screenshot
     /// veya eski Mac sürümleri frameID göndermez (nil).
-    case screenshotPayload(base64Image: String, frameID: String?)
+    /// Sprint 24 (v0.2.49): `wireLatencyMs` opsiyonel — Mac coordinator
+    /// önceki frame'in `WireLatencyTracker` round-trip ölçümünü embed eder
+    /// (mevcut tick'in ACK'i bu envelope'tan sonra gelecek, dolayısıyla
+    /// "en güncel ölçüm" geçmiş frame'lerden gelir). iOS Mac Paneli badge
+    /// için per-frame (~1Hz) güncellenir — Sprint 23'ün 3 sn delta loop
+    /// lag'ini eler. nil ise hiç ACK gelmemiş, fallback hostStatus path.
+    case screenshotPayload(base64Image: String, frameID: String?, wireLatencyMs: Int?)
     case toolCallEvent(ToolCallEventPayload)
     case archiveListResponse(entries: [ArchiveEntryPayload])
     case archiveLoadRequest(archiveID: String)
@@ -388,7 +394,7 @@ extension EnvelopePayload {
     }
 
     public var base64Image: String? {
-        if case .screenshotPayload(let img, _) = self { return img }
+        if case .screenshotPayload(let img, _, _) = self { return img }
         return nil
     }
 
@@ -398,7 +404,7 @@ extension EnvelopePayload {
     /// caller eski Mac sürümünden gönderilmiş demektir; ACK loop'u atlanır.
     public var screenshotFrameID: String? {
         switch self {
-        case .screenshotPayload(_, let id): return id
+        case .screenshotPayload(_, let id, _): return id
         case .screenshotFrameAck(let id): return id
         default: return nil
         }
@@ -438,10 +444,13 @@ extension EnvelopePayload {
 
     /// Sprint 23 (v0.2.48): hostStatus + hostStatusDelta wire-latency badge
     /// getter. iOS handler bu değeri okuyup @Published'a yansıtır.
+    /// **Sprint 24 (v0.2.49):** `.screenshotPayload` da bu değeri taşır
+    /// (per-frame ~1Hz update, 3sn hostStatus lag'ini eler).
     public var screenshotWireLatencyMs: Int? {
         switch self {
         case .hostStatus(let c): return c.screenshotWireLatencyMs
         case .hostStatusDelta(let c): return c.screenshotWireLatencyMs
+        case .screenshotPayload(_, _, let latency): return latency
         default: return nil
         }
     }
@@ -591,7 +600,9 @@ extension EnvelopePayload {
         case .screenshotPayload:
             let img = try c.decodeIfPresent(String.self, forKey: .base64Image) ?? ""
             let frameID = try c.decodeIfPresent(String.self, forKey: .screenshotFrameID)
-            return .screenshotPayload(base64Image: img, frameID: frameID)
+            // Sprint 24 (v0.2.49): per-frame wire latency embed.
+            let latency = try c.decodeIfPresent(Int.self, forKey: .screenshotWireLatencyMs)
+            return .screenshotPayload(base64Image: img, frameID: frameID, wireLatencyMs: latency)
 
         case .screenshotFrameAck:
             // Eksik veya boş frameID → yine de decode et; üst katman
@@ -719,11 +730,13 @@ extension EnvelopePayload {
             // Sprint 23 (v0.2.48): opsiyonel — nil ise wire format'tan omit.
             try c.encodeIfPresent(content.screenshotWireLatencyMs, forKey: .screenshotWireLatencyMs)
 
-        case .screenshotPayload(let img, let frameID):
+        case .screenshotPayload(let img, let frameID, let latency):
             try c.encode(img, forKey: .base64Image)
             // Sprint 22 (v0.2.47): frameID opsiyonel — sadece set ise wire'a
             // gider. Eski iOS sürümleri görmez, davranış değişmez.
             try c.encodeIfPresent(frameID, forKey: .screenshotFrameID)
+            // Sprint 24 (v0.2.49): per-frame wire latency embed.
+            try c.encodeIfPresent(latency, forKey: .screenshotWireLatencyMs)
 
         case .screenshotFrameAck(let id):
             try c.encode(id, forKey: .screenshotFrameID)
@@ -1023,13 +1036,21 @@ extension RemoteEnvelope {
     /// her tick UUID üretip iliştirir, iOS aynı ID'yi `screenshotFrameAck`
     /// ile geri yansıtır. Tek-shot (manual) screenshot çağrılarında nil
     /// kalır (ACK loop'u devreye girmez).
+    /// **Sprint 24 (v0.2.49):** `wireLatencyMs` opsiyonel — coordinator
+    /// önceki frame'in ACK round-trip ölçümünü embed eder; iOS Mac Paneli
+    /// badge per-frame (~1Hz) güncellenir.
     public static func screenshotPayload(
         base64Image: String,
-        frameID: String? = nil
+        frameID: String? = nil,
+        wireLatencyMs: Int? = nil
     ) -> RemoteEnvelope {
         RemoteEnvelope(
             type: .screenshotPayload,
-            payload: .screenshotPayload(base64Image: base64Image, frameID: frameID)
+            payload: .screenshotPayload(
+                base64Image: base64Image,
+                frameID: frameID,
+                wireLatencyMs: wireLatencyMs
+            )
         )
     }
 

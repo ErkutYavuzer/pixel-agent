@@ -362,24 +362,27 @@ final class EnvelopePayloadSumTypeTests: XCTestCase {
     // MARK: - Sprint 22 (v0.2.47): screenshotFrameAck + frameID
 
     func testScreenshotPayloadWithoutFrameIDRoundTrip() throws {
-        // Eski wire format: frameID yok. Bytes wire'da yok, decode nil verir.
+        // Eski wire format: frameID + wireLatencyMs yok. Wire'da yok, decode nil verir.
         let original = RemoteEnvelope.screenshotPayload(base64Image: "abc==")
-        guard case .screenshotPayload(let img, let frameID) = original.payload else {
+        guard case .screenshotPayload(let img, let frameID, let latency) = original.payload else {
             XCTFail("expected .screenshotPayload")
             return
         }
         XCTAssertEqual(img, "abc==")
         XCTAssertNil(frameID)
+        XCTAssertNil(latency)
 
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
         XCTAssertEqual(decoded, original)
 
-        // Wire'da `screenshotFrameID` field hiç olmamalı.
+        // Wire'da `screenshotFrameID` + `screenshotWireLatencyMs` hiç olmamalı.
         let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let payload = dict?["payload"] as? [String: Any]
         XCTAssertNil(payload?["screenshotFrameID"],
             "frameID nil ise wire format'ta hiç olmamalı (encodeIfPresent)")
+        XCTAssertNil(payload?["screenshotWireLatencyMs"],
+            "wireLatencyMs nil ise wire format'ta hiç olmamalı (encodeIfPresent)")
     }
 
     func testScreenshotPayloadWithFrameIDRoundTrip() throws {
@@ -388,7 +391,7 @@ final class EnvelopePayloadSumTypeTests: XCTestCase {
             base64Image: "abc==",
             frameID: frameID
         )
-        guard case .screenshotPayload(_, let decodedID) = original.payload else {
+        guard case .screenshotPayload(_, let decodedID, _) = original.payload else {
             XCTFail("expected .screenshotPayload")
             return
         }
@@ -398,6 +401,61 @@ final class EnvelopePayloadSumTypeTests: XCTestCase {
         let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
         XCTAssertEqual(decoded, original)
         XCTAssertEqual(decoded.payload?.screenshotFrameID, frameID)
+    }
+
+    // MARK: - Sprint 24 (v0.2.49): screenshotPayload wireLatencyMs embed
+
+    func testScreenshotPayloadWithWireLatencyRoundTrip() throws {
+        // Per-frame latency embed: Mac coordinator önceki frame'in ACK
+        // round-trip ölçümünü envelope'a iliştirir; iOS Mac Paneli badge
+        // her tick güncellenir (3sn hostStatus lag yerine).
+        let original = RemoteEnvelope.screenshotPayload(
+            base64Image: "abc==",
+            frameID: "F2",
+            wireLatencyMs: 142
+        )
+        guard case .screenshotPayload(_, _, let latency) = original.payload else {
+            XCTFail("expected .screenshotPayload")
+            return
+        }
+        XCTAssertEqual(latency, 142)
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.payload?.screenshotWireLatencyMs, 142)
+    }
+
+    func testScreenshotPayloadWireLatencyGetterAcrossCases() {
+        // screenshotWireLatencyMs getter artık 3 case'i kapsamalı:
+        // hostStatus, hostStatusDelta, screenshotPayload.
+        let withLatency = RemoteEnvelope.screenshotPayload(
+            base64Image: "x", frameID: nil, wireLatencyMs: 87
+        )
+        XCTAssertEqual(withLatency.payload?.screenshotWireLatencyMs, 87)
+
+        // screenshotPayload but no latency → nil.
+        let withoutLatency = RemoteEnvelope.screenshotPayload(base64Image: "x")
+        XCTAssertNil(withoutLatency.payload?.screenshotWireLatencyMs)
+
+        // Unrelated case → nil.
+        XCTAssertNil(RemoteEnvelope.userMessage(text: "z").payload?.screenshotWireLatencyMs)
+    }
+
+    func testScreenshotPayloadFrameIDAndLatencyIndependent() throws {
+        // frameID set ama latency yok (ilk frame; ACK henüz gelmedi).
+        let firstFrame = RemoteEnvelope.screenshotPayload(
+            base64Image: "img",
+            frameID: "F1",
+            wireLatencyMs: nil
+        )
+        XCTAssertEqual(firstFrame.payload?.screenshotFrameID, "F1")
+        XCTAssertNil(firstFrame.payload?.screenshotWireLatencyMs)
+
+        // Tek-shot (frameID yok ama latency'i de yok — tek-shot screenshot için).
+        let oneShot = RemoteEnvelope.screenshotPayload(base64Image: "img")
+        XCTAssertNil(oneShot.payload?.screenshotFrameID)
+        XCTAssertNil(oneShot.payload?.screenshotWireLatencyMs)
     }
 
     func testScreenshotFrameAckRoundTrip() throws {

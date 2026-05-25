@@ -574,6 +574,15 @@ final class RemoteSession: ObservableObject {
                     await self?.sendScreenshotFrameAck(frameID: frameID)
                 }
             }
+            // Sprint 24 (v0.2.49): per-frame wire latency embed. Bu envelope
+            // önceki frame'in ACK round-trip ölçümünü taşır — Mac Paneli badge
+            // 3sn hostStatus lag yerine ~1Hz güncellenir. Sprint 23'ün
+            // hostStatus path'i de hâlâ çalışıyor (fallback); en güncel
+            // değer kazanır — bu envelope per-frame geldiği için çoğu zaman
+            // o.
+            if let latency = envelope.payload?.screenshotWireLatencyMs {
+                self.screenshotWireLatencyMs = latency
+            }
         case .toolCallEvent:
             // C12: Mac MCP bridge bir tool çağırdı — ring buffer'ı en yeni
             // ilk olacak şekilde güncelle, 30 kayıttan fazlasını at.

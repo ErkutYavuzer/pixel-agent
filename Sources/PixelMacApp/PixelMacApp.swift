@@ -700,13 +700,18 @@ struct ChatHost: View {
             // `host` let snapshot — Swift 6 concurrent capture sending uyumu
             // ('weak var' captured-in-concurrent-closure hatasından kaçınır).
             //
-            // Sprint 22 (v0.2.47): sendImage callback artık (base64, frameID)
-            // alıyor — wire-level latency için. iOS aynı frameID'yi
-            // screenshotFrameAck ile geri yansıtır.
+            // Sprint 22 (v0.2.47): sendImage callback (base64, frameID).
+            // Sprint 24 (v0.2.49): callback artık (base64, frameID, wireLatencyMs?)
+            // alıyor — önceki frame'in ACK round-trip ölçümü her envelope'a
+            // embed edilir; iOS Mac Paneli badge per-frame güncellenir.
             remoteHost.onScreenshotStreamStartRequested = { intervalMs in
                 let host = remoteHost
-                self.screenshotStream.start(intervalMs: intervalMs) { base64, frameID in
-                    await host.sendScreenshot(base64Image: base64, frameID: frameID)
+                self.screenshotStream.start(intervalMs: intervalMs) { base64, frameID, wireLatencyMs in
+                    await host.sendScreenshot(
+                        base64Image: base64,
+                        frameID: frameID,
+                        wireLatencyMs: wireLatencyMs
+                    )
                 }
             }
             remoteHost.onScreenshotStreamStopRequested = {

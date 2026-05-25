@@ -47,11 +47,15 @@ public final class ScreenshotStreamCoordinator: ObservableObject {
     /// hareket edebilir (slow network'te büyür, rahat network'te tabana
     /// döner).
     ///
-    /// **Sprint 22 (v0.2.47):** `sendImage` callback artık `(base64, frameID)`
-    /// alır. frameID her tick'te yeni UUID. iOS ACK ile geri yansıtır.
+    /// **Sprint 22 (v0.2.47):** `sendImage` callback `(base64, frameID)` alır.
+    /// frameID her tick'te yeni UUID. iOS ACK ile geri yansıtır.
+    /// **Sprint 24 (v0.2.49):** Callback `(base64, frameID, wireLatencyMs?)` —
+    /// önceki frame'in ACK round-trip ölçümünü her envelope'a embed eder; iOS
+    /// Mac Paneli badge per-frame (~1Hz) güncellenir. Sprint 23'ün hostStatus
+    /// 3sn lag'ini eler.
     public func start(
         intervalMs requestedMs: Int,
-        sendImage: @escaping @Sendable (_ base64: String, _ frameID: String) async -> Void
+        sendImage: @escaping @Sendable (_ base64: String, _ frameID: String, _ wireLatencyMs: Int?) async -> Void
     ) {
         stop()
         // Defensive clamp — envelope decoder zaten clamp'liyor ama yine de.
@@ -71,6 +75,13 @@ public final class ScreenshotStreamCoordinator: ObservableObject {
                 let sendStart = Date()
                 await self?.markFrameSent(frameID: frameID, at: sendStart)
 
+                // Sprint 24 (v0.2.49): önceki frame'in ACK round-trip ölçümünü
+                // (varsa) bu frame'e embed et — iOS badge per-frame güncellenir.
+                // İlk frame için nil; ikinci frame'den itibaren önceki ACK
+                // değeri taşınır. wireState pruning sonrası lastWireLatencyMs
+                // güncel kalır.
+                let latencyToEmbed = await self?.lastWireLatencyMs
+
                 do {
                     let result = try await ScreenshotCapture.capture(target: .activeDisplay)
                     if let jpegData = ImageEncoding.compressPNGToJPEG(
@@ -78,7 +89,7 @@ public final class ScreenshotStreamCoordinator: ObservableObject {
                         quality: 0.5
                     ) {
                         let base64 = jpegData.base64EncodedString()
-                        await sendImage(base64, frameID)
+                        await sendImage(base64, frameID, latencyToEmbed)
                     }
                 } catch {
                     // Screenshot başarısız → log + bir sonraki tick'i bekle
