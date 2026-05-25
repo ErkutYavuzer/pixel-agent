@@ -191,6 +191,17 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 10 tamamlandı — iOS mutation dispatch.** v0.2.34 read-only görünümün üzerine düzenleme açıldı. iOS edit sheet → Mac handler → ConversationStore → otomatik archiveListResponse round-trip. Yeni envelope case'leri sum-type refactor (Sprint 8) sayesinde tip güvenli eklendi. PixelRemoteTests 100 → 122. iOS xcodebuild simulator BUILD SUCCEEDED. Mac + iOS feature parity tam.
 
+## Sprint 11 — "A items polish" (v0.2.36)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | A — Mac UX | Scroll spring (default linear → spring 0.35/0.85) |
+| ✅ | A — Mac UX | Asymmetric chat bubble (user sağ mavi / assistant sol mor / system ortada gri) |
+| ✅ | A — iOS UX | Reconnect countdown banner ("X sn sonra tekrar deneme…") |
+| ✅ | testable helpers | BubbleStyle (saf, +9 test) + ReconnectCountdownFormatter (saf, iOS) |
+
+**25 May 2026: Sprint 11 tamamlandı — A items polish.** Polish-roadmap'in A kategorisinde "feature çalışıyor ama hızlı prototip hissi" şikayetlerine 3 cevap. Mac chat görünümü modern asymmetric bubble pattern'ine geçti (badge prefix kaldırıldı, alignment + renk yeterli). iOS reconnect feedback'i TimelineView ile her saniye güncellenir countdown'a kavuştu. Mac test 745 → 754. iOS xcodebuild simulator BUILD SUCCEEDED.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

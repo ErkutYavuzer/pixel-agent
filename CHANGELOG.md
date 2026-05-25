@@ -10,9 +10,75 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.35 follow-up: A items polish (scroll spring/asymmetric bubble/reconnect countdown); iOS'tan archive silme (Mac'te kalıcı kaldırma).
+- v0.2.36 follow-up: iOS'tan archive silme (Mac'te kalıcı kaldırma — `archiveDelete` envelope adayı); iOS UI'da bubble alignment paritesi (Mac'le hizalama).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - Bilinen pre-existing flake: `PixelComputerUseTests.IMEChunkingTests` ve `PixelMCPServerTests.JSONValueTests.testNestedSubscript` ardışık `swift test` çalıştırmada bazen SIGBUS atıyor; izole çalıştırmada geçiyor.
+
+## [0.2.36] — 2026-05-25
+
+**A items polish — Sprint 11.** Polish-roadmap'in A kategorisinden 3 görsel/UX item: scroll spring animation (Mac), asymmetric chat bubble (Mac), reconnect countdown (iOS). Hepsi "feature çalışıyor ama hızlı prototip hissi veriyor" şikayetlerine yanıt. **754 test yeşil** (+9 BubbleStyleTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
+### Added — Sprint 11 / A items polish
+
+#### Mac: Scroll spring (`Sources/PixelMacApp/ChatColumn.swift`)
+- Mevcut `withAnimation { proxy.scrollTo(...) }` → `.spring(response: 0.35,
+  dampingFraction: 0.85)`. Default linear animation streaming append'lerde
+  sıçrama hissi yaratıyordu; dampened spring okunaklılık öncelik
+  (bouncy değil, yumuşak).
+
+#### Mac: Asymmetric chat bubble (`Sources/PixelMacApp/BubbleStyle.swift` yeni + `ChatColumn.swift` refactor)
+- **`BubbleStyle.swift` (yeni, saf):**
+  * `BubbleAlignment` enum (`.leading`/`.trailing`/`.center`) +
+    `from(role:)` factory + `leadingSpacer`/`trailingSpacer` Bool
+    computed. Modern chat pattern: user → trailing, assistant → leading,
+    system → center.
+  * `BubbleColors` — `background(for:)` (user mavi 0.85 alpha dolgu,
+    assistant mor 0.18 alpha, system gri 0.14 alpha) +
+    `foreground(for:)` (user beyaz, diğerleri primary).
+  * `BubbleMetrics` — `cornerRadius: 12`, `horizontalPadding: 12`,
+    `verticalPadding: 8`, `maxWidthRatio(for:)` (user 0.75 / assistant
+    0.92 / system 0.7).
+- **`MessageRow` refactor:**
+  * Eski `HStack { badge; body }` symmetric layout → asymmetric bubble
+    + Spacer (alignment'a göre). User mesajları sağda mavi dolgu beyaz
+    text; assistant solda mor şeffaf primary text; system ortada gri
+    italic.
+  * Badge prefix kaldırıldı (alignment + renk yeterli — modern chat UX).
+  * Attachment (screenshot) durumu eski badge+body layout'unu korur —
+    image bubble içine sıkıştırılmaz, doğal genişlikte.
+
+#### iOS: Reconnect countdown (`ios/PixelAgentRemote/`)
+- **`RemoteSession.swift`:** `@Published var nextReconnectAt: Date?`
+  yeni property. `startReconnectionLoop` her döngü başında
+  `Date().addingTimeInterval(delaySeconds)` ile set'ler; sleep
+  tamamlanınca nil (banner "Bağlanılıyor…" gösterir). Loop bitiminde +
+  `cleanActiveConnection` içinde nil clean-up.
+- **`ReconnectCountdownFormatter.swift` (yeni, saf):**
+  `message(nextAt:now:)` — nil → "Bağlantı koptu. Yeniden bağlanılıyor…",
+  `nextAt > now` → "X sn sonra tekrar deneme…" (ceil), `nextAt <= now`
+  → "Bağlanılıyor…". View'dan ayrık.
+- **`ConnectionLostBanner.swift`:** Yeni `nextReconnectAt: Date?` param.
+  Statik "Bağlantı koptu..." text yerine `TimelineView(.periodic(by:
+  0.5))` ile `ReconnectCountdownFormatter` çıktısı — countdown her
+  saniye güncellenir. `monospacedDigit()` ile sayı yer kayması yok.
+- **`ChatView.swift`:** Banner callsite'ına `nextReconnectAt:
+  session.nextReconnectAt` parametre geçildi.
+
+### Tests (+9)
+- `Tests/PixelMacAppTests/BubbleStyleTests.swift` (yeni, 9 test):
+  * Alignment her role için doğru (.user→trailing/.assistant→leading/
+    .system→center).
+  * leadingSpacer/trailingSpacer truth table coverage.
+  * BubbleColors foreground user beyaz (semantik distinguishability —
+    Color exact equatable değil, description tabanlı zayıf karşılaştırma).
+  * Background 3 role için birbirinden farklı.
+  * MaxWidthRatios sıralama (assistant > user) + valid range (0,1].
+  * Metric sabitleri pozitif.
+
+ReconnectCountdownFormatter test'i v0.3+'a ertelendi — iOS test target
+henüz yok (Mac SPM testTarget pattern'i Xcode UI test target
+gerektiriyor); helper saf + View'dan ayrık olduğu için ileride
+eklenebilir.
 
 ## [0.2.35] — 2026-05-25
 
