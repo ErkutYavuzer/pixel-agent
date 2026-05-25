@@ -172,13 +172,14 @@ struct ChatView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("pixel-agent")
                     .font(.system(.headline, design: .rounded))
-                if let label = session.transportLabel {
-                    transportBadge(label)
-                }
+                // Sprint 31 (v0.2.56): Backend · Model menu — Mac Paneli'ne
+                // gitmeden direkt başlık altından seçilebilir. Plan modu
+                // sağa küçük bir badge olarak.
+                backendModelMenu
             }
-            
+
             Spacer()
-            
+
             if let code = session.pairing?.code {
                 Text(code)
                     .font(.caption.monospaced())
@@ -187,7 +188,7 @@ struct ChatView: View {
                     .padding(.vertical, 4)
                     .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
             }
-            
+
             // Sprint 5 (iOS history viewer): Sohbet geçmişi sheet'i.
             Button { showHistory = true } label: {
                 Image(systemName: "clock.arrow.circlepath")
@@ -211,6 +212,101 @@ struct ChatView: View {
                 .frame(height: 0.5),
             alignment: .bottom
         )
+    }
+
+    /// **Sprint 31 (v0.2.56):** Chat header'da inline backend / model /
+    /// plan mode picker. Mac Paneli tab'ında zaten var ama kullanıcının
+    /// sohbet sırasında oraya gitmemesi için header'a da konuldu.
+    /// Transport badge bu menü içinde yer alıyor (önceki yerine), header
+    /// ana satır temiz kalır.
+    @ViewBuilder
+    private var backendModelMenu: some View {
+        Menu {
+            // Backend section
+            Section("Arka Uç") {
+                let backends = session.availableBackends.isEmpty
+                    ? [session.selectedBackend].filter { !$0.isEmpty }
+                    : session.availableBackends
+                ForEach(backends, id: \.self) { backend in
+                    Button {
+                        guard !backend.isEmpty, backend != session.selectedBackend else { return }
+                        let newModel = session.availableModels[backend]?.first ?? ""
+                        Task {
+                            await session.updateConfig(backend: backend, model: newModel, planMode: session.planMode)
+                        }
+                    } label: {
+                        if backend == session.selectedBackend {
+                            Label(backend.capitalized, systemImage: "checkmark")
+                        } else {
+                            Text(backend.capitalized)
+                        }
+                    }
+                }
+            }
+
+            // Model section
+            Section("Model") {
+                let models = session.availableModels[session.selectedBackend] ?? []
+                let displayModels = models.isEmpty
+                    ? [session.selectedModel].filter { !$0.isEmpty }
+                    : models
+                ForEach(displayModels, id: \.self) { model in
+                    Button {
+                        guard !model.isEmpty, model != session.selectedModel else { return }
+                        Task {
+                            await session.updateConfig(backend: session.selectedBackend, model: model, planMode: session.planMode)
+                        }
+                    } label: {
+                        if model == session.selectedModel {
+                            Label(model, systemImage: "checkmark")
+                        } else {
+                            Text(model)
+                        }
+                    }
+                }
+            }
+
+            // Plan Mode toggle
+            Section {
+                Button {
+                    Task {
+                        await session.updateConfig(
+                            backend: session.selectedBackend,
+                            model: session.selectedModel,
+                            planMode: !session.planMode
+                        )
+                    }
+                } label: {
+                    if session.planMode {
+                        Label("Plan Modu: Açık", systemImage: "checkmark")
+                    } else {
+                        Label("Plan Modu: Kapalı", systemImage: "list.bullet.clipboard")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                let backendLabel = session.selectedBackend.isEmpty ? "Backend seç" : session.selectedBackend.capitalized
+                let modelLabel = session.selectedModel.isEmpty ? "model seç" : session.selectedModel
+                Text("\(backendLabel) · \(modelLabel)")
+                    .font(.caption)
+                    .foregroundStyle(.purple)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if session.planMode {
+                    Image(systemName: "list.bullet.clipboard.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+                if let label = session.transportLabel {
+                    transportBadge(label)
+                }
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .disabled(!session.isConnected)
     }
 
     @ViewBuilder
