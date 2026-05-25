@@ -8,35 +8,50 @@ import SwiftUI
 /// `sendImage` callback'i çağırır. `screenshotStreamStop` veya disconnect
 /// stop tetikler.
 ///
+/// **Sprint 21 (v0.2.46):** Sabit interval yerine `AdaptiveRateController`
+/// — son tick latency'sini ölçüp slow/fast lane'lerde scale eder.
+///
+/// **Sprint 22 (v0.2.47):** Latency artık wire-level. Her tick'te frameID
+/// (UUID) üretilip envelope'a iliştirilir; iOS aynı ID'yle ACK döner;
+/// `recordAck` round-trip'i hesaplar. Henüz ACK yokken (stream başlangıcı,
+/// eski iOS) local latency fallback'i kullanılır — `WireLatencyTracker.effectiveLatencyMs`.
+///
 /// `@MainActor ObservableObject` — ChatHost `@StateObject` olarak tutar.
-/// Task referansı internal; dış API sadece start/stop + `isActive`
-/// @Published.
 @MainActor
 public final class ScreenshotStreamCoordinator: ObservableObject {
     @Published public private(set) var isActive: Bool = false
     /// Şu an aktif kullanılan interval (Sprint 21: adaptive — son tick latency'sine göre değişebilir).
     @Published public private(set) var intervalMs: Int = 1000
-    /// **Sprint 21 (v0.2.46):** Son tick'te ölçülen send latency (capture +
-    /// JPEG + transport.send). UI debugging veya istatistik için public.
+    /// **Sprint 21 (v0.2.46):** Son tick'te `AdaptiveRateController`'a verilen
+    /// effective latency (Sprint 22: wire varsa wire, yoksa local).
     @Published public private(set) var lastSendLatencyMs: Int = 0
+    /// **Sprint 22 (v0.2.47):** Yalnızca wire-level latency (son alınan ACK).
+    /// UI debug: "Ağ: 87 ms" gibi gösterim için. nil → henüz ACK gelmedi.
+    @Published public private(set) var lastWireLatencyMs: Int?
 
     private var task: Task<Void, Never>?
     /// Kullanıcı tercih tabanı — adaptive controller buna kadar küçülür.
     private var baseIntervalMs: Int = 1000
+    /// Sprint 22 (v0.2.47): wire latency state. `recordAck` ve loop tick
+    /// bu state'i okuyup/güncelliyor. MainActor isolated.
+    private var wireState = WireLatencyState()
 
     public init() {}
 
     /// Stream başlat. Önceki task varsa cancel edilir. `sendImage` her
-    /// frame için çağrılır (base64 JPEG). Caller `sendImage`'in
+    /// frame için çağrılır (base64 JPEG + frameID). Caller `sendImage`'in
     /// thread-safe / actor-isolated olduğundan emin olmalı.
     ///
     /// **Sprint 21 (v0.2.46):** `requestedMs` kullanıcı tercih tabanı —
     /// adaptive controller `AdaptiveRateController` ile bunun **üstünde**
     /// hareket edebilir (slow network'te büyür, rahat network'te tabana
     /// döner).
+    ///
+    /// **Sprint 22 (v0.2.47):** `sendImage` callback artık `(base64, frameID)`
+    /// alır. frameID her tick'te yeni UUID. iOS ACK ile geri yansıtır.
     public func start(
         intervalMs requestedMs: Int,
-        sendImage: @escaping @Sendable (String) async -> Void
+        sendImage: @escaping @Sendable (_ base64: String, _ frameID: String) async -> Void
     ) {
         stop()
         // Defensive clamp — envelope decoder zaten clamp'liyor ama yine de.
@@ -44,13 +59,18 @@ public final class ScreenshotStreamCoordinator: ObservableObject {
         intervalMs = clampedMs
         baseIntervalMs = clampedMs
         lastSendLatencyMs = 0
+        lastWireLatencyMs = nil
+        wireState = WireLatencyState()
         isActive = true
 
         task = Task { [weak self] in
             while !Task.isCancelled {
                 guard let active = await self?.isActive, active else { break }
 
+                let frameID = UUID().uuidString
                 let sendStart = Date()
+                await self?.markFrameSent(frameID: frameID, at: sendStart)
+
                 do {
                     let result = try await ScreenshotCapture.capture(target: .activeDisplay)
                     if let jpegData = ImageEncoding.compressPNGToJPEG(
@@ -58,7 +78,7 @@ public final class ScreenshotStreamCoordinator: ObservableObject {
                         quality: 0.5
                     ) {
                         let base64 = jpegData.base64EncodedString()
-                        await sendImage(base64)
+                        await sendImage(base64, frameID)
                     }
                 } catch {
                     // Screenshot başarısız → log + bir sonraki tick'i bekle
@@ -68,18 +88,27 @@ public final class ScreenshotStreamCoordinator: ObservableObject {
 
                 if Task.isCancelled { break }
 
-                // **Sprint 21 (v0.2.46):** Adaptive rate — son tick latency'sini
+                // Sprint 21 (v0.2.46): Adaptive rate — son tick latency'sini
                 // ölç, controller ile yeni interval öner. Kullanıcı tercih
                 // baseMs'e kadar küçülür; slow network'te büyür.
-                let latencyMs = Int(Date().timeIntervalSince(sendStart) * 1000)
+                //
+                // Sprint 22 (v0.2.47): Latency artık `effectiveLatencyMs` —
+                // wire varsa wire (gerçek round-trip), yoksa local (eski
+                // iOS veya stream başlangıcı fallback'i).
+                let localLatencyMs = Int(Date().timeIntervalSince(sendStart) * 1000)
+                let now = Date()
+                let effective = await self?.effectiveLatencyAndPrune(
+                    localMs: localLatencyMs,
+                    now: now
+                ) ?? localLatencyMs
                 let currentMs = await self?.intervalMs ?? clampedMs
                 let baseMs = await self?.baseIntervalMs ?? clampedMs
                 let nextMs = AdaptiveRateController.nextInterval(
                     currentMs: currentMs,
-                    lastSendLatencyMs: latencyMs,
+                    lastSendLatencyMs: effective,
                     baseMs: baseMs
                 )
-                await self?.applyAdaptiveTick(latency: latencyMs, newInterval: nextMs)
+                await self?.applyAdaptiveTick(latency: effective, newInterval: nextMs)
 
                 try? await Task.sleep(nanoseconds: UInt64(nextMs) * 1_000_000)
             }
@@ -87,6 +116,41 @@ public final class ScreenshotStreamCoordinator: ObservableObject {
             // Final state reset — task end veya cancel.
             await self?.markInactive()
         }
+    }
+
+    /// **Sprint 22 (v0.2.47):** iOS ACK geldi — `RemoteHost.onScreenshotFrameAckReceived`
+    /// callback'i bunu çağırır. frameID pending map'inde bulunursa wire
+    /// latency hesaplanıp `lastWireLatencyMs` published'ı güncellenir; bir
+    /// sonraki tick `effectiveLatencyMs` üzerinden adaptive controller'a
+    /// iletilir. Stream aktif değilken gelen geç ACK'ler güvenli no-op
+    /// (state zaten reset edilmiştir).
+    public func recordAck(frameID: String, at receivedAt: Date) {
+        guard let latency = WireLatencyTracker.consumeAck(
+            state: &wireState,
+            frameID: frameID,
+            receivedAt: receivedAt
+        ) else {
+            return
+        }
+        lastWireLatencyMs = latency
+    }
+
+    /// Sprint 22: frame gönderildiğinde tracker'a kaydet (MainActor isolated).
+    /// Worker Task'ten çağrılır.
+    private func markFrameSent(frameID: String, at sentAt: Date) {
+        WireLatencyTracker.record(state: &wireState, frameID: frameID, at: sentAt)
+    }
+
+    /// Sprint 22: tick sonunda local + wire'dan effective seç ve stale
+    /// pending entry'leri temizle (30s threshold). Tek MainActor hop'ta
+    /// hem prune hem effectiveLatencyMs.
+    private func effectiveLatencyAndPrune(localMs: Int, now: Date) -> Int {
+        WireLatencyTracker.prune(state: &wireState, olderThan: now.addingTimeInterval(-30))
+        return WireLatencyTracker.effectiveLatencyMs(
+            state: wireState,
+            localMs: localMs,
+            now: now
+        )
     }
 
     /// Sprint 21: Adaptive tick state update — MainActor isolated.

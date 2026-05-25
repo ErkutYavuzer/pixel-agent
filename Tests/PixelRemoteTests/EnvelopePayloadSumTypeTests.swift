@@ -358,4 +358,79 @@ final class EnvelopePayloadSumTypeTests: XCTestCase {
         XCTAssertNil(RemoteEnvelope.ping().payload?.streamIntervalMs)
         XCTAssertNil(RemoteEnvelope.archiveDelete(archiveID: "x").payload?.streamIntervalMs)
     }
+
+    // MARK: - Sprint 22 (v0.2.47): screenshotFrameAck + frameID
+
+    func testScreenshotPayloadWithoutFrameIDRoundTrip() throws {
+        // Eski wire format: frameID yok. Bytes wire'da yok, decode nil verir.
+        let original = RemoteEnvelope.screenshotPayload(base64Image: "abc==")
+        guard case .screenshotPayload(let img, let frameID) = original.payload else {
+            XCTFail("expected .screenshotPayload")
+            return
+        }
+        XCTAssertEqual(img, "abc==")
+        XCTAssertNil(frameID)
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded, original)
+
+        // Wire'da `screenshotFrameID` field hiç olmamalı.
+        let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let payload = dict?["payload"] as? [String: Any]
+        XCTAssertNil(payload?["screenshotFrameID"],
+            "frameID nil ise wire format'ta hiç olmamalı (encodeIfPresent)")
+    }
+
+    func testScreenshotPayloadWithFrameIDRoundTrip() throws {
+        let frameID = "F1-uuid-1234"
+        let original = RemoteEnvelope.screenshotPayload(
+            base64Image: "abc==",
+            frameID: frameID
+        )
+        guard case .screenshotPayload(_, let decodedID) = original.payload else {
+            XCTFail("expected .screenshotPayload")
+            return
+        }
+        XCTAssertEqual(decodedID, frameID)
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.payload?.screenshotFrameID, frameID)
+    }
+
+    func testScreenshotFrameAckRoundTrip() throws {
+        let original = RemoteEnvelope.screenshotFrameAck(frameID: "F1-uuid-1234")
+        XCTAssertEqual(original.type, .screenshotFrameAck)
+
+        guard case .screenshotFrameAck(let id) = original.payload else {
+            XCTFail("expected .screenshotFrameAck")
+            return
+        }
+        XCTAssertEqual(id, "F1-uuid-1234")
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(RemoteEnvelope.self, from: data)
+        XCTAssertEqual(decoded, original)
+        XCTAssertEqual(decoded.payload?.screenshotFrameID, "F1-uuid-1234")
+    }
+
+    func testScreenshotFrameIDGetterForUnrelatedCasesNil() {
+        XCTAssertNil(RemoteEnvelope.ping().payload?.screenshotFrameID)
+        XCTAssertNil(RemoteEnvelope.userMessage(text: "x").payload?.screenshotFrameID)
+        XCTAssertNil(RemoteEnvelope.archiveDelete(archiveID: "x").payload?.screenshotFrameID)
+    }
+
+    func testScreenshotFrameAckMissingIDDecodesEmpty() throws {
+        // Defensive: wire'da `screenshotFrameID` field eksikse ack boş ID
+        // ile decode olur; üst katman (RemoteHost.handle) `!id.isEmpty`
+        // gate'i sayesinde callback'i çağırmaz.
+        let raw = """
+        {"v":2,"id":"e","ts":1,"type":"screenshotFrameAck","payload":{}}
+        """.data(using: .utf8)!
+        let env = try JSONDecoder().decode(RemoteEnvelope.self, from: raw)
+        XCTAssertEqual(env.type, .screenshotFrameAck)
+        XCTAssertEqual(env.payload?.screenshotFrameID, "")
+    }
 }

@@ -48,6 +48,13 @@ public enum EnvelopeType: String, Sendable, CaseIterable {
     /// iOS field-by-field merge eder; mevcut state korunur, dolu field'lar
     /// override eder.
     case hostStatusDelta
+    /// **Sprint 22 (v0.2.47):** iOS → Mac. Mac'in continuous screenshot
+    /// stream'inde her frame'e iliştirdiği `frameID`'yi geri yansıtır.
+    /// Round-trip ölçümü ile `AdaptiveRateController` için **gerçek** wire
+    /// latency'si elde edilir (capture + encode + transport handoff yerine).
+    /// Eski iOS sürümleri frameID görmez ACK göndermez → Mac local latency
+    /// fallback'ine düşer (Sprint 21 davranışı).
+    case screenshotFrameAck
     /// **Sprint 4 (forward-compat):** Bilinmeyen wire string'leri buraya
     /// düşer. Eski client'lar yeni envelope tiplerini decode hatası vermek
     /// yerine sessizce yutar; handler'lar `default: break` ile geçer.
@@ -253,7 +260,11 @@ public enum EnvelopePayload: Sendable, Equatable {
     case clientConfig(backend: String, model: String, planMode: Bool)
     case clientAction(actionType: String, targetID: String?)
     case hostStatus(HostStatusContent)
-    case screenshotPayload(base64Image: String)
+    /// Sprint 22 (v0.2.47): `frameID` opsiyonel — Mac stream coordinator
+    /// her tick için UUID üretip iliştirir; iOS ACK'lerinin Mac-side
+    /// pendingFrames map'iyle eşleşmesi için. Tek-shot (manual) screenshot
+    /// veya eski Mac sürümleri frameID göndermez (nil).
+    case screenshotPayload(base64Image: String, frameID: String?)
     case toolCallEvent(ToolCallEventPayload)
     case archiveListResponse(entries: [ArchiveEntryPayload])
     case archiveLoadRequest(archiveID: String)
@@ -270,6 +281,9 @@ public enum EnvelopePayload: Sendable, Equatable {
     case screenshotStreamStart(intervalMs: Int)
     /// Sprint 19 (v0.2.44): Mac → iOS, host status delta (bandwidth opt).
     case hostStatusDelta(HostStatusDeltaContent)
+    /// Sprint 22 (v0.2.47): iOS → Mac. Mac'in `screenshotPayload` frame'inin
+    /// `frameID`'sini yansıtır; round-trip wire latency ölçümü için.
+    case screenshotFrameAck(frameID: String)
 }
 
 // MARK: - Backward-compat field getters
@@ -357,8 +371,20 @@ extension EnvelopePayload {
     }
 
     public var base64Image: String? {
-        if case .screenshotPayload(let img) = self { return img }
+        if case .screenshotPayload(let img, _) = self { return img }
         return nil
+    }
+
+    /// Sprint 22 (v0.2.47): `screenshotPayload` veya `screenshotFrameAck`
+    /// payload'unda taşınan frame ID. Mac round-trip tracker'ında pending
+    /// map ile eşleşmek için kullanır. `screenshotPayload`'da nil ise
+    /// caller eski Mac sürümünden gönderilmiş demektir; ACK loop'u atlanır.
+    public var screenshotFrameID: String? {
+        switch self {
+        case .screenshotPayload(_, let id): return id
+        case .screenshotFrameAck(let id): return id
+        default: return nil
+        }
     }
 
     public var availableBackends: [String]? {
@@ -468,6 +494,8 @@ private enum PayloadKey: String, CodingKey {
     case renameClearsTitle
     /// Sprint 15 (v0.2.40): screenshot stream interval (ms).
     case streamIntervalMs
+    /// Sprint 22 (v0.2.47): screenshotPayload / screenshotFrameAck frameID.
+    case screenshotFrameID
 }
 
 extension EnvelopePayload {
@@ -532,7 +560,14 @@ extension EnvelopePayload {
 
         case .screenshotPayload:
             let img = try c.decodeIfPresent(String.self, forKey: .base64Image) ?? ""
-            return .screenshotPayload(base64Image: img)
+            let frameID = try c.decodeIfPresent(String.self, forKey: .screenshotFrameID)
+            return .screenshotPayload(base64Image: img, frameID: frameID)
+
+        case .screenshotFrameAck:
+            // Eksik veya boş frameID → yine de decode et; üst katman
+            // (RemoteHost.handle) boş ID için consume çağrısını skip eder.
+            let id = try c.decodeIfPresent(String.self, forKey: .screenshotFrameID) ?? ""
+            return .screenshotFrameAck(frameID: id)
 
         case .toolCallEvent:
             guard let event = try c.decodeIfPresent(ToolCallEventPayload.self, forKey: .toolCallEvent) else {
@@ -650,8 +685,14 @@ extension EnvelopePayload {
             try c.encode(content.activeSubagents, forKey: .activeSubagents)
             try c.encode(content.systemMetrics, forKey: .systemMetrics)
 
-        case .screenshotPayload(let img):
+        case .screenshotPayload(let img, let frameID):
             try c.encode(img, forKey: .base64Image)
+            // Sprint 22 (v0.2.47): frameID opsiyonel — sadece set ise wire'a
+            // gider. Eski iOS sürümleri görmez, davranış değişmez.
+            try c.encodeIfPresent(frameID, forKey: .screenshotFrameID)
+
+        case .screenshotFrameAck(let id):
+            try c.encode(id, forKey: .screenshotFrameID)
 
         case .toolCallEvent(let event):
             try c.encode(event, forKey: .toolCallEvent)
@@ -937,7 +978,27 @@ extension RemoteEnvelope {
         return RemoteEnvelope(type: .hostStatus, payload: .hostStatus(content))
     }
 
-    public static func screenshotPayload(base64Image: String) -> RemoteEnvelope {
-        RemoteEnvelope(type: .screenshotPayload, payload: .screenshotPayload(base64Image: base64Image))
+    /// Sprint 22 (v0.2.47): `frameID` opsiyonel — coordinator stream'inde
+    /// her tick UUID üretip iliştirir, iOS aynı ID'yi `screenshotFrameAck`
+    /// ile geri yansıtır. Tek-shot (manual) screenshot çağrılarında nil
+    /// kalır (ACK loop'u devreye girmez).
+    public static func screenshotPayload(
+        base64Image: String,
+        frameID: String? = nil
+    ) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .screenshotPayload,
+            payload: .screenshotPayload(base64Image: base64Image, frameID: frameID)
+        )
+    }
+
+    /// Sprint 22 (v0.2.47): iOS → Mac. Mac'in `screenshotPayload`
+    /// frame'inin `frameID`'sini yansıtır. Mac coordinator round-trip
+    /// hesaplayıp `AdaptiveRateController`'a iletir.
+    public static func screenshotFrameAck(frameID: String) -> RemoteEnvelope {
+        RemoteEnvelope(
+            type: .screenshotFrameAck,
+            payload: .screenshotFrameAck(frameID: frameID)
+        )
     }
 }

@@ -39,6 +39,12 @@ public final class RemoteHost: ObservableObject {
     /// **Sprint 15 (v0.2.40):** iOS aktif stream'i durdurmak istediğinde
     /// çağrılır. Caller varsa aktif task'i cancel etmeli.
     public var onScreenshotStreamStopRequested: (() async -> Void)?
+    /// **Sprint 22 (v0.2.47):** iOS bir `screenshotPayload` frame'ini ACK'ledi.
+    /// `frameID` Mac coordinator'ın pending map'inde aranır; eşleşirse
+    /// `receivedAt - sentAt` = wire-level round-trip latency. Caller
+    /// (`ScreenshotStreamCoordinator.recordAck`) sonuçu `AdaptiveRateController`'a
+    /// iletir.
+    public var onScreenshotFrameAckReceived: ((_ frameID: String, _ receivedAt: Date) -> Void)?
 
     public var relayURL: String
 
@@ -264,9 +270,13 @@ public final class RemoteHost: ObservableObject {
         }
     }
 
-    public func sendScreenshot(base64Image: String) async {
+    /// Sprint 22 (v0.2.47): `frameID` opsiyonel — coordinator stream'inden
+    /// gelirse iliştirilir; tek-shot (manual) screenshot çağrılarında nil
+    /// kalır. iOS yeni sürümleri non-nil frameID görürse `screenshotFrameAck`
+    /// envelope'u ile geri yansıtır (round-trip wire latency).
+    public func sendScreenshot(base64Image: String, frameID: String? = nil) async {
         guard let transport = activeTransport else { return }
-        let envelope = RemoteEnvelope.screenshotPayload(base64Image: base64Image)
+        let envelope = RemoteEnvelope.screenshotPayload(base64Image: base64Image, frameID: frameID)
         do {
             let signed = try EnvelopeSigner.sign(envelope, with: signingKey)
             try await transport.send(signed)
@@ -413,6 +423,14 @@ public final class RemoteHost: ObservableObject {
                 guard let self else { return }
                 guard let stopHandler = await self.onScreenshotStreamStopRequested else { return }
                 await stopHandler()
+            }
+        case .screenshotFrameAck:
+            // Sprint 22 (v0.2.47): iOS bir screenshot frame'ini ACK'ledi —
+            // wire-level round-trip latency için coordinator'a iletilir.
+            // Boş frameID (eski wire format) skip; tracker'da eşleşmeyen ID
+            // de no-op (tracker.consumeAck nil döner).
+            if let frameID = envelope.payload?.screenshotFrameID, !frameID.isEmpty {
+                onScreenshotFrameAckReceived?(frameID, Date())
             }
         default:
             break

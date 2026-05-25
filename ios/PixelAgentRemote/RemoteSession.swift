@@ -366,6 +366,18 @@ final class RemoteSession: ObservableObject {
         }
     }
 
+    /// **Sprint 22 (v0.2.47):** iOS → Mac. Bir `screenshotPayload` frame'ini
+    /// frameID ile ACK'le. Mac coordinator round-trip latency'sini hesaplar.
+    /// Best-effort: imzalama / send hatası sessizce yutulur (bir frame
+    /// kaybı adaptive rate için minor; local latency fallback'i devreye
+    /// girer).
+    private func sendScreenshotFrameAck(frameID: String) async {
+        guard let transport else { return }
+        let envelope = RemoteEnvelope.screenshotFrameAck(frameID: frameID)
+        guard let signed = try? EnvelopeSigner.sign(envelope, with: signingKey) else { return }
+        try? await transport.send(signed)
+    }
+
     func disconnect(forget: Bool = true) async {
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -536,6 +548,14 @@ final class RemoteSession: ObservableObject {
                let data = Data(base64Encoded: base64),
                let image = UIImage(data: data) {
                 self.latestScreenshot = image
+            }
+            // Sprint 22 (v0.2.47): frameID varsa ACK gönder. Mac coordinator
+            // round-trip latency'sini ölçer. Eski Mac frameID göndermez →
+            // ACK loop'u devreye girmez (graceful degradation).
+            if let frameID = envelope.payload?.screenshotFrameID, !frameID.isEmpty {
+                Task { [weak self] in
+                    await self?.sendScreenshotFrameAck(frameID: frameID)
+                }
             }
         case .toolCallEvent:
             // C12: Mac MCP bridge bir tool çağırdı — ring buffer'ı en yeni

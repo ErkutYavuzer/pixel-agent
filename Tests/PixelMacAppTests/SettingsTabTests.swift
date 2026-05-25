@@ -5,12 +5,14 @@ import XCTest
 final class SettingsTabTests: XCTestCase {
 
     func testAllCasesPresent() {
-        // B1 demo senaryosu için sabit 4 tab. Eklenirse hem enum hem
+        // B1 demo senaryosu için sabit tab seti. Eklenirse hem enum hem
         // SettingsView switch'i güncellenmiş olmalı.
-        XCTAssertEqual(SettingsTab.allCases.count, 4)
+        // Sprint 14 (v0.2.39): subagent 5. tab eklendi.
+        XCTAssertEqual(SettingsTab.allCases.count, 5)
         XCTAssertTrue(SettingsTab.allCases.contains(.general))
         XCTAssertTrue(SettingsTab.allCases.contains(.models))
         XCTAssertTrue(SettingsTab.allCases.contains(.connection))
+        XCTAssertTrue(SettingsTab.allCases.contains(.subagent))
         XCTAssertTrue(SettingsTab.allCases.contains(.permissions))
     }
 
