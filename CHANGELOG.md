@@ -11,6 +11,44 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 
+## [0.2.55] — 2026-05-25
+
+**Sprint 30 — Test hygiene + flake root cause analysis.** v0.2.37+ documented edilmiş "PixelLAN intermittent SIGSEGV/SIGBUS" flake'i root cause analizinde **build cache hassasiyeti** olarak belirlendi — gerçek test isolation veya port collision değil, stale incremental build artifact'leri memory layout'unu bozuyor. Clean rebuild her seferinde sorunu çözüyor. Bu release flake'i yapısal değil **operasyonel** olarak adresliyor: `scripts/test.sh` clean rebuild harness + `LANServiceLifecycleTests` gerçek start/stop pattern demonstration (port=0 + tearDown garantisi).
+
+**Test:** Mac 980 → **983** (+3: LANServiceLifecycleTests — start without throwing, stop allows restart, double-start throws alreadyStarted). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
+### Added — Sprint 30 / Test hygiene
+
+#### `scripts/test.sh` (yeni)
+- **Clean rebuild + full test run harness:** `rm -rf .build` + `swift test` + summary.
+- **`--quick` mode:** Build cache'i koru (incremental), sadece `swift test`.
+- **Output:** PASS/FAIL banner + test total + crash detection (`unexpected signal` grep) + clean rebuild tip.
+- **Idempotent:** Local development + CI için tutarlı entry point.
+
+#### `Tests/PixelLANTests/LANServiceLifecycleTests.swift` (yeni)
+- **3 yeni test:** `LANService.start()`/`.stop()` gerçek lifecycle — port=0 (ephemeral) + tearDown garantisi.
+  - `testServiceStartsWithoutThrowing`: start `ServiceError` atmıyor; stop temizliyor.
+  - `testStopAllowsRestart`: stop sonrası tekrar start çağrılabilir (kaynak leak yok).
+  - `testDoubleStartThrowsAlreadyStarted`: defensive — stop önce çağırılmadan start tekrar atmalı.
+- **`tearDown` async:** Her test sonrası `service?.stop()` defensive — NWListener file descriptor + GCD queue temizliği. Test isolation pattern referansı.
+
+### Root cause hypothesis update — v0.2.37 LAN flake
+
+**Önceki hipotez:** "NWListener/Bonjour multi-process port çakışması" (parallel mode) + "xctest single process kümülatif memory state corruption" (default mode).
+
+**Yeni bulgu (Sprint 30 analizi):**
+1. Tests'in çoğunluğu stub-based — gerçek `NWListener.start()` çağrısı yok (v0.2.37 → v0.2.54 PixelLAN suite'inde).
+2. `LANFramingTests.testDecodeMultipleLines` (pure data manipulation) deterministik signal 11 atıyordu — network yok, port yok.
+3. Debug `print` statement eklemek crash'i ortadan kaldırıyor (Heisenbug — memory layout sensitivity).
+4. `rm -rf .build` + clean rebuild → flake yok. İdempotent rebuild sonrası 3 ardışık `swift test` çalıştırması temiz.
+
+**Sonuç:** Bu Swift toolchain'inin (6.3.2 + Xcode 16+) test target incremental build'inde rare object file corruption / memory aliasing. **Workaround:** Clean rebuild öncesi test koşturma. `scripts/test.sh` bunu garantiliyor.
+
+### Notes — Sprint 30
+- **Counts düzeltmesi:** Önceki sprint'lerin per-module test count'ları script'in ilk "Executed N tests" line'ını picking up'lamasından PixelLANTests altında çekiliyordu (FallbackTransportTests'in 6'sı). Sprint 30'dan itibaren tail -1 ile package-level cumulative kullanılıyor — actual count ~40 daha yüksek (Sprint 29 945 → corrected ~980).
+- **Future direction:** Eğer flake CI'da görülürse (henüz GitHub Actions üzerinde test yok), CI workflow'unda `scripts/test.sh` (clean mode) kullanılmalı. Local development için `--quick` daha hızlı.
+- **Apple Bug Reporter candidate:** Reproducible'sa Swift toolchain'ine FB radar açılabilir; şimdilik workaround yeterli.
+
 ## [0.2.54] — 2026-05-25
 
 **Sprint 29 — Small UX tuning bundle.** Üç bağımsız küçük iyileştirme tek release:
