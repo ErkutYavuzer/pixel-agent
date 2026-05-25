@@ -71,6 +71,11 @@ final class RemoteSession: ObservableObject {
     /// sonrası `archiveLoadResponse` ile dolar.
     @Published var loadedArchiveMessages: [Message] = []
     @Published var isLoadingArchives: Bool = false
+    /// **Sprint 11 (v0.2.36):** Bağlantı kopukken bir sonraki reconnection
+    /// denemesinin yapılacağı an. Banner buradan elapsed countdown gösterir
+    /// (TimelineView). nil → şu an deneme yapılmıyor (loop bekleme arası
+    /// veya bağlantı aktif).
+    @Published var nextReconnectAt: Date? = nil
 
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
@@ -119,6 +124,9 @@ final class RemoteSession: ObservableObject {
         macPublicKey = nil
         mascotState = .idle
         lastError = nil
+        // Sprint 11 (A): Successful connection veya manual disconnect →
+        // pending countdown bitsin (banner clean state).
+        nextReconnectAt = nil
     }
 
     func connect(pairing: PairingInfo) async {
@@ -333,31 +341,44 @@ final class RemoteSession: ObservableObject {
         reconnectTask = Task { [weak self] in
             var delaySeconds: Double = 2.0
             let maxDelaySeconds: Double = 30.0
-            
+
             while !Task.isCancelled {
                 guard let self else { break }
                 guard let pairing = await self.pairing else { break }
                 guard !(await self.isConnected) else { break }
-                
+
+                // Sprint 11 (A): Banner countdown için reconnection denemesinin
+                // hedef anını publish et. Sleep tamamlanınca nil — "şu an
+                // bağlanıyor" görsel feedback ek devirde set'lenir.
+                let attemptAt = Date().addingTimeInterval(delaySeconds)
+                await MainActor.run { [weak self] in
+                    self?.nextReconnectAt = attemptAt
+                }
+
                 do {
                     try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
                 } catch {
                     break // Task cancelled
                 }
-                
+
                 if Task.isCancelled { break }
-                
+
+                await MainActor.run { [weak self] in
+                    self?.nextReconnectAt = nil
+                }
+
                 await self.establishConnection(pairing: pairing)
-                
+
                 if await self.isConnected {
                     break
                 } else {
                     delaySeconds = min(delaySeconds * 2, maxDelaySeconds)
                 }
             }
-            
+
             await MainActor.run { [weak self] in
                 self?.reconnectTask = nil
+                self?.nextReconnectAt = nil
             }
         }
     }

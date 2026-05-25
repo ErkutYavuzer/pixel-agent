@@ -24,6 +24,7 @@ struct ChatView: View {
                 if !session.isConnected {
                     ConnectionLostBanner(
                         pulseTrigger: lastDisconnectAt,
+                        nextReconnectAt: session.nextReconnectAt,
                         onRetry: {
                             if let pairing = session.pairing {
                                 Task { await session.connect(pairing: pairing) }

@@ -75,7 +75,13 @@ struct ChatColumn: View {
                 }
                 .onChange(of: viewModel.messages.last?.text) {
                     if let last = viewModel.messages.last {
-                        withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                        // Sprint 11 (A): Default linear → spring (yumuşak son chunk
+                        // append'lerde sıçrama hissi). Streaming sırasında her
+                        // chunk için tetiklenir; düşük damping fraction tercih
+                        // bouncy değil, dampened — okunaklılık öncelik.
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -214,21 +220,22 @@ struct MessageRow: View {
     /// kombosu InlineScreenshotView render eder.
     var attachment: ScreenshotAttachment? = nil
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(badge)
-                .font(.caption2.bold())
-                .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(badgeColor, in: .capsule)
+    /// Sprint 11 (A): Bubble alignment + colors saf helper'lardan gelir.
+    private var alignment: BubbleAlignment {
+        BubbleAlignment.from(role: message.role)
+    }
 
-            messageBody
-                .frame(maxWidth: .infinity, alignment: .leading)
+    var body: some View {
+        // Attachment varsa (system+screenshot) eski symmetric layout — image
+        // bubble içine sığmaz, doğal genişlikte kalsın.
+        Group {
+            if attachment != nil {
+                attachmentRow
+            } else {
+                bubbleRow
+            }
         }
-        // B6: sağ-tık menüsü — her mesaj kopyalanabilir; assistant rolünde
-        // ek "ID'yi Kopyala" debugging affordance'ı yok (over-engineering),
-        // sadece basit metin kopyası.
+        // B6: sağ-tık menüsü — her mesaj kopyalanabilir.
         .contextMenu {
             Button {
                 NSPasteboard.general.clearContents()
@@ -241,45 +248,68 @@ struct MessageRow: View {
     }
 
     @ViewBuilder
-    private var messageBody: some View {
-        switch message.role {
-        case .assistant:
-            // Markdown render — fenced code block'ları kopya butonlu blok'a,
-            // inline formatlamayı (bold/italic/inline code/link) AttributedString'e
-            // çevirir. Streaming sırasında her chunk'ta re-segment yapılır.
-            MarkdownMessageView(text: message.text, isStreaming: isStreaming)
-        case .user, .system:
-            if let attachment {
-                // C2/C3: system + screenshot → inline image render.
-                VStack(alignment: .leading, spacing: 6) {
-                    InlineScreenshotView(attachment: attachment)
-                    if !message.text.isEmpty {
-                        Text(message.text)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                }
-            } else {
-                Text(message.text.isEmpty ? "…" : message.text)
-                    .textSelection(.enabled)
+    private var bubbleRow: some View {
+        HStack(alignment: .top, spacing: 0) {
+            if alignment.leadingSpacer {
+                Spacer(minLength: 32)
+            }
+            messageBody
+                .padding(.horizontal, BubbleMetrics.horizontalPadding)
+                .padding(.vertical, BubbleMetrics.verticalPadding)
+                .background(
+                    BubbleColors.background(for: message.role),
+                    in: RoundedRectangle(cornerRadius: BubbleMetrics.cornerRadius)
+                )
+                .foregroundStyle(BubbleColors.foreground(for: message.role))
+            if alignment.trailingSpacer {
+                Spacer(minLength: 32)
             }
         }
     }
 
-    private var badge: String {
-        switch message.role {
-        case .user: return "SİZ"
-        case .assistant: return "PIXEL"
-        case .system: return "SYS"
+    /// Attachment'lı (screenshot) row — eski symmetric badge + body yapısı.
+    /// Bubble içine resim sıkıştırmıyoruz; system rolünde zaten attachment'lar
+    /// var ("Pixel ekranı kapattı, X yapıldı..." gibi).
+    @ViewBuilder
+    private var attachmentRow: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("SYS")
+                .font(.caption2.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.gray, in: .capsule)
+            attachmentBody
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private var badgeColor: Color {
+    @ViewBuilder
+    private var messageBody: some View {
         switch message.role {
-        case .user: return .blue
-        case .assistant: return .purple
-        case .system: return .gray
+        case .assistant:
+            // Markdown render — fenced code block'ları kopya butonlu blok'a,
+            // inline formatlamayı AttributedString'e çevirir.
+            MarkdownMessageView(text: message.text, isStreaming: isStreaming)
+        case .user, .system:
+            Text(message.text.isEmpty ? "…" : message.text)
+                .textSelection(.enabled)
+                .italic(message.role == .system)
+        }
+    }
+
+    @ViewBuilder
+    private var attachmentBody: some View {
+        if let attachment {
+            VStack(alignment: .leading, spacing: 6) {
+                InlineScreenshotView(attachment: attachment)
+                if !message.text.isEmpty {
+                    Text(message.text)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
         }
     }
 }

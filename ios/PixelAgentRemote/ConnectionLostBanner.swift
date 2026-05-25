@@ -10,6 +10,10 @@ import SwiftUI
 /// daha zordu.
 struct ConnectionLostBanner: View {
     let pulseTrigger: Date?
+    /// **Sprint 11 (v0.2.36):** Bir sonraki reconnection denemesinin yapılacağı
+    /// an. Banner countdown'ı bu Date'ten 0.5s periyodla geriye sayar.
+    /// nil → "Yeniden bağlanılıyor…" (sayıcı yok).
+    let nextReconnectAt: Date?
     let onRetry: () -> Void
 
     @State private var pulseScale: CGFloat = 1.0
@@ -19,9 +23,17 @@ struct ConnectionLostBanner: View {
         HStack(spacing: 10) {
             ProgressView()
                 .tint(.orange)
-            Text("Bağlantı koptu. Yeniden bağlanılıyor...")
+            // Sprint 11 (A): TimelineView ile saniye saniye countdown
+            // (0.5s'lik tick — saniye değişimini kaçırmaz, fazla render yok).
+            TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                Text(ReconnectCountdownFormatter.message(
+                    nextAt: nextReconnectAt,
+                    now: context.date
+                ))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
+            }
             Spacer()
             Button(action: onRetry) {
                 Text("Tekrar Dene")
