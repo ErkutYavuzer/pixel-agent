@@ -276,6 +276,18 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 17 tamamlandı — Stream cancellation upstream.** v0.2.40 continuous screenshot stream'in bilinen kısıtı (~1 interval gecikmeli stop) düzeltildi: ChatHost.onChange(of: remoteHost.isConnected) disconnect anında screenshotStream.stop() çağırır → immediate cancel. Mac test 811 → 820 (+9 ScreenshotStreamCoordinatorTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 18 — "Per-turn live streaming" (v0.2.43)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | runner | MultiTurnSubagentEvent enum (turnStarted/chunk/turnFinished/allFinished) |
+| ✅ | runner | runConversationStreaming AsyncStream + runConversationInternal helper |
+| ✅ | session | activeTurnIndex + activeTurnPartial fields |
+| ✅ | manager | dispatchMultiTurnAndWait streaming consume + beginTurn/appendTurnChunk/completeTurn |
+| ✅ | UI | SubagentDetailSheet @ObservedObject manager + activeTurnRow (mavi spinner + dashed border + monospaced live partial) |
+
+**25 May 2026: Sprint 18 tamamlandı — Per-turn live streaming.** v0.2.41 batch render → live chunk akışı: aktif turn'ün çıktısı real-time görünür (in-progress mavi kart, her chunk re-render). Sheet @ObservedObject manager ile live update kontratı. Mac test 820 → 825 (+5 MultiTurnSubagentStreamingTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

@@ -11,8 +11,54 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): `hostStatus` delta-only push.
 - v0.2.40 follow-up (kalan): Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune).
-- v0.2.41 follow-up: Per-turn streaming UI (şu an her turn'ün sonuçları finalize sonrası görünür; live chunk akışı yok).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.43] — 2026-05-25
+
+**Per-turn live streaming — Sprint 16 follow-up.** v0.2.41'de iniş yapan UI panel multi-turn turn list **finalize sonrası batch** render ediyordu — kullanıcı tüm konuşma bitene kadar per-turn output görmüyordu. v0.2.43 **live chunk akışı** ile aktif turn'ün çıktısı real-time görünür: in-progress mavi kart spinner + monospaced partial output, her chunk için UI re-render.
+
+**Test:** Mac 820 → **825** (+5 MultiTurnSubagentStreamingTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni streaming API additive; non-streaming `runConversation` korundu).
+
+### Added — Sprint 18 / Per-turn live streaming
+
+#### `Sources/PixelSubagent/MultiTurnSubagentRunner.swift`
+- **`MultiTurnSubagentEvent`** yeni public enum (4 case):
+  * `.turnStarted(index: Int, prompt: String)` — yeni turn başladı.
+  * `.chunk(turnIndex: Int, chunk: String)` — backend partial output.
+  * `.turnFinished(index: Int, result: TurnResult)` — turn tamamlandı.
+  * `.allFinished(MultiTurnSubagentResult)` — terminal event.
+- **`runConversationStreaming(turns:system:options:)`** nonisolated → `AsyncStream<MultiTurnSubagentEvent>`. Caller her chunk + turn boundary için event alır; stream `.allFinished` ile biter. `Task.cancel()` cooperative.
+- **`runConversationInternal(turns:onEvent:)`** private — paylaşılan helper. `runConversation` (non-streaming, geri uyumlu) ve `runConversationStreaming` her ikisi bu metodu çağırır; onEvent nil ise event yayını yapılmaz.
+- **`runSingleTurn`** `onChunk: (@Sendable (String) -> Void)? = nil` yeni param — streaming path için her chunk callback.
+
+#### `Sources/PixelMacApp/Subagent/SubagentSession.swift`
+- **`activeTurnIndex: Int?`** yeni opsiyonel field — şu an çalışan turn 0-based index. nil → aktif turn yok.
+- **`activeTurnPartial: String`** yeni field — aktif turn'ün biriken chunk'ları. Turn bittiğinde clear edilir.
+
+#### `Sources/PixelMacApp/Subagent/SubagentManager.swift`
+- **`dispatchMultiTurnAndWait`** Faz 6 update: `runConversationStreaming` consume + per-event state update:
+  * `.turnStarted` → `beginTurn(id:turnIndex:)`: activeTurnIndex set, partial clear.
+  * `.chunk` → `appendTurnChunk(id:turnIndex:chunk:)`: partial += chunk (race guard: activeTurnIndex eşleşmesi).
+  * `.turnFinished` → `completeTurn(id:turnIndex:result:)`: turns.append(result), active clear.
+  * `.allFinished` → `finalizeMultiTurn` (mevcut, terminal status).
+- Defensive: stream cancel olursa `.allFinished` ulaşmayabilir → synthetic `.cancelledAt` ile finalize (one-shot SubagentRunner paterni).
+
+#### `Sources/PixelMacApp/Subagent/SubagentPanelView.swift`
+- **`SubagentDetailSheet` refactor:** `let session` → `let initialSession` + `@ObservedObject var manager`. `session` computed `manager.sessions.first(...)` — multi-turn streaming sırasında her chunk re-render eder (sheet açıkken live update).
+- **`turnListLabel`** computed — aktif turn varsa `"Turn List (N/N+1 — çalışıyor)"`, yoksa eski `"Turn List (N)"`.
+- **`activeTurnRow(index:partial:)`** yeni @ViewBuilder:
+  * "Turn N" mavi badge + spinner + "Çalışıyor" text + sağ Spacer.
+  * Partial output monospaced caption, mavi 0.06 background + 0.4 dashed border (tamamlanan turn'lerden görsel olarak ayrı). Empty → "(akış bekleniyor…)" placeholder.
+- Multi-turn render branch genişletildi: `multiTurnTurns.isEmpty` ve `activeTurnIndex != nil` ise bile branch açılır (henüz turn tamamlanmamış olsa da live kart gösterilir).
+
+### Tests (+5)
+- `Tests/PixelSubagentTests/MultiTurnSubagentStreamingTests.swift` (yeni, 5 test):
+  * 2 turn × 3+2 chunk: event order doğrulanır (ilk turnStarted, son allFinished, 5 chunk + 2 turnFinished).
+  * Chunk `turnIndex` doğru tag'lenir (turn 0 chunks → idx 0, turn 1 → idx 1).
+  * Stream `allFinished` exactly once.
+  * Backwards compat: non-streaming `runConversation` hâlâ çalışır.
+  * MultiTurnSubagentEvent Equatable conformance (Equality + Inequality).
+  * Mock `ChunkedMockBackend` (per-turn chunk array, sequential).
 
 ## [0.2.42] — 2026-05-25
 
