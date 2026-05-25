@@ -10,9 +10,106 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.36 follow-up: iOS'tan archive silme (Mac'te kalıcı kaldırma — `archiveDelete` envelope adayı); iOS UI'da bubble alignment paritesi (Mac'le hizalama).
+- v0.2.37 follow-up: test isolation refactor (flake'ı yapısal çöz — ayrı xctest binary'ler veya fixture cleanup); demo GIF; Apple Dev ID + notarization.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
-- Bilinen pre-existing flake: `PixelComputerUseTests.IMEChunkingTests` ve `PixelMCPServerTests.JSONValueTests.testNestedSubscript` ardışık `swift test` çalıştırmada bazen SIGBUS atıyor; izole çalıştırmada geçiyor.
+
+## [0.2.37] — 2026-05-25
+
+**Sprint 12 bundle: iOS bubble parity + archive delete + flake root cause.** Üç atomic iş tek release'de:
+- iOS chat row hardcoded color/shape → `IOSBubbleStyle` saf helper (Mac `BubbleStyle` paraleli, testable; görsel davranış değişmedi — maintainability + cross-platform consistency).
+- iOS'tan **archive silme** dispatch: yeni `archiveDelete` envelope case + Mac handler + swipe-to-delete UI + confirmation dialog. Geri alınamaz; sidecar entry'ler (title + tags) JSONL ile birlikte temizlenir.
+- **Pre-existing test flake root cause analysis** — fix değil, karakterizasyon (CHANGELOG'da kayıt).
+
+**Test:** Mac 754 → 762 (+8 envelope/delete tests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni envelope case additive, eski sürümler `unknown` fallback).
+
+### Added — Sprint 12 / archive delete
+
+#### Protokol (`Sources/PixelRemote/RemoteEnvelope.swift`)
+- **`EnvelopeType.archiveDelete`** — iOS → Mac, arşivi kalıcı sil.
+- **`EnvelopePayload.archiveDelete(archiveID: String)`** — sum-type case.
+- **`PayloadKey`** değişiklik yok (`mutationArchiveID` Sprint 10'dan reuse).
+- **`mutationArchiveID` getter** `.archiveDelete` case'i kapsayacak şekilde genişletildi.
+- **Factory:** `RemoteEnvelope.archiveDelete(archiveID:)`.
+
+#### Mac (`Sources/PixelMemory/ConversationStore.swift` + `RemoteHost.swift` + `PixelMacApp.swift`)
+- **`ConversationStore.deleteArchive(at:directory:)`** nonisolated static:
+  sidecar entry'lerini (`ArchiveTitleStore`/`ArchiveTagsStore`) temizler +
+  JSONL dosyasını siler. Idempotent (dosya yoksa hata atmaz).
+- **`RemoteHost.onArchiveDeleteRequested`** yeni callback. `handle(...)`
+  inbound switch'e branch — handler çağrılır + otomatik
+  `archiveListResponse` refresh (iOS list'ten entry kaybolur).
+- **`PixelMacApp.swift`** wire-up: `ConversationStore.deleteArchive` static.
+
+#### iOS (`ios/PixelAgentRemote/`)
+- **`RemoteSession.deleteArchive(id:)`** async — `archiveDelete` envelope
+  sign+send.
+- **`ConversationHistoryViewIOS`** row `.swipeActions(edge: .trailing)`:
+  destructive "Sil" buton → `pendingDeleteEntry` state. List üstünde
+  `.confirmationDialog` ile "Bu arşivi sil?" onay + display title
+  message. Confirm → `session.deleteArchive` async + dialog kapan.
+
+### Refactored — Sprint 12 / iOS bubble parity
+
+#### `ios/PixelAgentRemote/IOSBubbleStyle.swift` (yeni saf helper)
+- **`IOSBubbleAlignment`** enum (.leading/.trailing/.center) +
+  `from(role:)` factory. Mac `BubbleAlignment` paraleli.
+- **`IOSBubbleColors`** — `background`/`foreground`/`shadowColor`/
+  `shadowRadius` her role için. iOS-native semantic adaptive renkler
+  (assistant `secondarySystemGroupedBackground` light/dark uyumlu).
+- **`IOSBubbleMetrics`** — `cornerRadius: 16`, `horizontalPadding: 16`,
+  `verticalPadding: 10`.
+
+#### `ios/PixelAgentRemote/ChatView.swift` MessageRow refactor
+- Eski `if/else` ladder (user/assistant/system role inline render) →
+  `bubbleBody` `@ViewBuilder` + `IOSBubbleStyle` helper'ları.
+- Spacer pattern alignment'a göre. System rolünde bubble değil sade
+  caption render (eski davranış korundu).
+- **Görsel davranış değişmedi.** Refactor amacı maintainability + Mac
+  `BubbleStyle` ile cross-platform tutarlılık.
+
+### Root Cause: Pre-existing test flake (fix yok, dokümante)
+
+Önceki release notlarında bahsi geçen `swift test` çalıştırmada bazen
+oluşan SIGBUS/SIGSEGV crash'leri Sprint 12'de derinlemesine analiz edildi.
+**İki ayrı pattern:**
+
+1. **Default mode (ardışık):** `swift test` çağrısında arada bir
+   rastgele test SIGBUS (signal 10) atıyor. Crash test'i her seferinde
+   farklı (`IMEChunkingTests.testNewlinePreserved`,
+   `JSONValueTests.testNestedSubscript`,
+   `JSONRPCMessageTests.testDecodeRequestWithStringID` — hep PixelMCPServer
+   veya PixelComputerUse). **Test'leri tek başına çağırınca geçiyor.**
+   Hipotez: xctest tek process'te tüm modülleri sırayla çalıştırıyor;
+   kümülatif memory state corruption bir test'i tetikliyor. Çözüm: test
+   isolation refactor (ayrı xctest binary'ler veya fixture cleanup).
+
+2. **Parallel mode (`--parallel --num-workers 4`):** Deterministik 4
+   adet SIGSEGV (signal 11) `PixelLANTests` altında her run'da
+   (LANFramingTests + MergeTransportTests). Hipotez: NWListener/Bonjour
+   servis port çakışması — multi-process'de aynı port'u dinleme deneyimi.
+   Çözüm: test'lerde port=0 (OS atama) zorunlu + fixture per-test
+   cleanup.
+
+**Etki:** Default ardışık modda nadir crash (~1/N test), release blocker
+değil; CI'da retry yeterli. **Parallel mode kullanılmamalı** PixelLAN
+testleri fix edilene kadar. v0.3+ test isolation refactor adayı.
+
+**Reproducer:**
+```bash
+swift test                           # → rastgele 0-1 SIGBUS
+swift test --parallel --num-workers 4  # → deterministik 4 SIGSEGV PixelLAN
+swift test --filter "PixelMCPServerTests"  # → 0 crash (isolate)
+```
+
+### Tests (+8)
+- `Tests/PixelMemoryTests/DeleteArchiveTests.swift` (yeni, 4 test):
+  removes file, clears sidecar (title + tags), idempotent on missing
+  file, preserves other entries.
+- `Tests/PixelRemoteTests/EnvelopePayloadSumTypeTests.swift` (+3 yeni
+  test): archiveDelete round-trip, mutationArchiveID getter (delete
+  case dahil), encodes only `mutationArchiveID` (diğer field'lar yok).
+- `Tests/PixelRemoteTests/RemoteEnvelopeTests`: hardcoded expected
+  envelope type set'ine `archiveDelete` eklendi (regression guard).
 
 ## [0.2.36] — 2026-05-25
 

@@ -202,6 +202,18 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 11 tamamlandı — A items polish.** Polish-roadmap'in A kategorisinde "feature çalışıyor ama hızlı prototip hissi" şikayetlerine 3 cevap. Mac chat görünümü modern asymmetric bubble pattern'ine geçti (badge prefix kaldırıldı, alignment + renk yeterli). iOS reconnect feedback'i TimelineView ile her saniye güncellenir countdown'a kavuştu. Mac test 745 → 754. iOS xcodebuild simulator BUILD SUCCEEDED.
 
+## Sprint 12 — "iOS bubble parity + archive delete + flake debug" (v0.2.37)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | iOS refactor | IOSBubbleStyle saf helper (Mac BubbleStyle paraleli) |
+| ✅ | yeni feature | archiveDelete envelope + ConversationStore.deleteArchive static |
+| ✅ | iOS UI | Swipe-to-delete + confirmation dialog |
+| ✅ | docs | Pre-existing test flake root cause analysis (CHANGELOG'da) |
+| ⏸ | v0.3+ | Test isolation refactor (flake'ı yapısal çöz) |
+
+**25 May 2026: Sprint 12 tamamlandı — bundle.** Üç paralel iş tek release'de. iOS chat row Mac ile cross-platform tutarlı (görsel değişiklik yok, sadece refactor); arşiv silme tam round-trip (iOS swipe → Mac delete → otomatik refresh); flake için root cause kayıt altına alındı (parallel mode'da deterministik PixelLAN SIGSEGV, default mode'da nadir random SIGBUS — test isolation refactor v0.3+ adayı). Mac test 754 → 762 (+8). iOS xcodebuild simulator BUILD SUCCEEDED.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
