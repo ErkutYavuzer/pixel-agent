@@ -176,7 +176,20 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 | ✅ | iOS row | Tag inline preview `#x #y #z +N` |
 | ✅ | iOS detail | Navigation title = display title, tag chip ScrollView |
 
-**25 May 2026: Sprint 9 tamamlandı — iOS visual parity.** v0.2.31 rename + v0.2.32 tag wire field'ları artık iOS UI'da görünür. **Read-only** — iOS'tan düzenleme v0.2.35+ adayı (`clientAction` envelope ile Mac'e dispatch edilebilir). iOS xcodebuild simulator BUILD SUCCEEDED.
+**25 May 2026: Sprint 9 tamamlandı — iOS visual parity.** v0.2.31 rename + v0.2.32 tag wire field'ları artık iOS UI'da görünür. **Read-only** — iOS'tan düzenleme Sprint 10'da iniş yaptı.
+
+## Sprint 10 — "iOS rename/tag dispatch" (v0.2.35)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | protokol | `archiveRename` + `archiveSetTags` EnvelopeType + sum case |
+| ✅ | mac handler | 2 callback + otomatik archiveListResponse refresh |
+| ✅ | mac wire | TagNormalizer defense in depth + ConversationStore mutation |
+| ✅ | iOS API | RemoteSession.renameArchive/setArchiveTags async metodlar |
+| ✅ | iOS UI | EditArchiveSheet (Başlık + Etiketler editor) + Düzenle toolbar buton |
+| ✅ | iOS reaktif | liveEntry session.archiveEntries'ten güncel hali çeker |
+
+**25 May 2026: Sprint 10 tamamlandı — iOS mutation dispatch.** v0.2.34 read-only görünümün üzerine düzenleme açıldı. iOS edit sheet → Mac handler → ConversationStore → otomatik archiveListResponse round-trip. Yeni envelope case'leri sum-type refactor (Sprint 8) sayesinde tip güvenli eklendi. PixelRemoteTests 100 → 122. iOS xcodebuild simulator BUILD SUCCEEDED. Mac + iOS feature parity tam.
 
 ## Demo Senaryosu (Sprint 1 sonrası)
 

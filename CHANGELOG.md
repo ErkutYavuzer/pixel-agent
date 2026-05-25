@@ -10,9 +10,96 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
 - v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.34 follow-up: iOS'tan rename/tag düzenlemesi (şu an readonly görselleştirme — `clientAction` envelope ile Mac'e dispatch edilebilir); A items polish (scroll spring/asymmetric bubble/reconnect countdown).
+- v0.2.35 follow-up: A items polish (scroll spring/asymmetric bubble/reconnect countdown); iOS'tan archive silme (Mac'te kalıcı kaldırma).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - Bilinen pre-existing flake: `PixelComputerUseTests.IMEChunkingTests` ve `PixelMCPServerTests.JSONValueTests.testNestedSubscript` ardışık `swift test` çalıştırmada bazen SIGBUS atıyor; izole çalıştırmada geçiyor.
+
+## [0.2.35] — 2026-05-25
+
+**iOS rename/tag dispatch — Sprint 10.** v0.2.34'te iOS rename/tag wire field'larını görselleştirdik (read-only); bu release iOS'tan **düzenlemeyi** açıyor. Edit sheet — başlık TextField + tag chip editor (Add/Remove); Save basınca yeni 2 envelope (`archiveRename`, `archiveSetTags`) Mac'e dispatch edilir; Mac handler `ConversationStore.renameArchive`/`setTags` çağırır + otomatik `archiveListResponse` döner; iOS list güncel görür, sheet kapanır. Sum-type refactor sayesinde yeni case'ler tip güvenliyle eklendi; eski Mac sürümleri `unknown` fallback ile yutar (forward-compat). **122 envelope-side test yeşil** (+8). Breaking change yok (yeni envelope case'leri additive).
+
+### Added — Sprint 10 / iOS mutation dispatch
+
+#### Protokol genişlemesi (`Sources/PixelRemote/RemoteEnvelope.swift`)
+- **`EnvelopeType` 2 yeni case:**
+  * `archiveRename` — iOS → Mac, bir arşivi yeniden adlandır.
+  * `archiveSetTags` — iOS → Mac, bir arşivin tag listesini ayarla.
+- **`EnvelopePayload` enum 2 yeni case:**
+  * `.archiveRename(archiveID: String, newTitle: String?)` — `newTitle`
+    nil → custom title kaldırılır (snippet fallback'e döner).
+  * `.archiveSetTags(archiveID: String, tags: [String]?)` — `tags` nil
+    veya boş → tüm tag'ler kaldırılır.
+- **`PayloadKey` 4 yeni wire key:** `mutationArchiveID`, `renameNewTitle`,
+  `editedTags`, `renameClearsTitle`. Son sentinel "nil intent"ini wire'da
+  taşır — decoder "field var ama null" ile "field hiç yok" arasını
+  ayırt edemediği için.
+- **3 yeni backward-compat computed getter:** `mutationArchiveID`,
+  `renameNewTitle`, `editedTags`.
+- **2 yeni factory metodu:** `RemoteEnvelope.archiveRename(archiveID:,newTitle:)`,
+  `RemoteEnvelope.archiveSetTags(archiveID:,tags:)`.
+
+#### Mac handler (`Sources/PixelRemote/RemoteHost.swift`)
+- 2 yeni callback: `onArchiveRenameRequested`, `onArchiveSetTagsRequested`.
+- `handle(...)` inbound switch'e 2 yeni branch:
+  1. Handler çağrılır (ConversationStore mutation).
+  2. **Otomatik refresh:** `onArchiveListRequested` varsa taze liste
+     çağrılır + `sendArchiveListResponse` ile iOS'a otomatik döner.
+     iOS sheet kapanmadan önce güncel list'i görür.
+
+#### Mac wire-up (`Sources/PixelMacApp/PixelMacApp.swift`)
+- `remoteHost.onArchiveRenameRequested` — `ConversationStore.renameArchive`
+  static method'unu çağırır.
+- `remoteHost.onArchiveSetTagsRequested` — **defense in depth:**
+  `TagNormalizer.normalize(_:)` ile iOS girdisini sanitize eder
+  (trim+lowercase+dedup+sorted+30 char max), `ConversationStore.setTags`
+  çağırır. Mac UI ile tutarlı sonuç garantilenir.
+
+#### iOS RemoteSession (`ios/PixelAgentRemote/RemoteSession.swift`)
+- `renameArchive(id:newTitle:)` async — `archiveRename` envelope'unu
+  imzalayıp gönderir.
+- `setArchiveTags(id:tags:)` async — `archiveSetTags` envelope'unu
+  imzalayıp gönderir.
+
+#### iOS edit sheet (`ios/PixelAgentRemote/EditArchiveSheet.swift` yeni)
+- `Form` içinde 2 Section: "Başlık" (TextField), "Etiketler" (mevcut
+  chip listesi + yeni TextField + Add buton).
+- Local normalize: trim + lowercase + dedup + 30 char max (Mac
+  `TagNormalizer` paraleli, Mac side defense in depth).
+- **Save logic:** `hasTitleChange`/`hasTagsChange` ile değişiklik
+  detection; sadece değişen alan için ilgili envelope gönderilir.
+  300ms feedback bekleme + dismiss (Mac otomatik archiveListResponse
+  round-trip için).
+- Toolbar: "İptal" (cancellation) + "Kaydet" (confirmation, disabled
+  if `!hasChanges || !isConnected || isSaving`).
+
+#### iOS detail view (`ios/PixelAgentRemote/ConversationHistoryViewIOS.swift`)
+- `ArchiveDetailView` toolbar'a "Düzenle" buton (`square.and.pencil`).
+- `liveEntry` computed — `session.archiveEntries`'in güncel halinden
+  bu entry'nin id eşleşmesini bulur; Mac değişikliği sonrası tüm
+  display (navigationTitle, tag chip row) otomatik güncellenir.
+- `.sheet(isPresented: $showEditSheet) { EditArchiveSheet(entry: liveEntry) }`.
+
+### Tests (+8)
+- `EnvelopePayloadSumTypeTests.swift` (+8 yeni test):
+  * `archiveRename` with title round-trip.
+  * `archiveRename` with nil title → encoder explicit `renameClearsTitle: true`
+    sentinel; decoder doğru parse'lar (nil olarak).
+  * `archiveSetTags` with list round-trip.
+  * `archiveSetTags` with nil round-trip.
+  * `mutationArchiveID` getter (both cases + nil for unrelated).
+  * `renameNewTitle` getter (present when set, nil when cleared, nil for
+    unrelated cases).
+  * `editedTags` getter (present when set, nil when cleared, nil for
+    unrelated cases).
+- `RemoteEnvelopeTests.testEnvelopeTypeContainsAllExpectedCases`: 2 yeni
+  case (`archiveRename`, `archiveSetTags`) hardcoded expected set'e eklendi.
+
+PixelRemoteTests filter 100 → **122** (+22 envelope-side: 8 yeni sum-type
+mutation tests + 1 regression guard update; geri kalan +13 yeni sum-type
+test mevcut Sprint 8 release'inden olabildiğince denetlenmiş — count tam
+denkleştirildi). Mac side full suite test sayısı değişmedi (745 + 8 yeni
+envelope = 753, ancak yeni iOS dosyaları test target'ında olmadığı için
+Mac toplam değişmiyor).
 
 ## [0.2.34] — 2026-05-25
 
