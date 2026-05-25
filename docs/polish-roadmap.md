@@ -312,6 +312,17 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 20 tamamlandı — AX label-aware badge placement.** v0.2.38 BadgeLayout geometry-aware idi ama element içerik anlamı yoktu. AX role-based heuristic eklendi: button → topRightOutside (text merkez), link → topRightInside (text sol kenar), checkbox/radio → topRightOutside (simge sol + label sağ). Mac test 837 → 849 (+12 LabelAwarePlacementResolverTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 21 — "Adaptive stream rate" (v0.2.46)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | saf helper | AdaptiveRateController.nextInterval (slow lane 1.5x, fast lane 0.8x, hysteresis) |
+| ✅ | coordinator | baseIntervalMs (kullanıcı taban) + currentIntervalMs (dinamik) + lastSendLatencyMs |
+| ✅ | loop | Per-tick latency ölçümü + controller call + state update |
+| ⏸ | v0.2.47+ | Wire-level latency (transport.send round-trip, şu an local) |
+
+**25 May 2026: Sprint 21 tamamlandı — Adaptive stream rate.** v0.2.40 continuous screenshot stream sabit interval'den **latency-aware** adaptive'e geçti. Slow network → 1.5x backoff (max 5000ms); rahat network → 0.8x speedup baseMs alt sınıra kadar; hysteresis zone osilasyon engeller. Mac test 849 → 859 (+10 AdaptiveRateControllerTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

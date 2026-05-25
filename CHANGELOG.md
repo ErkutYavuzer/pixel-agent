@@ -9,9 +9,69 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: App Store signing.
-- v0.2.40 follow-up (kalan): Stream rate adaptive (Mac bandwidth/CPU'ya göre interval auto-tune).
 - v0.2.45 follow-up: OCR-based badge placement (Vision framework — text bounding box detection; AX label-aware heuristic'in pratik limiti aşıldığında).
+- v0.2.46 follow-up: Latency wire-level (transport.send round-trip, şu an local send latency — JPEG encode + transport handoff dahil).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.46] — 2026-05-25
+
+**Adaptive stream rate — Sprint 15 follow-up.** v0.2.40'da iniş yapan continuous screenshot stream **sabit interval** (UI'dan 1000ms hardcoded) kullanıyordu. Slow network'te aynı frame rate'i zorlar → packet kuyruğu birikir; rahat network'te yine 1Hz, bandwidth boşa harcanır. v0.2.46 **Mac side latency-aware adaptive**: son tick send latency'sine göre interval otomatik ayarlanır.
+
+**Test:** Mac 849 → **859** (+10 AdaptiveRateControllerTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (saf helper additive + Coordinator API aynı; davranış adaptive).
+
+### Added — Sprint 21 / Adaptive stream rate
+
+#### `Sources/PixelMacApp/AdaptiveRateController.swift` (yeni saf helper)
+- **`nextInterval(currentMs:lastSendLatencyMs:baseMs:minMs:maxMs:)`** static
+  — saf math, view/coordinator bağımsız → test edilebilir.
+- **Algoritma:**
+  - **Slow lane (backoff):** `latency > current / 2` → `min(maxMs,
+    current * 1.5)`. Exponential 1.5x büyüme, max-cap'li (default 5000ms).
+  - **Fast lane (speedup):** `latency < current / 10` ve `current > baseMs`
+    → `max(baseMs, current * 0.8)`. 0.8x küçülme, baseMs alt sınır
+    (kullanıcı tercih tabanı).
+  - **Hysteresis zone:** Aksi halde `current` korunur (osilasyon önler).
+- **Defensive clamping:** Bozuk girdiyle (negative latency, out-of-range
+  current) çağrılırsa min/max'a clamp.
+
+#### `Sources/PixelMacApp/ScreenshotStreamCoordinator.swift`
+- **`baseIntervalMs: Int`** yeni private state — kullanıcı tercih tabanı,
+  `start(intervalMs:)` parametresinden alınır. Adaptive controller buna
+  kadar küçülür.
+- **`lastSendLatencyMs: Int`** yeni `@Published` — UI debugging/stats
+  için son tick latency'si. (Mac UI'da görünmüyor; bonus public state.)
+- **Loop refactor:** Her tick'te `sendStart = Date()` ölç → capture +
+  send → `latencyMs = Date().timeIntervalSince(sendStart) * 1000` →
+  `AdaptiveRateController.nextInterval(...)` çağrısı → state update +
+  sleep. `intervalMs` artık dinamik (slow network'te büyür, rahat'ta
+  baseIntervalMs'e döner).
+- **`applyAdaptiveTick(latency:newInterval:)`** private — MainActor
+  isolated state update.
+
+### Tests (+10)
+- `Tests/PixelMacAppTests/AdaptiveRateControllerTests.swift` (yeni, 10
+  test):
+  * **Slow lane:** High latency 800ms / current 1000ms → 1500ms (1.5x).
+  * Backoff max cap (5000ms hard limit).
+  * Threshold edge: latency == current/2 → no change (hysteresis).
+  * **Fast lane:** Low latency 100ms / current 2000ms / base 1000ms →
+    1600ms (0.8x).
+  * Speedup base floor (current 1100 → 880 → clamped to 1000).
+  * Speedup skip when current == base.
+  * **Hysteresis:** Mid latency 300ms / current 1000ms → no change.
+  * **Defensive:** Invalid current 9999 → clamped to 5000 → speedup 4000.
+  * Negative latency → treated as 0.
+  * **Realistic scenario:** Slow → backoff (1000→1500→2250) → recover
+    (1800→1440→1152→1000 base floor) — 6-tick sequence doğrulanır.
+
+### Bandwidth behavior
+
+| Senaryo | v0.2.45 (sabit) | v0.2.46 (adaptive) |
+|---|---|---|
+| Fast network (latency ~50ms) | 1000ms sabit | 1000ms (base floor) |
+| Slow network (latency ~800ms) | 1000ms (queue birikir) | 1500-5000ms (auto backoff) |
+| Network recovery | Sabit 1000ms | Hızla baseMs'e döner (0.8x ticks) |
+| Aşırı uzun gecikme | Queue birikir, UI laggy | Max-cap 5000ms hard limit |
 
 ## [0.2.45] — 2026-05-25
 
