@@ -299,6 +299,11 @@ public enum BuiltInTools {
                     "type": .string("integer"),
                     "description": .string("Toplam çıktı için UTF-8 byte cap (opsiyonel, varsayılan sınırsız)."),
                 ]),
+                "follow_ups": .object([
+                    "type": .string("array"),
+                    "items": .object(["type": .string("string")]),
+                    "description": .string("Faz 4 (v0.2.39): Multi-turn. Verilirse `prompt` ilk turn'dür, follow_ups sequential olarak çalıştırılır; her turn'ün assistant cevabı history'ye eklenir + sonraki turn full history ile backend'e gider. Shared budget (max_duration_seconds tüm turn'lere) — aşılırsa kalan turn'ler atlanır. Response'ta `turns` array (per-turn output + duration + outcome) ve `status: \"completed_all_turns\"/\"budget_exceeded_at\"/\"failed_at\"/\"cancelled_at\"`. UI manager bypass — turns sonucu chat akışına stateless yolla döner."),
+                ]),
             ]),
             "required": .array([.string("prompt"), .string("backend")]),
         ]),
@@ -318,6 +323,9 @@ public enum BuiltInTools {
             }
             if let bytes = params?["max_output_bytes"] {
                 args["max_output_bytes"] = bytes
+            }
+            if let followUps = params?["follow_ups"] {
+                args["follow_ups"] = followUps
             }
             return await callBridge(tool: "dispatch_subagent", arguments: .object(args))
         }

@@ -31,6 +31,7 @@ struct SettingsView: View {
         case .general: GeneralSettingsTab()
         case .models: ModelsSettingsTab()
         case .connection: ConnectionSettingsTab()
+        case .subagent: SubagentSettingsTab()
         case .permissions: PermissionsSettingsTab()
         }
     }
@@ -39,7 +40,7 @@ struct SettingsView: View {
 // MARK: - Tab enum (testable)
 
 enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, models, connection, permissions
+    case general, models, connection, subagent, permissions
 
     var id: String { rawValue }
 
@@ -48,6 +49,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .general: return "Genel"
         case .models: return "Modeller"
         case .connection: return "Bağlantı"
+        case .subagent: return "Subagent"
         case .permissions: return "İzinler"
         }
     }
@@ -57,6 +59,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .general: return "gear"
         case .models: return "cpu"
         case .connection: return "wifi"
+        case .subagent: return "person.2.crop.square.stack"
         case .permissions: return "lock.shield"
         }
     }
@@ -341,5 +344,80 @@ private struct PermissionsSettingsTab: View {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
         }
+    }
+}
+
+
+// MARK: - Subagent tab (Faz 4 / v0.2.39)
+
+private struct SubagentSettingsTab: View {
+    @State private var settings: SubagentSettings = SubagentSettingsStore.load()
+
+    var body: some View {
+        Form {
+            Section {
+                Stepper(
+                    "Maks. süre: \(Int(settings.maxDurationSeconds)) sn",
+                    value: $settings.maxDurationSeconds,
+                    in: 5...600,
+                    step: 5
+                )
+                Picker("Çıktı limiti", selection: outputLimitBinding) {
+                    Text("Limit yok").tag(Optional<Int>.none)
+                    Text("4 KB").tag(Optional<Int>(4096))
+                    Text("16 KB").tag(Optional<Int>(16384))
+                    Text("64 KB").tag(Optional<Int>(65536))
+                    Text("256 KB").tag(Optional<Int>(262144))
+                }
+                Stepper(
+                    "Paralel cap: \(settings.maxParallelCap)",
+                    value: $settings.maxParallelCap,
+                    in: 1...10
+                )
+            } header: {
+                Text("Bütçe")
+            } footer: {
+                Text("dispatch_subagent MCP tool'unda default değerler. Çıktı limit aşılırsa subagent .budgetExceeded ile sonlanır; süre aşılırsa watchdog kestiririr.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Default backend", selection: $settings.defaultBackend) {
+                    Text("Claude").tag("claude")
+                    Text("Codex").tag("codex")
+                    Text("Gemini").tag("gemini")
+                }
+            } header: {
+                Text("Backend")
+            } footer: {
+                Text("dispatch_subagent çağrıları backend belirtmediyse kullanılır.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack {
+                    Button("Sıfırla") {
+                        SubagentSettingsStore.reset()
+                        settings = SubagentSettings.default
+                    }
+                    Spacer()
+                    Button("Kaydet") {
+                        SubagentSettingsStore.save(settings)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .padding(20)
+        .formStyle(.grouped)
+    }
+
+    private var outputLimitBinding: Binding<Int?> {
+        Binding(
+            get: { settings.maxOutputBytes },
+            set: { settings.maxOutputBytes = $0 }
+        )
     }
 }

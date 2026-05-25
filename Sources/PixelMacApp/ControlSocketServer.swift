@@ -502,6 +502,16 @@ public actor ControlSocketServer {
         }()
         let budget = Budget(maxDuration: max(1, duration), maxOutputBytes: outputBytes)
 
+        // **Faz 4 (v0.2.39):** follow_ups varsa multi-turn yolu. Manager
+        // attached olsa bile multi-turn UI entegrasyonu v0.3+'a kalıyor;
+        // şimdilik stateless yolla (UI panel'inde görünmez ama bridge
+        // response döner).
+        if case .array(let followUpArr) = args["follow_ups"] {
+            let followUps = followUpArr.compactMap { $0.stringValue }
+            let allTurns = [prompt] + followUps
+            return await dispatchMultiTurn(turns: allTurns, kind: kind, budget: budget)
+        }
+
         // Manager attach edilmişse birleşik havuza yönlendir.
         if let manager = self.manager {
             let outcome = await manager.dispatchAndWait(prompt: prompt, backend: kind, budget: budget)
@@ -522,6 +532,75 @@ public actor ControlSocketServer {
         let runner = SubagentRunner(backend: backend, budget: budget)
         let result = await runner.run(prompt: prompt)
         return Self.bridgeResponse(from: result, backendKind: kind)
+    }
+
+    /// **Faz 4 (v0.2.39):** Multi-turn subagent dispatch'i (follow_ups var).
+    /// Her turn için per-turn output + outcome JSON'a serialize edilir.
+    private func dispatchMultiTurn(turns: [String], kind: CLIKind, budget: Budget) async -> BridgeResponse {
+        let detector = CLIDetector()
+        guard let executablePath = detector.locate(kind) else {
+            return .failure("Backend bulunamadı: \(kind.executableName) (PATH veya bilinen lokasyonlarda yok).")
+        }
+        let backend = CLIBackend(kind: kind, executablePath: executablePath)
+        let runner = MultiTurnSubagentRunner(backend: backend, budget: budget)
+        let result = await runner.runConversation(turns: turns)
+        return Self.multiTurnBridgeResponse(from: result, backendKind: kind)
+    }
+
+    private static func multiTurnBridgeResponse(
+        from result: MultiTurnSubagentResult,
+        backendKind kind: CLIKind
+    ) -> BridgeResponse {
+        let status: String
+        var errorPayload: String? = nil
+        var failedTurnIndex: Int? = nil
+        switch result {
+        case .completedAllTurns:
+            status = "completed_all_turns"
+        case .budgetExceededAt(let idx, let reason, _, _):
+            status = "budget_exceeded_at"
+            failedTurnIndex = idx
+            errorPayload = reason.rawValue
+        case .cancelledAt(let idx, _, _):
+            status = "cancelled_at"
+            failedTurnIndex = idx
+        case .failedAt(let idx, let err, _, _):
+            status = "failed_at"
+            failedTurnIndex = idx
+            errorPayload = err
+        }
+
+        let turnsPayload: JSONValue = .array(result.completedTurns.map { turn in
+            let outcomeStr: String
+            var detail: String? = nil
+            switch turn.outcome {
+            case .completed: outcomeStr = "completed"
+            case .budgetExceeded(let r): outcomeStr = "budget_exceeded"; detail = r.rawValue
+            case .cancelled: outcomeStr = "cancelled"
+            case .failed(let e): outcomeStr = "failed"; detail = e
+            }
+            var dict: [String: JSONValue] = [
+                "output": .string(turn.output),
+                "duration_seconds": .double(turn.durationSeconds),
+                "outcome": .string(outcomeStr),
+            ]
+            if let detail { dict["detail"] = .string(detail) }
+            return .object(dict)
+        })
+
+        var payload: [String: JSONValue] = [
+            "status": .string(status),
+            "backend": .string(kind.rawValue),
+            "total_duration_seconds": .double(result.totalDurationSeconds),
+            "turns": turnsPayload,
+        ]
+        if let idx = failedTurnIndex {
+            payload["failed_turn_index"] = .int(idx)
+        }
+        if let err = errorPayload {
+            payload["error"] = .string(err)
+        }
+        return .success(.object(payload))
     }
 
     /// `SubagentResult` → `BridgeResponse` çevirimi. Hem manager yolu hem stateless yol
