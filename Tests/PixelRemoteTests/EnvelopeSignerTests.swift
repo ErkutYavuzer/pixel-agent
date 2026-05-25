@@ -25,7 +25,7 @@ final class EnvelopeSignerTests: XCTestCase {
             id: signed.id,
             ts: signed.ts,
             type: signed.type,
-            payload: EnvelopePayload(text: "Sahte", role: "user"),
+            payload: .userMessage(text: "Sahte", messageID: nil),
             sig: signed.sig
         )
         XCTAssertFalse(EnvelopeSigner.verify(tampered, with: key.publicKey))
@@ -60,7 +60,7 @@ final class EnvelopeSignerTests: XCTestCase {
         let envelope = RemoteEnvelope(
             v: 2, id: "fixed-id", ts: 1_700_000_000,
             type: .userMessage,
-            payload: EnvelopePayload(text: "deterministic", role: "user")
+            payload: .userMessage(text: "deterministic", messageID: nil)
         )
         let a = try EnvelopeSigner.sign(envelope, with: key)
         let b = try EnvelopeSigner.sign(envelope, with: key)
