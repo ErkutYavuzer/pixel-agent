@@ -349,6 +349,19 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 23 tamamlandı — Wire latency badge UI.** Sprint 22 Mac side wire latency'i ölçüyordu ama iOS user'a görsel feedback yoktu. Sprint 23 protocol additive (hostStatus + hostStatusDelta `screenshotWireLatencyMs: Int?`) + Mac periyodik push + iOS Mac Paneli renk-bantlı rozet. 3 saniyelik delta loop'a piggyback — debug-tier feedback için yeterli, gerçek-zamanlı değil. Mac test 871 → 880 (+9 HostStatusDeltaCalculator: change/unchanged/value→nil edge case, full bootstrap, host envelope round-trip, isEmpty truth table, getter passthrough). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 24 — "Per-frame wire latency embed" (v0.2.49)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | protokol | `EnvelopePayload.screenshotPayload(base64Image:frameID:wireLatencyMs:)` — 3. associated value (additive, encodeIfPresent) |
+| ✅ | getter | `payload?.screenshotWireLatencyMs` artık screenshotPayload case'ini de kapsar (hostStatus/Delta yanına) |
+| ✅ | Mac coordinator | `start(...sendImage:)` callback `(base64, frameID, wireLatencyMs?)`; loop her tick `lastWireLatencyMs` snapshot embed |
+| ✅ | RemoteHost | `sendScreenshot(...wireLatencyMs:)` opsiyonel param |
+| ✅ | iOS merge | `.screenshotPayload` handler `if let latency` guard ile @Published update — per-frame ~1Hz, hostStatus path'ından daha güncel |
+| ⏸ | v0.2.50+ | Wire latency timeline grafiği (son N frame trend) Mac Paneli'nde |
+
+**25 May 2026: Sprint 24 tamamlandı — Per-frame wire latency embed.** Sprint 23'ün 3 sn hostStatus delta lag'i giderildi. Mac coordinator her `screenshotPayload` envelope'una önceki frame'in ACK round-trip ölçümünü embed eder; iOS Mac Paneli badge stream rate'inde (~1Hz default) güncellenir. hostStatus path fallback olarak kalır (eski Mac uyumu için). Mac test 880 → 883 (+3 EnvelopePayloadSumType: round-trip, getter cross-case, frameID/latency independence). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (additive opsiyonel field). Bandwidth: per-frame ~10 byte ek — ihmal edilebilir.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

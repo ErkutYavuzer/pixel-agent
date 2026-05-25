@@ -12,6 +12,41 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2.45 follow-up: OCR-based badge placement (Vision framework — text bounding box detection; AX label-aware heuristic'in pratik limiti aşıldığında).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 
+## [0.2.49] — 2026-05-25
+
+**Per-frame wire latency embed — Sprint 23 follow-up.** v0.2.48 wire latency badge'i `hostStatusDelta` 3 sn periyodik push'una bağlıydı — kullanıcı interval ortasında bir spike görse 3 sn beklerdi. v0.2.49 Mac coordinator önceki frame'in ACK round-trip ölçümünü her `screenshotPayload` envelope'una **embed eder**; iOS Mac Paneli badge stream rate'inde (~1Hz, kullanıcı tercihine göre 250 ms-5 sn) güncellenir. hostStatus path fallback kalır (eski Mac'ler için).
+
+**Test:** Mac 880 → **883** (+3 net: 3 yeni EnvelopePayloadSumType — withWireLatencyRoundTrip, getterAcrossCases, frameIDAndLatencyIndependent; 2 existing test 3-tuple pattern'e migrate). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (additive optional field, eski wire format decoder ile uyumlu).
+
+### Added — Sprint 24 / Per-frame wire latency embed
+
+#### `Sources/PixelRemote/RemoteEnvelope.swift` (protokol genişletme, additive)
+- **`EnvelopePayload.screenshotPayload(base64Image: String, frameID: String?, wireLatencyMs: Int?)`** — 3. associated value (önceki: 2). `encodeIfPresent` ile eski wire format korunur; eski Mac frameID/latency göndermez (nil), eski iOS field'ı yoksayar.
+- **`payload?.screenshotWireLatencyMs`** getter artık `screenshotPayload` case'ini de kapsar — Sprint 23'ün hostStatus/Delta path'leri yanına.
+- **Factory:** `screenshotPayload(base64Image:frameID:wireLatencyMs:)` üçü de opsiyonel default'lu.
+
+#### `Sources/PixelRemote/RemoteHost.swift`
+- **`sendScreenshot(base64Image:frameID:wireLatencyMs:)`** — yeni opsiyonel param (default nil ile eski callsites unchanged).
+
+#### `Sources/PixelMacApp/ScreenshotStreamCoordinator.swift`
+- **`start(intervalMs:sendImage:)`** callback signature: `(base64, frameID)` → `(base64, frameID, wireLatencyMs?)`.
+- **Loop:** Her tick, `lastWireLatencyMs` (önceki frame'in ACK round-trip'i) snapshot alınıp callback'e iletilir; iOS bu envelope'tan badge'i günceller.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **`onScreenshotStreamStartRequested`** callback closure yeni 3-tuple imzasıyla `sendScreenshot(...wireLatencyMs:)` çağırır.
+
+#### `ios/PixelAgentRemote/RemoteSession.swift`
+- **`.screenshotPayload`** merge handler: `if let latency = payload.screenshotWireLatencyMs` ile guard'lı update — bu envelope per-frame geldiği için hostStatus path'ından daha güncel. En son envelope kazanır.
+
+### Tests
+- `Tests/PixelRemoteTests/EnvelopePayloadSumTypeTests.swift` — **+3** Sprint 24: per-frame latency round-trip, getter cross-case coverage, frameID/latency independence. Mevcut 2 test `(let img, let frameID, let latency)` 3-tuple pattern'e güncellendi.
+- `Tests/PixelMacAppTests/ScreenshotStreamCoordinatorTests.swift` — 11 closure literal `{_, _, _ in}` yeni signature'a migrate edildi.
+
+### Notes — Sprint 24
+- **Sprint 23 ile çakışma:** hostStatus path hâlâ aktif (3 sn delta); iOS handler her iki yoldan gelen değeri en son `screenshotWireLatencyMs`'e atar. Per-frame envelope çoğu zaman daha yeni → o kazanır. Eski Mac'lerle backward-compat sayesinde hostStatus tek başına çalışır.
+- **Bandwidth:** Her frame'e ~5-10 byte ek (`"screenshotWireLatencyMs":123`). 1Hz stream'de ~10 B/s — JPEG payload yanında ihmal edilebilir.
+- **Stream başlangıcı:** İlk frame'de hiç ACK gelmemiştir → `lastWireLatencyMs = nil` → embed'lenir nil; iOS badge stable kalır (önceki hostStatus değeri veya gizli).
+
 ## [0.2.48] — 2026-05-25
 
 **Wire latency badge UI — Sprint 22 follow-up.** v0.2.47 Mac side wire-level latency'i `WireLatencyTracker` ile ölçüyordu ama iOS kullanıcısına görsel feedback yoktu. v0.2.48 `HostStatusContent` + `HostStatusDeltaContent` aggregator'larına `screenshotWireLatencyMs: Int?` field eklendi; Mac periyodik 3 sn delta loop'unda coordinator'ın son ölçümünü push'lar; iOS Mac Paneli "Ekran Resmi" section'unda **renk-bantlı capsule rozet** (yeşil <100ms, turuncu <300ms, kırmızı >=300ms). Görselleştirme `isStreamingScreenshots` gate'i ile streaming aktif değilken gizlenir.
