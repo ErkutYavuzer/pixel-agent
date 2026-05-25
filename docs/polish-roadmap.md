@@ -375,6 +375,21 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 25 tamamlandı — Wire latency timeline grafiği.** Sprint 24 spot değer (badge) yanına son 20 frame'in trendi inline sparkline olarak eklendi. Saf normalize helper (`Sources/PixelRemote/LatencySparkline.swift`) SwiftUI/CG bağımsız — view katmanı `proxy.size`'a çarpıp Y'yi flip eder. Mac test 883 → 897 (+14). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 26 — "OCR-based SoM badge placement" (v0.2.51)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | enum | `BadgePlacement.contentAware` yeni case |
+| ✅ | saf helper | `OCRBadgePlacement` — overlapArea/scorePlacements/bestPlacement; Vision dep yok |
+| ✅ | async wrapper | `OCRTextDetector` — `VNRecognizeTextRequest(.fast)` background queue + CheckedContinuation; coords pixel + top-left |
+| ✅ | renderer | `SoMRenderer.annotate(...textRegions:)` opsiyonel param; `resolvePlacement` per-element strategy resolver |
+| ✅ | capture | `ScreenshotCapture.capture` orkestra: contentAware ise upfront OCR + textRegions passla |
+| ✅ | MCP | `ui_screenshot.som_options.badge_placement` schema'sına `'content_aware'` enum |
+| ⏸ | v0.2.52+ | Per-element OCR crop (whole-image yerine) — performance tuning |
+| ⏸ | v0.2.52+ | OCR text confidence threshold (low-conf observations filter) |
+
+**25 May 2026: Sprint 26 tamamlandı — OCR-based SoM badge placement.** v0.2.45 AX role heuristic konvansiyon tabanlıydı; özel layout'larda yine badge text alanını örtebilirdi. v0.2.51 Vision `VNRecognizeTextRequest` ile tüm text bbox'larını çıkarır; her element için 4 köşe adayından **text ile en az çakışan** seçilir. OCR başarısız → `.labelAware` fallback (graceful degradation). Mac test 897 → 913 (+16: 14 OCRBadgePlacement + 2 SoMOptions content-aware coverage). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (additive enum case + opsiyonel param).
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

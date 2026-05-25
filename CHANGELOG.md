@@ -9,8 +9,53 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: App Store signing.
-- v0.2.45 follow-up: OCR-based badge placement (Vision framework — text bounding box detection; AX label-aware heuristic'in pratik limiti aşıldığında).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+
+## [0.2.51] — 2026-05-25
+
+**OCR-based SoM badge placement — Sprint 20 follow-up.** v0.2.45 AX role heuristic (button → topRightOutside, link → topRightInside, vs.) konvansiyon tabanlıydı — custom widget'larda veya beklenmedik layout'larda yine badge text alanını örtebilirdi. v0.2.51 Vision framework `VNRecognizeTextRequest` ile screenshot'taki tüm text bounding box'ları çıkarır; her element için 4 köşe adayı arasından **text ile en az çakışan** seçilir. OCR başarısız veya text yoksa `.labelAware` fallback'i — graceful degradation.
+
+**Test:** Mac 897 → **913** (+16: 14 OCRBadgePlacement saf helper testleri + 2 SoMOptions content-aware Codable round-trip + raw value coverage). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni enum case additive, SoMRenderer signature opsiyonel param).
+
+### Added — Sprint 26 / OCR-based SoM badge placement
+
+#### `Sources/PixelComputerUse/SoMOptions.swift`
+- **`BadgePlacement.contentAware`** yeni case — OCR text-aware placement strategy. AX heuristic'in pratik limiti aşıldığında devreye girer.
+
+#### `Sources/PixelComputerUse/OCRBadgePlacement.swift` (yeni saf helper)
+- **`overlapArea(badgeRect:textRegions:) -> CGFloat`** — badge ile tüm text region'larının toplam çakışma alanı (pixel²). Düşük = iyi yerleşim.
+- **`scorePlacements(elementRect:badgeSize:imagePixelSize:textRegions:candidates:)`** — adayları skorlar; image bounds dışına taşan adaylar filtrelenir.
+- **`bestPlacement(...) -> BadgePlacement?`** — en az çakışan aday. Stable tie-breaking (array sırası kazanır). Tüm adaylar invalid'se nil.
+- **`defaultCandidates`** static — `[topLeftInside, topLeftOutside, topRightInside, topRightOutside]`.
+- **Vision dependency yok** — saf math; test edilebilir.
+
+#### `Sources/PixelComputerUse/OCRTextDetector.swift` (yeni)
+- **`detectTextRegions(in image: CGImage) async -> [CGRect]`** — `VNRecognizeTextRequest(.fast)` background queue üzerinde; `CheckedContinuation` ile async wrap. Vision'ın normalize (0-1, bottom-left) bbox'ları image pixel coords + top-left origin'e çevrilir (SoMRenderer convention).
+- **Best-effort:** Vision hatası / sonuç yok → boş array; caller `.labelAware` fallback'ine düşer.
+- **Performans:** Typical retina screenshot (~3000×1800) ~100-300ms with `.fast` mode.
+- **`#if canImport(Vision)`** — platform safety (iOS/macOS only); diğer platformlarda boş array.
+
+#### `Sources/PixelComputerUse/SoMRenderer.swift`
+- **`annotate(...textRegions: [CGRect] = [])`** — yeni opsiyonel param. Caller (ScreenshotCapture) OCR çıktısını upfront sağlar.
+- **`resolvePlacement(requested:elementRect:badgeSize:imagePixelSize:element:textRegions:) -> BadgePlacement`** yeni static helper — per-element concrete placement döner. `.contentAware` → `OCRBadgePlacement.bestPlacement` (textRegions varsa); fallback `.labelAware`. `.labelAware` → AX role lookup. Diğer → request as-is.
+- **BadgeLayout.rawBadgeRect:** `.contentAware` case'i defensive `.topLeftInside` fallback'ine eklendi (resolvePlacement zaten concrete'e çevirir).
+
+#### `Sources/PixelComputerUse/ScreenshotCapture.swift`
+- **`capture(...)` orkestra:** `options.badgePlacement == .contentAware` ise `OCRTextDetector.detectTextRegions(in: croppedImage)` upfront çağrılır; `SoMRenderer.annotate(...textRegions:)` ile passla. Aksi halde boş array (eski path).
+- **Async chain:** `capture` zaten `async throws` idi; OCR call zincire eklendi sorunsuz.
+
+#### `Sources/PixelMCPServer/ToolRegistry.swift`
+- **`ui_screenshot.som_options.badge_placement`** schema açıklamasına `'content_aware'` enum eklendi — Vision OCR ile gerçek text bbox'larını çıkarıp en az çakışan köşe seçilir; `label_aware` pratik limiti aşıldığında. OCR başarısız ise `label_aware` fallback'i.
+
+### Tests
+- `Tests/PixelComputerUseTests/OCRBadgePlacementTests.swift` — **14 yeni**: overlapArea (empty/disjoint/contained/partial/multiple-sum/edge-touching), scorePlacements (within-bounds/out-of-bounds filter), bestPlacement (no-text first-candidate/avoid-overlap/min-score/empty-candidates/stable-tie-breaking), defaultCandidates 4-corner coverage.
+- `Tests/PixelComputerUseTests/SoMOptionsTests.swift` — **+2** Sprint 26: `.contentAware` Codable round-trip + raw value + SoMOptions accepts.
+
+### Notes — Sprint 26
+- **`.contentAware` overhead:** Per-screenshot tek Vision pass (~100-300ms). Caller bunu kabul edilebilir buluyorsa devreye al; vision model'in "1, 2, 3" görmesi her zamanki gibi.
+- **Backward-compat:** `.contentAware` istemeyen caller'lar etkilenmedi; SoMRenderer `textRegions: [CGRect] = []` default'lu, eski callsites unchanged.
+- **Whole-image OCR stratejisi:** Vision tek geçişte tüm text bbox'larını çıkarır (per-element OCR yerine — performans 1× yerine N×). Caller element rect'lerini textRegions ile cross-check ederek hangi text element içinde olduğunu çıkarabilir.
+- **iOS:** `OCRTextDetector` `#if canImport(Vision)` gate'i sayesinde iOS'ta da çalışır; ama pixel-agent'ın SoM rendering'i Mac-only (ScreenCaptureKit dependency).
 
 ## [0.2.50] — 2026-05-25
 
