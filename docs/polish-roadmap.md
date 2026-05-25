@@ -405,6 +405,18 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 27 tamamlandı — Per-element OCR crop.** Sprint 26 whole-image OCR'a opt-in alternatif olarak per-element crop mode eklendi. Az element + büyük screen senaryolarında scoping benefit + wall-clock saving. Default `.wholeImage` korunur — Sprint 26 davranışı backward-compat. Snake_case enum raw value Sprint 27 ile standart oldu (BadgePlacement camelCase Sprint 26 shipped). Mac test 913 → 928 (+15: 9 ElementRegionExpander + 6 SoMOptions ocrCropMode). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 28 — "Parallel per-element Vision" (v0.2.53)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | saf helper | `ParallelCropDetection.detect(cropRects:ocr:)` — withTaskGroup generic OCR orchestration |
+| ✅ | capture | `collectTextRegions` `.perElement` branch: sync crop rect list + parallel Vision dispatch |
+| ✅ | tests | 10 yeni — empty/single/multi/mixed results, parallel speedup, peak concurrency observer, defensive empty |
+| ⏸ | v0.2.54+ | OCR text confidence threshold (low-conf observations filter) |
+| ⏸ | v0.2.54+ | OCR cancellation propagation (task cancel → Vision request cancel) |
+
+**25 May 2026: Sprint 28 tamamlandı — Parallel per-element Vision.** Sprint 27 sequential per-element loop'u `withTaskGroup` ile parallel'e geçti. 5 element × 100ms test: sequential 500ms+ → parallel ~300ms+. CPU path'inde gerçek paralelizm; Neural Engine internal serialize ederse worst case sequential (regresyon yok). Mac test 928 → 938 (+10). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (orchestration internal; union ordering Sprint 26'dan beri deterministic değildi).
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

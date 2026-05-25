@@ -11,6 +11,38 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 
+## [0.2.53] — 2026-05-25
+
+**Parallel per-element Vision — Sprint 27 follow-up.** v0.2.52 `.perElement` modu sequential loop kullanıyordu — N element için N × ~50-150ms wall-clock. v0.2.53 `withTaskGroup` ile her crop rect için konkurrent `Task` spawn'lar; wall-clock max(per-element) seviyesine düşer. 5 element × 100ms test: sequential ~500ms+ → parallel ~300ms+ (Neural Engine ve CPU scheduler latency dahil). Çoğu vision agent senaryosunda `.perElement` artık `.wholeImage` ile rekabet edebilir hale geldi.
+
+**Test:** Mac 928 → **938** (+10: ParallelCropDetectionTests — empty/single/multi/mixed-results, parallel execution speedup, concurrent in-flight tracker, many crops, defensive empty closure). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (orchestration internal refactor; davranış union ordering haricinde aynı — caller order'a güvenmemeli ki Sprint 26'dan beri öyle değildi).
+
+### Added — Sprint 28 / Parallel per-element Vision
+
+#### `Sources/PixelComputerUse/ParallelCropDetection.swift` (yeni saf helper)
+- **`detect(cropRects:ocr:) async -> [CGRect]`** — generic OCR orchestration. `withTaskGroup(of: [CGRect].self)` her crop rect için ayrı Task spawn'lar, hepsi tamamlanınca union döner. Boş input → boş output, TaskGroup spawn'lanmaz.
+- **OCR closure `@Sendable`** generic — test'lerde mock kullanılabilir (Vision dependency yok). Production'da `OCRTextDetector.detectTextRegions(in:cropRect:)` wrap edilir.
+- **Ordering caveat:** Union task completion sırasına bağlı — non-deterministic. Caller order'a güvenmemeli; CGRect overlap scoring (Sprint 26 `OCRBadgePlacement`) sıraya duyarsız.
+- **Neural Engine caveat:** Apple Silicon Neural Engine multi-request Vision'ı internal serialize edebilir; theoretical speedup ~1x'e yaklaşabilir ama worst case sequential, regresyon yok. `.fast` recognition level CPU path'ini kullanıyor olabilir, paralelizm avantajlıdır.
+
+#### `Sources/PixelComputerUse/ScreenshotCapture.swift`
+- **`collectTextRegions` `.perElement` branch refactor:**
+  - **Önce:** sequential for-await loop her element için.
+  - **Şimdi:** İki aşama:
+    1. **Sync crop rect listesi** (`MarkLayout.computeMarkRect` + `ElementRegionExpander.expandedRect` — saf math, hızlı).
+    2. **Parallel Vision pass'leri** `ParallelCropDetection.detect(cropRects:ocr:)` ile.
+- CGImage `@Sendable` closure'a strong capture — CFType effectively Sendable read-only ops için.
+
+### Tests
+- `Tests/PixelComputerUseTests/ParallelCropDetectionTests.swift` — **10 yeni**: empty crop rects boş sonuç + closure çağrılmaz, single crop tek OCR call + cropRect parametresi closure'a düşer, multi crops union (3 crop × 2 region = 6 total), empty results union'da yok, mixed results sadece dolu olanları topla, **parallel speedup smoke test** (5 × 100ms <350ms), **peak concurrency observer** (4 task aynı anda 2+ in-flight), many crops (20) hepsini çalıştır, defensive empty input closure çağrılmaz.
+- Yeni test actor'lar (`OCRCallCounter`, `ConcurrencyObserver`) — Sendable-safe mutable state for assertions.
+
+### Notes — Sprint 28
+- **`.wholeImage` etkilenmedi** — Sprint 26 single-pass path aynı. Sadece `.perElement` artık paralel.
+- **Wall-clock kazanç:** N element × per-element latency → ~per-element latency. 5 element 100ms each: 500ms sequential → ~150-300ms parallel. Neural Engine serialize ederse fark daha küçük; CPU yolu paralel.
+- **Memory:** N Vision request konkurrent → memory peak yükselir (her biri ~10-50MB). Tipik vision agent workflow'unda 5-15 element, kabul edilebilir.
+- **Caller değişikliği gerekmedi** — `.perElement` opt-in mode aynı API, sadece içeride paralel.
+
 ## [0.2.52] — 2026-05-25
 
 **Per-element OCR crop — Sprint 26 follow-up.** v0.2.51 `.contentAware` placement Vision'ı **tüm screenshot** üzerinde tek pass çalıştırıyordu — çoğu element için iyi (1 pass overhead amortize olur), ama az element + büyük screen senaryolarında ilgisiz alanlarda da Vision çalışır. v0.2.52 `OCRCropMode` enum'u ile opt-in `.perElement` modu: her element için `ElementRegionExpander.expandedRect` ile crop edilmiş region'da ayrı Vision pass. Az element (1-3) + küçük rect'lerde wall-clock daha hızlı; scoring scope'ı element neighborhood'una sınırlı.
