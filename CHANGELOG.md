@@ -11,6 +11,46 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 
+## [0.2.52] — 2026-05-25
+
+**Per-element OCR crop — Sprint 26 follow-up.** v0.2.51 `.contentAware` placement Vision'ı **tüm screenshot** üzerinde tek pass çalıştırıyordu — çoğu element için iyi (1 pass overhead amortize olur), ama az element + büyük screen senaryolarında ilgisiz alanlarda da Vision çalışır. v0.2.52 `OCRCropMode` enum'u ile opt-in `.perElement` modu: her element için `ElementRegionExpander.expandedRect` ile crop edilmiş region'da ayrı Vision pass. Az element (1-3) + küçük rect'lerde wall-clock daha hızlı; scoring scope'ı element neighborhood'una sınırlı.
+
+**Test:** Mac 913 → **928** (+15: 9 ElementRegionExpander saf helper + 6 SoMOptions ocrCropMode coverage — Codable round-trip, default, backward-compat without field, snake_case raw value). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (additive opsiyonel param, eski wire format `convertFromSnakeCase` ile uyumlu, `SoMOptions.ocrCropMode` field eski JSON'da yoksa default `.wholeImage`).
+
+### Added — Sprint 27 / Per-element OCR crop
+
+#### `Sources/PixelComputerUse/ElementRegionExpander.swift` (yeni saf helper)
+- **`expandedRect(elementRect:badgeSize:imagePixelSize:padding:) -> CGRect?`** — element rect'i badge size + padding kadar her yönde genişletir, image bounds'a clamp eder. Outside badge candidate'larını + civar text bağlamını kapsar.
+- **`defaultPadding: CGFloat = 8`** — ek padding adjacent text yakalamak için.
+- **Defensive:** Element image dışı → nil; zero-size image → nil.
+- **Saf math** — Vision/View dependency yok; testable.
+
+#### `Sources/PixelComputerUse/OCRTextDetector.swift`
+- **`detectTextRegions(in image:, cropRect:) async -> [CGRect]`** yeni overload — image'ı `cropRect`'e crop eder (`CGImage.cropping(to:)`), Vision pass yapar, sonuç koordinatları `cropRect.origin` eklenerek image-global'a translate.
+- **`performDetection(on:cropOffset:)`** private — `cropOffset` parametresi alır; whole-image modunda `.zero`, crop modunda `cropRect.origin`.
+
+#### `Sources/PixelComputerUse/SoMOptions.swift`
+- **`OCRCropMode` yeni enum** — `.wholeImage` (default, Sprint 26 path) | `.perElement` (Sprint 27 opt-in). **Snake_case raw value** (`"whole_image"` / `"per_element"`) — MCP wire docs ile tutarlı; BadgePlacement camelCase raw value Sprint 26 ile shipped, yeni enum'larda snake_case standart.
+- **`SoMOptions.ocrCropMode: OCRCropMode = .wholeImage`** yeni field.
+- **Manuel Codable** — eski JSON'da `ocrCropMode` yoksa default `.wholeImage` (backward-compat). `decodeIfPresent` her field için → eski wire format'ı bozmaz.
+
+#### `Sources/PixelComputerUse/ScreenshotCapture.swift`
+- **`collectTextRegions(for:in:options:imageScreenOrigin:imageLogicalSize:)`** yeni private static — `options.ocrCropMode`'a göre dispatcher:
+  - `.wholeImage`: `OCRTextDetector.detectTextRegions(in:)` (Sprint 26 path).
+  - `.perElement`: her element için `MarkLayout.computeMarkRect` ile image içindeki rect, `ElementRegionExpander.expandedRect` ile crop region, `OCRTextDetector.detectTextRegions(in:cropRect:)` ile pass, sonuçlar union'lanır.
+
+#### `Sources/PixelMCPServer/ToolRegistry.swift`
+- **`ui_screenshot.som_options`** schema açıklamasına `ocr_crop_mode` parametresi eklendi: `'whole_image'` (default) | `'per_element'`. Sadece `content_aware` placement iken anlamlı.
+
+### Tests
+- `Tests/PixelComputerUseTests/ElementRegionExpanderTests.swift` — **9 yeni**: basic expansion (badge + padding), default padding usage, bounds clamping (top-left/bottom-right corner, completely outside, zero-size image), custom padding (zero, large), default padding sabiti.
+- `Tests/PixelComputerUseTests/SoMOptionsTests.swift` — **+6** Sprint 27: OCRCropMode snake_case raw values, Codable round-trip, SoMOptions default `.wholeImage`, accepts `.perElement`, full round-trip with cropMode, **backward-compat decode without field** (eski JSON → default).
+
+### Notes — Sprint 27
+- **Performance trade-off:** `.perElement` Vision setup cost N pass için N × ~50-100ms overhead. Çok element (>5) durumunda `.wholeImage` (tek pass ~100-300ms) daha hızlı. **Default `.wholeImage` korunur** — Sprint 26 davranışı.
+- **Scoping benefit:** Per-element crop OCR sadece element neighborhood'unu görür; uzak text scoring'i etkilemez. Whole-image'da ise tüm text bbox'ları flat liste; ama scoring CGRect overlap'le iş gördüğü için ilgisiz uzak text overlap'siz olduğundan score'u etkilemez (Sprint 26 design'ı zaten "doğal" filtering yapıyordu).
+- **Snake_case migration:** `OCRCropMode` raw value snake_case (wire docs ile tutarlı). Önceki `BadgePlacement` camelCase raw shipped — Sprint 26 wire'ı bozmamak için bırakıldı; gelecekte explicit migration ile snake_case'e çevrilebilir.
+
 ## [0.2.51] — 2026-05-25
 
 **OCR-based SoM badge placement — Sprint 20 follow-up.** v0.2.45 AX role heuristic (button → topRightOutside, link → topRightInside, vs.) konvansiyon tabanlıydı — custom widget'larda veya beklenmedik layout'larda yine badge text alanını örtebilirdi. v0.2.51 Vision framework `VNRecognizeTextRequest` ile screenshot'taki tüm text bounding box'ları çıkarır; her element için 4 köşe adayı arasından **text ile en az çakışan** seçilir. OCR başarısız veya text yoksa `.labelAware` fallback'i — graceful degradation.

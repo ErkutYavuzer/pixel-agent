@@ -390,6 +390,21 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 26 tamamlandı — OCR-based SoM badge placement.** v0.2.45 AX role heuristic konvansiyon tabanlıydı; özel layout'larda yine badge text alanını örtebilirdi. v0.2.51 Vision `VNRecognizeTextRequest` ile tüm text bbox'larını çıkarır; her element için 4 köşe adayından **text ile en az çakışan** seçilir. OCR başarısız → `.labelAware` fallback (graceful degradation). Mac test 897 → 913 (+16: 14 OCRBadgePlacement + 2 SoMOptions content-aware coverage). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (additive enum case + opsiyonel param).
 
+## Sprint 27 — "Per-element OCR crop" (v0.2.52)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | saf helper | `ElementRegionExpander.expandedRect` — element + badge + padding, image bounds clamp |
+| ✅ | async overload | `OCRTextDetector.detectTextRegions(in:cropRect:)` — crop CGImage, Vision pass, coords translate back |
+| ✅ | enum | `OCRCropMode` (`.wholeImage` default | `.perElement`); **snake_case raw values** wire docs ile tutarlı |
+| ✅ | SoMOptions | `ocrCropMode` field + manuel Codable (backward-compat decode without field) |
+| ✅ | capture | `collectTextRegions` dispatcher — `.wholeImage` Sprint 26 path; `.perElement` loop per-element crop + union |
+| ✅ | MCP | `ui_screenshot.som_options.ocr_crop_mode` schema |
+| ⏸ | v0.2.53+ | OCR text confidence threshold (low-conf observations filter) |
+| ⏸ | v0.2.53+ | Parallel per-element Vision (TaskGroup ile wall-clock azaltma) |
+
+**25 May 2026: Sprint 27 tamamlandı — Per-element OCR crop.** Sprint 26 whole-image OCR'a opt-in alternatif olarak per-element crop mode eklendi. Az element + büyük screen senaryolarında scoping benefit + wall-clock saving. Default `.wholeImage` korunur — Sprint 26 davranışı backward-compat. Snake_case enum raw value Sprint 27 ile standart oldu (BadgePlacement camelCase Sprint 26 shipped). Mac test 913 → 928 (+15: 9 ElementRegionExpander + 6 SoMOptions ocrCropMode). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
