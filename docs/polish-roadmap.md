@@ -153,7 +153,19 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 | ✅ | B2 power | Row inline tag preview (`#x #y #z +N`) + contextMenu |
 | ✅ | wire | `ArchiveEntryPayload.tags` opsiyonel (iOS read-only) |
 
-**25 May 2026: Sprint 7 tamamlandı — Conversation tag.** v0.2.31'in (rename) eşi: 27 yeni test (+8 ArchiveTagsStore + 9 TagNormalizer + 6 TagFilter + 4 ConversationStore). Test: 718 → 745. iOS UI'da tag görünümü v0.2.33'e ertelendi (şu an wire-only data layer). Apple Developer ID + notarization + demo GIF hâlâ kullanıcı aksiyonu olarak bekliyor.
+**25 May 2026: Sprint 7 tamamlandı — Conversation tag.** v0.2.31'in (rename) eşi: 27 yeni test (+8 ArchiveTagsStore + 9 TagNormalizer + 6 TagFilter + 4 ConversationStore). Test: 718 → 745. iOS UI'da tag görünümü v0.2.34'e ertelendi (şu an wire-only data layer). Apple Developer ID + notarization + demo GIF hâlâ kullanıcı aksiyonu olarak bekliyor.
+
+## Sprint 8 — "EnvelopePayload sum-type refactor" (v0.2.33)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | v0.3 hazırlığı | EnvelopePayload struct → enum (15 case, EnvelopeType ile 1:1) |
+| ✅ | yapısal | HostStatusContent sub-struct (7 field aggregator) |
+| ✅ | wire-compat | RemoteEnvelope custom Codable (type-aware decode) |
+| ✅ | backward-compat | 20 computed getter (eski caller'lar migrate olmadan çalışır) |
+| ✅ | cleanup | Dead `metadata` field silindi + manual Equatable kaldırıldı (auto-synth) |
+
+**25 May 2026: Sprint 8 tamamlandı — EnvelopePayload sum-type.** v0.2.32'ye kadar 20 opsiyonel field'lı flat struct'tı; şimdi 15 case'lı sum type, derleyici hangi case'in hangi data taşıdığını biliyor. Wire format değişmedi (eski sürümler uyumlu). 15 yeni test (+15 EnvelopePayloadSumTypeTests). Caller migration zorunlu değil.
 
 ## Demo Senaryosu (Sprint 1 sonrası)
 

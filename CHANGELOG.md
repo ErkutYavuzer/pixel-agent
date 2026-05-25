@@ -9,9 +9,74 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: PixelComputerUse Faz 5 (SoMOptions override + AX-based otomatik element keşfi + content-aware badge placement); Subagent Faz 4+ (multi-turn workflow + settings UI); App Store signing.
-- v0.2.25 follow-up adayları (hâlâ açık): `EnvelopePayload` sum-type refactor (20+ opsiyonel field → enum); iOS continuous screenshot streaming; `hostStatus` delta-only push.
-- v0.2.32 follow-up: iOS UI'da tag görünümü (şu an wire-only; iOS read-only chip listing eklenebilir); A items polish (scroll spring/asymmetric bubble/reconnect countdown).
+- v0.2.25 follow-up adayları (hâlâ açık): iOS continuous screenshot streaming; `hostStatus` delta-only push.
+- v0.2.32 follow-up: iOS UI'da tag görünümü (şu an wire-only; iOS read-only chip listing eklenebilir).
+- v0.2.33 follow-up: A items polish (scroll spring/asymmetric bubble/reconnect countdown).
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+- Bilinen pre-existing flake: `PixelComputerUseTests.IMEChunkingTests` ve `PixelMCPServerTests.JSONValueTests.testNestedSubscript` ardışık `swift test` çalıştırmada bazen SIGBUS atıyor; izole çalıştırmada geçiyor. v0.2.33 refactor'üyle alakasız.
+
+## [0.2.33] — 2026-05-25
+
+**EnvelopePayload sum-type refactor — v0.3 hazırlığı.** v0.2.32'ye kadar `EnvelopePayload` 20 opsiyonel field'lı flat struct'tı (`text: String?`, `selectedBackend: String?`, vs.); hangi field'ın hangi envelope type'a ait olduğu konvansiyondu, derleyici garantilemiyordu. Şimdi `EnvelopeType` ile 1:1 sum type — type checker bilgisi sertleşti. **Wire format değişmedi** (eski iOS/Mac sürümleri uyumlu); backward-compat computed getter'lar sayesinde caller migration zorunlu değil. **760 envelope-side test yeşil** (+15 bu release'te). Breaking change yok pratikte (factory metodları aynı imza, getter'lar aynı).
+
+### Refactored — Sprint 8 / Sum-type API
+
+#### `Sources/PixelRemote/RemoteEnvelope.swift` baştan yazıldı
+- **`EnvelopePayload` enum (15 case, EnvelopeType ile 1:1):**
+  * `.hello(publicKey: String)`
+  * `.error(code: String, message: String)`
+  * `.ack(referenceID: String)`
+  * `.userMessage(text: String, messageID: String?)`
+  * `.assistantMessage(text: String, messageID: String?)`
+  * `.assistantChunk(text: String, messageID: String?)`
+  * `.clientConfig(backend: String, model: String, planMode: Bool)`
+  * `.clientAction(actionType: String, targetID: String?)`
+  * `.hostStatus(HostStatusContent)` — yeni sub-struct (7 field aggregator)
+  * `.screenshotPayload(base64Image: String)`
+  * `.toolCallEvent(ToolCallEventPayload)`
+  * `.archiveListResponse(entries: [ArchiveEntryPayload])`
+  * `.archiveLoadRequest(archiveID: String)`
+  * `.archiveLoadResponse(messages: [Message])`
+  * Empty payload type'lar (`ping`, `ready`, `archiveListRequest`) için
+    `RemoteEnvelope.payload = nil` (enum'da `empty` case yok).
+- **`HostStatusContent` yeni sub-struct** — 7 field'lı aggregator
+  (selectedBackend, selectedModel, planMode, availableBackends,
+  availableModels, activeSubagents, systemMetrics). hostStatus envelope
+  payload'unun gerçek yapısı görünür hale geldi.
+- **Custom Codable (`RemoteEnvelope`):** type'ı önce decode et, sonra
+  payload'u type-aware decode et. Eski wire format flat dict'ten yeni
+  enum'a build edilir. Encode tarafında case'e göre ilgili field'lar
+  yazılır (eski formatla birebir aynı).
+- **Backward-compat computed getter'lar:** Önceki `payload?.text`,
+  `payload?.actionType`, `payload?.selectedBackend` vb. 20 field için
+  her biri için ilgili case'den döndüren computed property. Caller'lar
+  migrate olmadan çalışmaya devam eder; istersek aşamalı `case let .foo`
+  pattern matching'e geçilir.
+- **Equatable artık auto-synthesized.** Eski manual `==` (toolCallEvent,
+  archiveEntries, archiveLoadID, archiveMessages eksikti) bug taşıyordu.
+- **Dead `metadata: [String: String]?` field silindi** — hiçbir call site
+  yoktu (init default'u dışında).
+
+### Migration notları
+- **Caller'lar:** Mevcut `envelope.payload?.fieldName` access pattern'leri
+  computed getter'lar sayesinde olduğu gibi çalışır (8 access site + iOS
+  RemoteSession dahil). Migration **zorunlu değil**; tercihe göre yeni
+  `case let .userMessage(text, id) = payload` pattern matching API'sine
+  geçilebilir.
+- **Construction:** Doğrudan `EnvelopePayload(text:role:)` çağıran 2 test
+  `.userMessage(text:messageID:)` enum case'ine güncellendi
+  (EnvelopeSignerTests).
+- **Wire format:** Değişmedi. Yeni Mac/iOS eski Mac/iOS ile pairing edebilir.
+
+### Tests (+15)
+- `Tests/PixelRemoteTests/EnvelopePayloadSumTypeTests.swift` (yeni, 15 test):
+  case binding (userMessage/clientAction/hostStatus), empty payload nil
+  (ping/archiveListRequest), backward-compat computed getter'lar (text/role/
+  messageID/hostStatus passthrough/clientConfig/clientAction/null-default),
+  wire format backward-compat (decode v0.2.32 flat JSON → enum, encode →
+  flat shape, empty payload omit).
+
+Toplam envelope-side test: 85 → 100 (PixelRemoteTests filter) — wire round-trip + signer + tool call + archive + type forward-compat + yeni sum type pattern matching tümü yeşil.
 
 ## [0.2.32] — 2026-05-25
 
