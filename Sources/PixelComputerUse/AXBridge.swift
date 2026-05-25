@@ -79,6 +79,68 @@ actor AXBridge {
         #endif
     }
 
+    /// **Faz 5 (v0.2.38):** AX tree'de interactive element'leri (button/link/
+    /// textField/checkbox/...) BFS ile tara, snapshot listesi döner. SoM
+    /// auto-discover için entry point — caller ui_screenshot için query
+    /// yazmak zorunda kalmaz.
+    ///
+    /// - `bundleID`: nil ise frontmost app.
+    /// - `maxDepth`: traversal derinlik limiti (default 12 — `UIQuery.default`'la aynı).
+    /// - `timeout`: en fazla bu kadar saniye gez (overrun → `timedOut`).
+    /// - `limit`: en fazla bu kadar element döner (vision model annotation
+    ///   noise'i kontrol için; default 30).
+    /// - Returns: interactive element snapshot'ları. Zero-frame element'ler
+    ///   (görünmez/layout-only) atlanır.
+    func discoverInteractive(
+        bundleID: String? = nil,
+        maxDepth: Int = 12,
+        timeout: TimeInterval = 2.0,
+        limit: Int = 30
+    ) throws -> [UIElement] {
+        #if canImport(ApplicationServices) && canImport(AppKit)
+        let deadline = Date().addingTimeInterval(timeout)
+
+        let root: AXUIElement
+        let resolvedBundleID: String?
+        if let bid = bundleID {
+            guard let app = applicationElement(bundleID: bid) else { return [] }
+            root = app
+            resolvedBundleID = bid
+        } else {
+            guard let front = frontmostApplicationElement() else { return [] }
+            root = front.element
+            resolvedBundleID = front.bundleID
+        }
+
+        var queue: [(element: AXUIElement, depth: Int, path: [String])] = [(root, 0, [])]
+        var matches: [UIElement] = []
+
+        while !queue.isEmpty, matches.count < limit {
+            if Date() > deadline {
+                throw ComputerUseError.timedOut(after: timeout)
+            }
+            let (element, depth, path) = queue.removeFirst()
+            let snapshot = makeSnapshot(element, bundleID: resolvedBundleID, path: path)
+
+            if AXRole.interactiveRoles.contains(snapshot.role),
+               snapshot.frame.width > 0,
+               snapshot.frame.height > 0 {
+                matches.append(snapshot)
+            }
+
+            if depth < maxDepth, matches.count < limit {
+                for child in children(element) {
+                    queue.append((child, depth + 1, snapshot.path))
+                }
+            }
+        }
+
+        return matches
+        #else
+        throw ComputerUseError.unsupported(reason: "AX yalnızca macOS'ta desteklenir")
+        #endif
+    }
+
     #if canImport(ApplicationServices) && canImport(AppKit)
 
     // MARK: - Roots

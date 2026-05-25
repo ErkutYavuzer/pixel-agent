@@ -81,12 +81,38 @@ public actor PixelComputerUse {
     /// **Faz 4 (ADR-0031):** `annotating` dolu ise Set-of-Mark overlay çizilir;
     /// her element için numaralı badge + outline. `ScreenshotResult.marks` 1-bazlı
     /// ID listesi döner. Off-screen element'ler atlanır.
+    ///
+    /// **Faz 5 (v0.2.38):**
+    /// - `autoDiscover: true` ve `annotating` boş ise AX tree'den interactive
+    ///   element'ler (button/link/textfield/...) otomatik taranır, annotate
+    ///   edilir. Caller önce `ui_query` yazmaktan kurtulur.
+    /// - `options` parametresi SoM renderer'ı yapılandırır (palette, outline/
+    ///   badge boyutu, content-aware badge placement). `.default` eski hardcoded
+    ///   davranış (geri uyumlu).
     public func screenshot(
         of target: ScreenshotTarget = .activeDisplay,
-        annotating elements: [UIElement] = []
+        annotating elements: [UIElement] = [],
+        autoDiscover: Bool = false,
+        options: SoMOptions = .default
     ) async throws -> ScreenshotResult {
         try await ensureScreenRecording()
-        return try await ScreenshotCapture.capture(target: target, annotating: elements)
+        // Faz 5: autoDiscover + annotate boşsa AX'tan tara. annotate dolu ise
+        // caller'ın listesi öncelikli (override edilmez — explicit > otomatik).
+        var resolvedElements = elements
+        if autoDiscover && resolvedElements.isEmpty {
+            try await ensureAccessibility()
+            let discoverBundle: String? = {
+                if case .window(let bid) = target { return bid }
+                if case .windowContent(let bid, _) = target { return bid }
+                return nil  // .activeDisplay / .allDisplays → frontmost app
+            }()
+            resolvedElements = try await axBridge.discoverInteractive(bundleID: discoverBundle)
+        }
+        return try await ScreenshotCapture.capture(
+            target: target,
+            annotating: resolvedElements,
+            options: options
+        )
     }
 
     /// **Faz 3a:** Daha önce `query()` ile alınmış bir `opaqueID`'den canlı

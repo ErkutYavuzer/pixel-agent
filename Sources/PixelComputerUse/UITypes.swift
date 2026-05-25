@@ -156,6 +156,23 @@ public enum AXRole: String, Sendable, Codable, CaseIterable {
     case tabGroup = "AXTabGroup"
     case scrollArea = "AXScrollArea"
     case any = "*"
+
+    /// **Faz 5 (v0.2.38):** "İnteraktif" rol seti — auto-discover screenshot'ta
+    /// otomatik annotate edilecek element'ler. Decorative element'ler
+    /// (image/group/scrollArea/staticText) hariç; click/type/select edilebilir
+    /// olanlar dahil. Caller `ui_screenshot(auto_discover: true)` çağırırsa
+    /// AX tree'de bu rollerin örnekleri annotate edilir.
+    public static let interactiveRoles: Set<String> = [
+        AXRole.button.rawValue,
+        AXRole.link.rawValue,
+        AXRole.textField.rawValue,
+        AXRole.textArea.rawValue,
+        AXRole.checkbox.rawValue,
+        AXRole.radioButton.rawValue,
+        AXRole.popUpButton.rawValue,
+        AXRole.comboBox.rawValue,
+        AXRole.menuItem.rawValue,
+    ]
 }
 
 // MARK: - MatchMode

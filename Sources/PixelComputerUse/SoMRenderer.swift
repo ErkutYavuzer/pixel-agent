@@ -24,22 +24,9 @@ import CoreText
 /// nil dönerse). Image bounds içinde kalan kısmı outline ile çevrelenir.
 enum SoMRenderer {
 
-    /// Birden fazla element için palette'ten döngüsel renk seçimi.
-    /// 5 renk × yüksek alpha → vision model net algılar; arka plana boğulmaz.
-    private static let palette: [CGColor] = [
-        CGColor(red: 1.00, green: 0.20, blue: 0.20, alpha: 0.90),  // kırmızı
-        CGColor(red: 0.20, green: 0.60, blue: 1.00, alpha: 0.90),  // mavi
-        CGColor(red: 0.20, green: 0.80, blue: 0.30, alpha: 0.90),  // yeşil
-        CGColor(red: 1.00, green: 0.70, blue: 0.00, alpha: 0.90),  // turuncu
-        CGColor(red: 0.85, green: 0.30, blue: 0.95, alpha: 0.90),  // mor
-    ]
-
-    /// Outline stroke kalınlığı (pixel) ve badge boyutu — annotated PNG'nin
-    /// vision model tarafından okunabilir olması için tipik retina capture'da
-    /// (1600×1200) iyi çalışan değerler. Daha küçük image'da scale-down zaten
-    /// vision model tarafından handle edilir.
-    private static let outlineWidth: CGFloat = 4
-    private static let badgeSize: CGFloat = 36
+    /// **Faz 5 (v0.2.38):** Önceki hardcoded sabitler `SoMOptions`'a taşındı.
+    /// Geri uyumluluk için `annotate(...)` default `SoMOptions.default` kullanır
+    /// (eski caller'lar değişmedi).
 
     /// Annotation entry point. Image üzerine N element için marker overlay'i çizer.
     ///
@@ -48,13 +35,17 @@ enum SoMRenderer {
     /// - `imageScreenOrigin`: image'in temsil ettiği bölgenin top-left logical
     ///   screen origin'i (window.frame.origin + opsiyonel titlebarOffset).
     /// - `imageLogicalSize`: bölgenin logical points cinsinden boyutu.
+    /// - `options`: **Faz 5 (v0.2.38):** Görselleştirme parametreleri — palette,
+    ///   outline/badge boyutları, badge placement strategy. `.default` eski
+    ///   hardcoded davranışla aynı.
     /// - Returns: `(annotated CGImage, [SoMMark] in 1-bazlı ID sırasıyla)`.
     ///   Off-screen element'ler atlanır → `marks.count` ≤ `elements.count`.
     static func annotate(
         image: CGImage,
         elements: [UIElement],
         imageScreenOrigin: CGPoint,
-        imageLogicalSize: CGSize
+        imageLogicalSize: CGSize,
+        options: SoMOptions = .default
     ) throws -> (CGImage, [SoMMark]) {
         #if canImport(CoreGraphics) && canImport(AppKit)
         let width = image.width
@@ -113,8 +104,17 @@ enum SoMRenderer {
         NSGraphicsContext.current = nsCtx
         defer { NSGraphicsContext.restoreGraphicsState() }
 
+        let badgeSize = CGFloat(options.badgeSize)
+        let outlineWidth = CGFloat(options.outlineWidth)
+        let textNSColor = NSColor(
+            srgbRed: CGFloat(options.textColor.red),
+            green: CGFloat(options.textColor.green),
+            blue: CGFloat(options.textColor.blue),
+            alpha: CGFloat(options.textColor.alpha)
+        )
+
         for (i, mark) in marks.enumerated() {
-            let color = palette[i % palette.count]
+            let color = options.palette[i % options.palette.count].cgColor
             let rect = rects[i]
 
             // Outline
@@ -122,21 +122,24 @@ enum SoMRenderer {
             context.setLineWidth(outlineWidth)
             context.stroke(rect)
 
-            // Badge: outline'ın sol-üst köşesinde dolu daire
-            let badgeRect = CGRect(
-                x: rect.origin.x,
-                y: rect.origin.y,
-                width: badgeSize,
-                height: badgeSize
-            )
+            // **Faz 5 (v0.2.38):** Badge konumu BadgeLayout helper'ından —
+            // content-aware placement (.smartCorner image kenarına göre seçer).
+            // Clamping/bounds dışı kontrolü helper içinde; nil dönerse skip
+            // (defansif — MarkLayout zaten görünür element'leri filtreliyor).
+            guard let badgeRect = BadgeLayout.computeBadgeRect(
+                elementRect: rect,
+                badgeSize: badgeSize,
+                imagePixelSize: pixelSize,
+                placement: options.badgePlacement
+            ) else { continue }
             context.setFillColor(color)
             context.fillEllipse(in: badgeRect)
 
             // Number — NSAttributedString tek karakter veya çift; merkezde
-            let font = NSFont.boldSystemFont(ofSize: 20)
+            let font = NSFont.boldSystemFont(ofSize: CGFloat(options.fontSize))
             let textAttrs: [NSAttributedString.Key: Any] = [
                 .font: font,
-                .foregroundColor: NSColor.white,
+                .foregroundColor: textNSColor,
             ]
             let str = NSAttributedString(string: mark.id, attributes: textAttrs)
             let textSize = str.size()

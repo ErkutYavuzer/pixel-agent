@@ -371,8 +371,30 @@ public actor ControlSocketServer {
             annotateElements = []
         }
 
+        // **Faz 5 (v0.2.38):** auto_discover + som_options decode.
+        let autoDiscover: Bool = {
+            if case .bool(let b) = args["auto_discover"] { return b }
+            return false
+        }()
+
+        let options: SoMOptions
+        if let optsValue = args["som_options"] {
+            do {
+                options = try Self.decodeJSON(SoMOptions.self, from: optsValue)
+            } catch {
+                return .failure("som_options decode başarısız: \(error.localizedDescription)")
+            }
+        } else {
+            options = .default
+        }
+
         do {
-            let result = try await computer.screenshot(of: target, annotating: annotateElements)
+            let result = try await computer.screenshot(
+                of: target,
+                annotating: annotateElements,
+                autoDiscover: autoDiscover,
+                options: options
+            )
             // PNG'i base64 olarak göm — MCP image content shape'i Faz 2 (şu an text).
             let base64 = result.pngData.base64EncodedString()
             let marksPayload: JSONValue = .array(
@@ -429,10 +451,17 @@ public actor ControlSocketServer {
     /// snake_case'de gelir (bundle_id, opaque_id, ...) — convertFromSnakeCase
     /// strategy ile bundleID/opaqueID alanlarına çevrilir.
     private static func decodeUIElement(from value: JSONValue) throws -> UIElement {
+        try decodeJSON(UIElement.self, from: value)
+    }
+
+    /// **Faz 5 (v0.2.38):** Generic JSONValue → Codable decode. snake_case
+    /// convention'a otomatik dönüşür (SoMOptions için `outline_width` →
+    /// `outlineWidth` vb.).
+    private static func decodeJSON<T: Decodable>(_ type: T.Type, from value: JSONValue) throws -> T {
         let data = try JSONEncoder().encode(value)
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(UIElement.self, from: data)
+        return try decoder.decode(type, from: data)
     }
 
     private static func encodeJSON<T: Encodable>(_ value: T) throws -> JSONValue {

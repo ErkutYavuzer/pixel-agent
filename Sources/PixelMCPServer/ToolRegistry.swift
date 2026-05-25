@@ -531,6 +531,14 @@ public enum BuiltInTools {
                     ]),
                     "description": .string("Faz 4 Set-of-Mark: bu element'ler PNG üzerinde numaralı badge + outline ile işaretlenir. Off-screen olanlar atlanır."),
                 ]),
+                "auto_discover": .object([
+                    "type": .string("boolean"),
+                    "description": .string("Faz 5 (v0.2.38): true ve `elements` boşsa AX tree'den interactive element'ler (button/link/textfield/checkbox) otomatik bulunur ve annotate edilir. Vision model için tek-shot 'tıklanabilir ne var?' özeti — önce ui_query yazmaktan kurtarır. Limit 30 element, timeout 2s."),
+                ]),
+                "som_options": .object([
+                    "type": .string("object"),
+                    "description": .string("Faz 5 (v0.2.38): SoM renderer override — palette, outline_width, badge_size, font_size, text_color, badge_placement. Boş bırakırsan default değerler (geri uyumlu eski davranış). badge_placement: 'top_left_inside' (default) | 'top_left_outside' | 'top_right_inside' | 'top_right_outside' | 'smart_corner'."),
+                ]),
             ]),
         ]),
         handler: { params in
@@ -539,6 +547,8 @@ public enum BuiltInTools {
             if let bid = params?["bundle_id"] { args["bundle_id"] = bid }
             if let off = params?["titlebar_offset"] { args["titlebar_offset"] = off }
             if let els = params?["elements"] { args["elements"] = els }
+            if let auto = params?["auto_discover"] { args["auto_discover"] = auto }
+            if let opts = params?["som_options"] { args["som_options"] = opts }
             return await callBridge(tool: "ui_screenshot", arguments: .object(args))
         }
     )

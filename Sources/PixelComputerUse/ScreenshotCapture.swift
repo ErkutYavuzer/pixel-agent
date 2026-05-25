@@ -25,7 +25,8 @@ public enum ScreenshotCapture {
 
     public static func capture(
         target: ScreenshotTarget,
-        annotating elements: [UIElement] = []
+        annotating elements: [UIElement] = [],
+        options: SoMOptions = .default
     ) async throws -> ScreenshotResult {
         #if canImport(ScreenCaptureKit) && canImport(AppKit) && canImport(ImageIO)
         let content = try await fetchContent()
@@ -80,7 +81,8 @@ public enum ScreenshotCapture {
                 image: croppedImage,
                 elements: elements,
                 imageScreenOrigin: croppedLogicalFrame.origin,
-                imageLogicalSize: croppedLogicalFrame.size
+                imageLogicalSize: croppedLogicalFrame.size,
+                options: options
             )
             finalImage = annotated
             marks = generated
