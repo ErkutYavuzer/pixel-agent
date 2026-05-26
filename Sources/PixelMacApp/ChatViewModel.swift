@@ -183,15 +183,20 @@ final class ChatViewModel: ObservableObject {
         streamTask = Task {
             do {
                 // **Sprint 36 (v0.2.63):** Cross-session memory injection.
-                // `memoryStore` set ise relevant past entries fetch, system
-                // prompt'una formatlanmış prefix olarak prepend.
+                // **Sprint 41 (v0.2.68):** Auto-capture instruction merge.
+                // `memoryStore` set ise relevant past entries fetch +
+                // PlaybookLearner formatPrompt → playbook section.
+                // `MemoryCaptureInstruction.assembleSystemPrompt` playbook
+                // section + base instruction + contextual prefix
+                // (CaptureIntentDetector pattern match olursa) birleştirir.
                 var systemPrompt: String? = nil
                 if let memoryStore {
                     let entries = (try? await memoryStore.relevantContext(for: queryForMemory)) ?? []
-                    let formatted = PlaybookLearner.formatPrompt(entries)
-                    if !formatted.isEmpty {
-                        systemPrompt = formatted
-                    }
+                    let playbookSection = PlaybookLearner.formatPrompt(entries)
+                    systemPrompt = MemoryCaptureInstruction.assembleSystemPrompt(
+                        playbookSection: playbookSection,
+                        userMessage: queryForMemory
+                    )
                 }
                 var firstChunkSeen = false
                 let stream = backend.send(messages: snapshot, system: systemPrompt, options: options)

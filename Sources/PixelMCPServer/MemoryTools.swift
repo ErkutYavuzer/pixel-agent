@@ -22,11 +22,33 @@ public enum MemoryTools {
         persiste edilir; sonraki sohbetlerde benzer task'lerde otomatik olarak
         prompt'a enjekte edilir (PlaybookLearner).
 
+        **NE ZAMAN ÇAĞIR (Sprint 41 — otomatik öğrenme):**
+
+        Sessizce, kullanıcıya sormadan, şu durumlarda doğrudan çağır:
+
+        - Profil: "Benim adım Erkut" / "Beni X diye çağır" / "I'm a backend developer"
+          → category="profile"
+        - Tercih: "Kısa cevap tercih ederim" / "Always use TypeScript" / "Türkçe yaz"
+          → category="preference"
+        - Recipe (tekrarlayan): "PR review için şu template" / "Her seferinde X yap"
+          → category="task", tags=["recipe"]
+        - Aktif proje: "Şu an pixel-agent üzerinde çalışıyorum" / "I'm working on X"
+          → category="project"
+
+        **NE ZAMAN ÇAĞIRMA:**
+        - Geçici durumlar ("Bugün biraz yorgunum")
+        - Tek seferlik sorular ("Bu ne anlama gelir?")
+        - Belirsiz / yanlış anlamış olabileceğin ifadeler
+        - search_memory ile zaten kayıtlı olduğunu gördüğün bilgiler (duplicate)
+
+        **Format kuralı:** Kayıt sonrası ana cevabında tek satırlık "(Hafızaya
+        kaydedildim: <kısa özet>)" notu bırak. Kullanıcı bilsin.
+
         Kategoriler:
         - profile: Kullanıcı kimliği, rol, lokasyon, dil
         - preference: İletişim stili, ton tercihleri
         - project: Aktif iş bağlamı, hedefler
-        - task: Tekrarlayan iş örüntüleri (tags: ["recipe"] ile gelecekte boost)
+        - task: Tekrarlayan iş örüntüleri (tags: ["recipe"] ile boost)
         - note: Uzun-form serbest metin
 
         Aynı içerik tekrar yazılırsa duplicate olarak işaretlenir

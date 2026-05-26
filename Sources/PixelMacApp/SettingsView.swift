@@ -441,6 +441,10 @@ private struct MemorySettingsTab: View {
     /// toggle. Default ON. Kapatıldığında PlaybookLearner Sprint 36 word
     /// Jaccard davranışına döner.
     @AppStorage(EmbeddingScorer.enabledDefaultsKey) private var semanticMatching: Bool = true
+    /// **Sprint 41 (v0.2.68):** Otomatik memory capture talimatı. Default ON.
+    /// Kapatılırsa system prompt'a capture instruction inject edilmez —
+    /// agent sadece kullanıcı `save_memory` aracını explicit isteyince çağırır.
+    @AppStorage(MemoryCaptureInstruction.autoCaptureEnabledDefaultsKey) private var autoCaptureEnabled: Bool = true
 
     var body: some View {
         Form {
@@ -455,6 +459,19 @@ private struct MemorySettingsTab: View {
                 }
             } header: {
                 Text("Eşleştirme")
+            }
+
+            Section {
+                Toggle(isOn: $autoCaptureEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Otomatik Öğrenme")
+                        Text("Profil, tercih, recipe veya proje bilgisi yakaladığında agent kendi `save_memory` aracını çağırır (sessizce, sormadan). Kapatılırsa sadece kullanıcının explicit isteğiyle kaydeder.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Otomatik Capture")
             }
 
             Section {
