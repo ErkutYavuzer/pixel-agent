@@ -90,8 +90,17 @@ struct RootView: View {
         .task {
             _ = await SystemNotifications.requestAuthorization()
             await Self.startControlBridge()
+            // Sprint 38 (v0.2.65): Proaktif tetikleyiciler başlat. Master toggle
+            // (`pixel.proactive.masterEnabled` UserDefaults) kapalıysa engine
+            // no-op olur. Idle 15dk default; appChange 60s debounce.
+            await Self.proactiveEngine.start()
         }
     }
+
+    /// **Sprint 38 (v0.2.65):** ProactiveEngine singleton — Mac app lifetime
+    /// boyunca tek instance. App kapanışında implicit stop (process exit
+    /// detector task'ları cancel eder).
+    static let proactiveEngine = ProactiveEngine()
 
     /// MCP server'ın bundle-bağımlı tool isteklerini dinleyen Unix socket
     /// sunucusunu (`ControlSocketServer`) açılışta başlatır. Hata olursa

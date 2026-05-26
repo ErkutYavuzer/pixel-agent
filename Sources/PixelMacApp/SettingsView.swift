@@ -34,6 +34,7 @@ struct SettingsView: View {
         case .connection: ConnectionSettingsTab()
         case .subagent: SubagentSettingsTab()
         case .memory: MemorySettingsTab()
+        case .proactive: ProactiveSettingsTab()
         case .permissions: PermissionsSettingsTab()
         }
     }
@@ -42,7 +43,7 @@ struct SettingsView: View {
 // MARK: - Tab enum (testable)
 
 enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, models, connection, subagent, memory, permissions
+    case general, models, connection, subagent, memory, proactive, permissions
 
     var id: String { rawValue }
 
@@ -53,6 +54,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .connection: return "Bağlantı"
         case .subagent: return "Subagent"
         case .memory: return "Hafıza"
+        case .proactive: return "Proaktif"
         case .permissions: return "İzinler"
         }
     }
@@ -64,6 +66,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .connection: return "wifi"
         case .subagent: return "person.2.crop.square.stack"
         case .memory: return "brain.head.profile"
+        case .proactive: return "bell.badge"
         case .permissions: return "lock.shield"
         }
     }
@@ -607,5 +610,166 @@ private struct MemorySettingsTab: View {
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let path = support.appendingPathComponent("pixel-agent/memory.jsonl").path
         return path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+    }
+}
+
+// MARK: - Proactive tab (Sprint 38 / v0.2.65)
+
+private struct ProactiveSettingsTab: View {
+    @AppStorage(ProactiveEngine.masterEnabledDefaultsKey) private var masterEnabled: Bool = true
+    @AppStorage(ProactiveEngine.idleThresholdDefaultsKey) private var idleThresholdMinutes: Int = ProactiveEngine.defaultIdleThresholdMinutes
+
+    @State private var suppressedKinds: Set<TriggerKind> = []
+    @State private var suppressedBundles: [String] = []
+    @State private var newBundleDraft: String = ""
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $masterEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Proaktif Tetikleyiciler")
+                        Text("Boş kaldığınızda veya uygulama değiştiğinizde sistem bildirimiyle Pixel Agent'a yönlendiriliyorsunuz. Kapatılırsa hiçbir tetikleyici çalışmaz. Etkili olması için uygulamayı yeniden başlatın.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Ana Anahtar")
+            }
+
+            Section {
+                ForEach(TriggerKind.allCases, id: \.self) { kind in
+                    HStack(alignment: .top, spacing: 10) {
+                        Toggle(isOn: kindSuppressedBinding(for: kind)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(kind.displayName)
+                                Text(kind.description)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            } header: {
+                Text("Aktif Tetikleyiciler")
+            } footer: {
+                Text("İşaretli kalanlar çalışır; kaldırılanlar suspend edilir.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Stepper(
+                    "Boşta kalma eşiği: \(idleThresholdMinutes) dakika",
+                    value: $idleThresholdMinutes,
+                    in: 5...120,
+                    step: 5
+                )
+            } header: {
+                Text("Boşta Kalma")
+            } footer: {
+                Text("CGEventSource ile herhangi bir input event'in üzerinden geçen süre. Değişiklik için uygulamayı yeniden başlatın.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                if suppressedBundles.isEmpty {
+                    Text("Sustrululan uygulama yok.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ForEach(suppressedBundles, id: \.self) { bundle in
+                        HStack {
+                            Text(bundle).font(.caption.monospaced())
+                            Spacer()
+                            Button(role: .destructive) {
+                                removeBundle(bundle)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .controlSize(.small)
+                        }
+                    }
+                }
+                HStack {
+                    TextField("com.apple.Safari", text: $newBundleDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption.monospaced())
+                    Button("Ekle") {
+                        addBundle()
+                    }
+                    .disabled(newBundleDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .controlSize(.small)
+                }
+            } header: {
+                Text("Sustrulan Uygulamalar (appChange için)")
+            } footer: {
+                Text("Bundle ID'leri (örn com.apple.Safari) için 'Uygulama değişimi' bildirimi gösterilmez. Eklemek için bundle ID yazıp Ekle'ye basın.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 4)
+        .task { await reloadSuppression() }
+    }
+
+    // MARK: - Helpers
+
+    private func kindSuppressedBinding(for kind: TriggerKind) -> Binding<Bool> {
+        Binding(
+            get: { !suppressedKinds.contains(kind) },
+            set: { active in
+                if active {
+                    suppressedKinds.remove(kind)
+                } else {
+                    suppressedKinds.insert(kind)
+                }
+                Task { await applySuppression() }
+            }
+        )
+    }
+
+    private func reloadSuppression() async {
+        let store = SuppressionStore.load()
+        suppressedKinds = store.suppressedKinds
+        suppressedBundles = Array(store.suppressedBundles).sorted()
+    }
+
+    private func applySuppression() async {
+        var store = SuppressionStore()
+        store = SuppressionStore.load()
+        for kind in TriggerKind.allCases {
+            store.setKind(kind, suppressed: suppressedKinds.contains(kind))
+        }
+        // Bundles aktif state üzerinden update
+        let activeBundles = Set(suppressedBundles)
+        // Remove all then add — basit, atomik
+        for existing in store.suppressedBundles where !activeBundles.contains(existing) {
+            store.setBundle(existing, suppressed: false)
+        }
+        for active in activeBundles {
+            store.setBundle(active, suppressed: true)
+        }
+        store.save()
+        await RootView.proactiveEngine.updateSuppression(store)
+    }
+
+    private func addBundle() {
+        let normalized = newBundleDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return }
+        if !suppressedBundles.contains(normalized) {
+            suppressedBundles.append(normalized)
+            suppressedBundles.sort()
+        }
+        newBundleDraft = ""
+        Task { await applySuppression() }
+    }
+
+    private func removeBundle(_ bundle: String) {
+        suppressedBundles.removeAll { $0 == bundle }
+        Task { await applySuppression() }
     }
 }
