@@ -1,18 +1,25 @@
 import Foundation
 
 /// **Sprint 36 (v0.2.63):** Query → top-N relevant memory entries ranker.
+/// **Sprint 37 (v0.2.64):** `EmbeddingScorer` hybrid scoring (NLEmbedding +
+/// char n-gram + word Jaccard fallback) ile genişletildi. Kısa metinlerde
+/// (örn "Beni Erkut diye çağır" + "Erkut burada") morfolojik benzerlikler
+/// artık yakalanır — Sprint 36'da Jaccard zayıflığı çözüldü.
 ///
 /// `ChatViewModel.send` her user mesajı öncesi `MemoryStore.relevantContext(for:)`
 /// çağırır; o da bu helper'ı kullanır. Sonuç entry'ler CLIBackend `priorContext`
 /// parametresine "Similar past tasks:" prefix ile enjekte edilir. Agent
 /// geçmiş benzer iş örüntülerini görür.
 ///
-/// **Ranking:** `TextSimilarityScorer.score(query, entry.content)` × category
+/// **Ranking:** `EmbeddingScorer.score(query, entry.content)` × category
 /// `promptWeight` (0-4) çarpan. `recipe` tag'i ekstra +0.1 boost — v2
 /// `PlaybookLearner` paterniyle uyumlu.
 ///
-/// **Threshold:** Default `minSimilarity = 0.55` (v2 ile uyumlu). Çok agresif
-/// olursa irrelevant context prompt'a sızar; çok sıkı olursa hiç yardımcı olmaz.
+/// **Threshold:** Default `minSimilarity = 0.35` (Sprint 37'de 0.55'ten
+/// düşürüldü çünkü n-gram skorları sentence embedding'e göre daha düşük
+/// aralıkta — "erkut" + "erkut burada" trigram ~0.4 verir). Embedding
+/// disable ise eski 0.55 daha uygun ama UI/MCP'de tek default kullanır;
+/// kullanıcı ihtiyaç duyarsa Settings'ten ayarlayabilir (gelecek versiyon).
 public enum PlaybookLearner {
     /// **Recipe tag boost** — tekrarlayan iş örüntüsü olarak etiketlenen
     /// entry'lere score boost. `task` kategorisindeki "recipe" tag'ı
@@ -30,13 +37,15 @@ public enum PlaybookLearner {
         query: String,
         in entries: [MemoryEntry],
         limit: Int = 3,
-        minSimilarity: Double = 0.55
+        minSimilarity: Double = 0.35
     ) -> [MemoryEntry] {
         guard !query.isEmpty, !entries.isEmpty, limit > 0 else { return [] }
 
         let scored: [(entry: MemoryEntry, score: Double)] = entries.compactMap { entry in
             guard !entry.deleted else { return nil }
-            let baseScore = TextSimilarityScorer.score(query, entry.content)
+            // Sprint 37: Hybrid scoring — EmbeddingScorer dispatcher tier seçer
+            // (İngilizce sentence embedding / multilingual char n-gram / word Jaccard).
+            let baseScore = EmbeddingScorer.score(query, entry.content)
             guard baseScore >= minSimilarity else { return nil }
             var boosted = baseScore + Double(entry.category.promptWeight) * 0.05
             if entry.tags.contains(recipeTag) {

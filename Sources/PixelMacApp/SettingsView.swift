@@ -434,9 +434,26 @@ private struct MemorySettingsTab: View {
     @State private var isLoading: Bool = true
     @State private var isOptimizing: Bool = false
     @State private var optimizeMessage: String?
+    /// **Sprint 37 (v0.2.64):** Semantic matching (NLEmbedding + char n-gram)
+    /// toggle. Default ON. Kapatıldığında PlaybookLearner Sprint 36 word
+    /// Jaccard davranışına döner.
+    @AppStorage(EmbeddingScorer.enabledDefaultsKey) private var semanticMatching: Bool = true
 
     var body: some View {
         Form {
+            Section {
+                Toggle(isOn: $semanticMatching) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Anlamsal Eşleştirme")
+                        Text("İngilizce için NLEmbedding sentence vektör, diğer diller için karakter n-gram morfoloji. Kapatılırsa Sprint 36 word Jaccard'a düşer.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Eşleştirme")
+            }
+
             Section {
                 if isLoading {
                     HStack { ProgressView().controlSize(.small); Text("Yükleniyor…").foregroundStyle(.secondary) }

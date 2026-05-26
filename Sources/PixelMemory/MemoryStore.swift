@@ -119,10 +119,11 @@ public actor MemoryStore {
     /// Tag'inde "recipe" olan entry'ler boost edilir (PlaybookLearner çoğu
     /// zaman buradan beslenir).
     ///
-    /// Default `limit = 3`, `minSimilarity = 0.55` — v2'nin PlaybookLearner
-    /// threshold'u ile uyumlu. Embedding-free Jaccard token similarity
-    /// (CoreML overhead'i v0.3+ aday).
-    public func relevantContext(for query: String, limit: Int = 3, minSimilarity: Double = 0.55) throws -> [MemoryEntry] {
+    /// Default `limit = 3`, `minSimilarity = 0.35` — Sprint 37'de
+    /// `EmbeddingScorer` hybrid scoring entegre edildi (NLEmbedding + char
+    /// n-gram + word Jaccard fallback). N-gram skorları sentence embedding'e
+    /// göre daha düşük aralıkta olduğu için threshold 0.55'ten düşürüldü.
+    public func relevantContext(for query: String, limit: Int = 3, minSimilarity: Double = 0.35) throws -> [MemoryEntry] {
         let all = try loadAll()
         return PlaybookLearner.relevant(
             query: query,
