@@ -12,6 +12,91 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.70] — 2026-05-26
+
+**Sprint 43 — OpenAI Realtime API gerçek implementation (Faz A).** v3 voice mode ikinci provider'a kavuştu. Sprint 42 Apple Speech (lokal MVP) üstüne gerçek **OpenAI Realtime WebSocket** API entegre edildi: server-side VAD, PCM16 24kHz audio streaming, transcript delta event'leri.
+
+**Pragmatik split:**
+- **Sprint 43 (bu, Faz A):** Audio I/O + WebSocket + server-side VAD + transcript
+- **Sprint 44 (Faz B):** Function calling + interrupt + Gemini Live
+
+**Akış:**
+1. Settings → Sesli Mod → "OpenAI Realtime" provider seç + API key gir + restart
+2. ChatComposer mic FAB tıkla → `OpenAIRealtimeProvider.start()`
+3. WebSocket bağlantı `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17` (`Authorization: Bearer ...` + `OpenAI-Beta: realtime=v1`)
+4. `session.update` event ile config gönder (modalities, voice="alloy", PCM16, server_vad)
+5. Mic capture: AVAudioEngine tap → AVAudioConverter (Apple format → PCM16 24kHz mono) → base64 → `input_audio_buffer.append` event
+6. Server-side VAD speech_started/stopped otomatik → `response.create` server tetikler
+7. Server `response.audio.delta` → base64 decode → `RealtimeAudioPlayer.schedule(samples:)` AVAudioEngine queue
+8. Server `response.audio_transcript.delta` → `.interim(text:)` TranscriptEvent yields
+9. `response.done` → `.final(text:)` TranscriptEvent
+
+**Test:** Mac 1239 → **1271** (+32: 14 PCMAudioCodec + 18 RealtimeEvent; +1 Sprint 42 regression update). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok**.
+
+### Added — Sprint 43 / OpenAI Realtime Faz A
+
+#### `Sources/PixelVoice/PCMAudioCodec.swift` (yeni saf helper)
+- **`encodeToBase64([Int16]) -> String`** — Int16 PCM array → base64 (little-endian byte order).
+- **`decodeFromBase64(String) -> [Int16]`** — base64 → Int16 PCM array (defensive empty fallback).
+- **`float32ToInt16([Float]) -> [Int16]`** — Apple AVAudioEngine'in default Float32 format'ından OpenAI'nin Int16 format'ına dönüşüm, clamping ile.
+- **`int16ToFloat32([Int16]) -> [Float]`** — ters dönüşüm.
+- Constants: `sampleRate = 24_000`, `channels = 1`, `bytesPerSample = 2` — OpenAI Realtime sabit spec.
+
+#### `Sources/PixelVoice/RealtimeEvent.swift` (yeni)
+- **`RealtimeClientEvent` enum** (Encodable) — 5 client→server event: sessionUpdate(config:), inputAudioBufferAppend(audioBase64:), inputAudioBufferCommit, responseCreate, responseCancel.
+- **`SessionConfig` struct** — modalities `["text", "audio"]`, voice `"alloy"`, instructions (Turkish), PCM16 format, turn_detection default `server_vad`.
+- **`TurnDetection` struct** — `serverVAD(threshold:0.5, prefixPaddingMs:300, silenceDurationMs:500)`.
+- **`RealtimeServerEvent` enum** (manual decode) — 9 server→client event: sessionCreated, sessionUpdated, audioDelta, transcriptDelta, responseDone, speechStarted, speechStopped, error, unknown (forward-compat).
+- **`decode(_ data:) -> RealtimeServerEvent?`** — JSON dispatch via "type" field.
+
+#### `Sources/PixelVoice/RealtimeAudioPlayer.swift` (yeni)
+- **`RealtimeAudioPlayer` actor** — AVAudioEngine + AVAudioPlayerNode + PCM16 24kHz mono output format.
+- `start()/stop()` lifecycle + `schedule(samples: [Int16])` queue buffer.
+- `interrupt()` Sprint 44 aday.
+- AVAudioPCMBuffer Sendable değil → her schedule çağrısında yeni buffer (Apple framework internal queue thread-safe).
+
+#### `Sources/PixelVoice/OpenAIRealtimeProvider.swift` (yeni)
+- **`OpenAIRealtimeProvider` actor** — `VoiceProvider` conformance.
+- `start()`: API key oku → WebSocket bağlantı → session.update → audioPlayer.start → mic capture → receive loop.
+- Mic capture: `AVAudioConverter` ile Apple format → PCM16 24kHz mono → base64 → `input_audio_buffer.append`.
+- Receive loop: WebSocket messages → `RealtimeServerEvent.decode` → handle.
+- `audioDelta` → audioPlayer.schedule; `transcriptDelta` → accumulate + `.interim` yield; `responseDone` → `.final` yield.
+- `isAuthorized()`: mic permission + API key var mı combined.
+- `stop()`: WebSocket close + audio engine stop + player stop.
+
+#### `Sources/PixelVoice/VoiceCredentialsStore.swift` (genişletme)
+- **`VoiceProviderKind.openaiRealtime.isAvailable = true`** (Sprint 43 aktivasyon).
+- **`activeProviderDefaultsKey = "pixel.voice.activeProvider"`** — UserDefaults toggle anahtarı.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **`RootView.makeVoiceProvider()`** factory — UserDefaults'tan aktif provider okur, dynamic instance üretir (Apple/OpenAI/Gemini-fallback-Apple).
+- `voiceProvider` singleton artık factory çağrısı (app launch'ta bir kez).
+
+#### `Sources/PixelMacApp/SettingsView.swift` (VoiceSettingsTab)
+- **`@AppStorage(VoiceProviderKind.activeProviderDefaultsKey)`** — provider seçimi UserDefaults'a kalıcı.
+- Picker seçimi raw value bind (UserDefaults compatible String).
+- Restart uyarı satırı (`Text("Provider değişikliği için uygulamayı yeniden başlatın.")` orange).
+- OpenAI description'ı maliyet bilgisiyle güncellendi (~$0.06/min input, ~$0.24/min output).
+
+### Tests — Sprint 43
+
+- `Tests/PixelVoiceTests/PCMAudioCodecTests.swift` — **14 yeni**: encode empty / decode empty / decode corrupt / round-trip single/multi/large buffer / float32 ↔ int16 range + clamps / round-trip sign preservation / sample rate + channels + bytesPerSample constants.
+- `Tests/PixelVoiceTests/RealtimeEventTests.swift` — **18 yeni**: 5 client event encode (session.update, input_audio_buffer.append/commit, response.create/cancel) + 4 SessionConfig field check (modalities, voice, pcm16 format, turn_detection server_vad defaults) + 7 server event decode (session.created, audio.delta, transcript.delta, response.done, speech_started, error, unknown) + 2 defensive (corrupt JSON / missing type → nil).
+- **Sprint 42 regression update** — `VoiceCredentialsStoreTests.testRealtimeProvidersAvailability` (renamed from testRealtimeProvidersNotYetAvailable): OpenAI artık available; Gemini Sprint 44.
+
+### Notes — Sprint 43
+
+- **Sprint 43 Faz A scope:** Audio I/O + server-side VAD + transcript. Bu MVP olarak çalışıyor — kullanıcı sesli konuşur, agent sesli cevap verir, transcript composer'a/UI'a düşer.
+- **Sprint 44 Faz B aday:**
+  - **Function calling:** `session.tools` ile MCP tool definitions paylaş, `response.function_call_arguments.done` event handle, tool dispatch.
+  - **Interrupt:** Kullanıcı agent konuşurken söze başlarsa `response.cancel` + `RealtimeAudioPlayer.interrupt()`.
+  - **Gemini Live:** Aynı VoiceProvider abstraction, farklı WebSocket protokol.
+- **Cost awareness:** OpenAI Realtime ~$0.06/min input, ~$0.24/min output. Settings UI'da gösterildi; UI'da cost dashboard v0.2.71+ aday (token count tracking).
+- **API key flow:** Settings → Sesli Mod → "OpenAI Realtime API Key" alanına gir → "Kaydet". UserDefaults'a yazılır (v0.3+'da Keychain'e taşınır).
+- **Provider switch restart-required:** RootView.voiceProvider singleton app launch'ta yaratılır. Settings'te provider değişince Mac app'i kapat-aç. Hot-reload v0.2.71+ aday.
+- **iOS Voice yok:** Mac-only Sprint 43. iOS Background App Refresh + sürekli WebSocket bağlantısı extra config gerek.
+- **Türkçe destek:** OpenAI Realtime multilingual; `instructions` Turkish prompt ile aktif. Voice "alloy" tüm dilleri konuşur (TR aksanı iyi).
+
 ## [0.2.69] — 2026-05-26
 
 **Sprint 42 — Realtime Voice Faz 1: Foundation + Apple Speech MVP.** v3'e ilk kez **sesli mod**. v2'nin (~64k LOC) `Realtime/*.swift` (9 dosya, GeminiLiveSession + OpenAIRealtimeVoiceProvider + RealtimeAudioIO) paterninin foundation katmanı modüler SPM mimarisinde indi.

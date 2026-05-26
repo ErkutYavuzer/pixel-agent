@@ -24,8 +24,8 @@ targets:
       path: PixelAgentRemote/Info.plist
       properties:
         CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
-        CFBundleShortVersionString: "0.2.69"
-        CFBundleVersion: "61"
+        CFBundleShortVersionString: "0.2.70"
+        CFBundleVersion: "62"
         CFBundleDevelopmentRegion: tr
         CFBundleDisplayName: Pixel
         UILaunchScreen:

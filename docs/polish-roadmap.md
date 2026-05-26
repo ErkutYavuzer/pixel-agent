@@ -584,6 +584,25 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 42 Faz 1 tamamlandı — Apple Speech MVP.** v3'e ilk kez sesli mod. Foundation + AppleVoiceProvider lokal/ücretsiz/sıfır-API-key. Sprint 43-44'te OpenAI Realtime + Gemini Live aynı provider abstraction'ı kullanacak — sadece provider swap. Mac test 1212 → 1239 (+27). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 43 — "OpenAI Realtime Faz A (audio I/O)" (v0.2.70)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | codec | `PCMAudioCodec` saf — Int16 PCM ↔ base64 + Float32 ↔ Int16 conversion (OpenAI 24kHz mono spec) |
+| ✅ | event | `RealtimeEvent` saf — 5 client→server encode + 9 server→client decode (unknown forward-compat) + SessionConfig + TurnDetection |
+| ✅ | player | `RealtimeAudioPlayer` actor — AVAudioEngine PCM16 24kHz mono playback queue |
+| ✅ | provider | `OpenAIRealtimeProvider` actor — VoiceProvider conformance, URLSessionWebSocketTask, AVAudioConverter Apple→PCM16, server-side VAD, transcript+audio handle |
+| ✅ | factory | RootView.makeVoiceProvider() dynamic factory — UserDefaults'tan aktif provider okur |
+| ✅ | settings | VoiceSettingsTab @AppStorage activeProviderRaw + restart-required uyarı |
+| ✅ | tests | 32 yeni (14 PCMAudioCodec + 18 RealtimeEvent) + 1 Sprint 42 regression update |
+| ⏸ | v0.2.71 (Sprint 44) | Function calling — session.tools schema + response.function_call_arguments.done handle + MCP dispatch |
+| ⏸ | v0.2.71 (Sprint 44) | Interrupt — response.cancel + RealtimeAudioPlayer.interrupt() |
+| ⏸ | v0.2.71 (Sprint 44) | Gemini Live WebSocket — aynı provider abstraction |
+| ⏸ | v0.2.72+ | Cost dashboard (token count + USD estimate UI) + Keychain migration (UserDefaults → KeychainKeyStore) |
+| ⏸ | v0.2.72+ | Hot-reload provider switch (restart-required çözüm) |
+
+**26 May 2026: Sprint 43 Faz A tamamlandı — OpenAI Realtime gerçek.** Sprint 42 Apple Speech MVP üstüne gerçek WebSocket API entegre edildi. PCM16 24kHz audio bidirectional, server-side VAD otomatik response trigger. Function calling + interrupt + Gemini Live Sprint 44'e ayrıldı. Mac test 1239 → 1271 (+32). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
