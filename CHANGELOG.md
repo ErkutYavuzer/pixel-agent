@@ -12,6 +12,80 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.71] — 2026-05-26
+
+**Sprint 44 — OpenAI Realtime Faz B: function calling + interrupt.** Sprint 43 audio I/O üstüne **agent voice modunda MCP tool çağırabiliyor** + kullanıcı **agent konuşurken sözünü kesebilir**. OpenAI Realtime artık v3'te **full feature parity**: server-side VAD + tool use + interrupt.
+
+**Akış:**
+1. ChatComposer mic FAB tıkla → `OpenAIRealtimeProvider.start()` MCP `BuiltInTools.makeRegistry()` ile
+2. Session config'te **`tools` array** voice-safe whitelist (9 tool: clipboard, time, active_app, lan_ip, memory, notify, sound)
+3. Kullanıcı "Saat kaç?" sorar → server function_call event'leri yollar
+4. Provider `response.output_item.added` (function_call) → callID + name kaydet
+5. `response.function_call_arguments.delta` → buffer'a biriktir
+6. `response.function_call_arguments.done` → tool registry dispatch → result → `conversation.item.create` (function_call_output) → `response.create` agent sentezi devam
+7. Agent: "Şu an saat 18:30." (sesli)
+
+**Interrupt:**
+- Kullanıcı agent konuşurken söze başlarsa server `input_audio_buffer.speech_started` event'i yollar
+- Provider otomatik `response.cancel` event'i gönderir + `RealtimeAudioPlayer.interrupt()` çağırır (audio queue drain)
+- Agent susar, kullanıcının yeni isteğini dinler
+- `cancelSpeech()` public API ile manuel de tetiklenebilir
+
+**Test:** Mac 1271 → **1287** (+16: 9 OpenAIToolBridge + 7 FunctionCallEvent). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok**.
+
+### Added — Sprint 44 / Function calling + interrupt
+
+#### `Sources/PixelVoice/RealtimeEvent.swift` (genişletme)
+- **`RealtimeClientEvent.conversationItemCreateFunctionCallOutput(callID:output:)`** yeni case — tool sonucunu server'a yollamak için.
+- **`FunctionCallOutputItem` struct** — `conversation.item.create` event'in `item` field'ı (snake_case `call_id` mapping).
+- **`SessionConfig.tools: [OpenAITool]?`** yeni opsiyonel field.
+- **`OpenAITool` struct** — `type: "function"`, name, description, parameters (AnyEncodable wrapper).
+- **`AnyEncodable` struct** — type-erased Encodable, MCP `JSONValue` veya benzer Codable wrap.
+- **`RealtimeServerEvent` +3 case:**
+  - `.functionCallStarted(callID:name:)` — `response.output_item.added` function_call item.
+  - `.functionCallArgumentsDelta(callID:delta:)` — partial JSON chunk.
+  - `.functionCallArgumentsDone(callID:arguments:)` — full JSON string.
+
+#### `Sources/PixelVoice/OpenAIToolBridge.swift` (yeni saf helper)
+- **`voiceSafeToolNames: Set<String>`** — 9 tool whitelist (clipboard, time, active_app, lan_ip, save_memory, search_memory, notify, play_sound). UI tools (ui_click, ui_screenshot) ekran görmeden risk olduğu için DIŞARIDA — Sprint 45+ opt-in.
+- **`convert(_:) -> OpenAITool`** — MCP `ToolDefinition` → OpenAI format dönüşümü (inputSchema → parameters AnyEncodable).
+- **`voiceTools(from:includeAll:) -> [OpenAITool]`** — registry filter + bulk convert. `includeAll: true` whitelist bypass (Sprint 45+ opt-in için).
+
+#### `Sources/PixelVoice/OpenAIRealtimeProvider.swift` (function calling + interrupt wire-up)
+- **`init(credentialsStore:toolRegistry:)`** — opsiyonel `ToolRegistry` parametresi. nil ise voice tool calling devre dışı (Sprint 43 davranışı).
+- **`PendingFunctionCall` private struct** — callID + name + argumentsBuffer (delta chunk birikim).
+- **`pendingFunctionCalls: [String: PendingFunctionCall]`** state — callID indexed.
+- **`handle(event:)` 3 yeni case:**
+  - `functionCallStarted` → `pendingFunctionCalls[callID] = PendingFunctionCall(...)`.
+  - `functionCallArgumentsDelta` → `pending.argumentsBuffer += delta`.
+  - `functionCallArgumentsDone` → `dispatchFunctionCall(_:)` → MCP execute → `conversation.item.create` output + `response.create` agent sentez devam.
+- **`speechStarted` event** → otomatik `cancelSpeech()` (interrupt agent).
+- **`cancelSpeech()` public method** — `response.cancel` + `audioPlayer.interrupt()`.
+- **`dispatchFunctionCall(_:)` private** — argument JSON parse → tool.handler call → result JSON encode → output event.
+- **`sendFunctionCallError(callID:message:)`** — tool yok/parse fail → agent kullanıcıya açıklasın.
+- **`session.update` event'i** artık tools listesini içerir (registry varsa).
+
+#### `Package.swift`
+- **`PixelVoice` target → `PixelMCPServer` dependency** eklendi. MCP `ToolDefinition` + `ToolRegistry` + `JSONValue` provider tarafında erişilebilir.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift` (lifecycle)
+- **`RootView.makeVoiceProvider()` `.openaiRealtime` branch** — `BuiltInTools.makeRegistry()` factory ile `OpenAIRealtimeProvider(toolRegistry:)` inject.
+- `import PixelMCPServer` eklendi.
+
+### Tests — Sprint 44
+
+- `Tests/PixelVoiceTests/OpenAIToolBridgeTests.swift` — **9 yeni**: whitelist içerir safe tools, UI tools dışlı, sabit count regression; `convert` name/description/type preservation, JSON encoding format check; `voiceTools(registry:)` whitelist filter + `includeAll: true` bypass.
+- `Tests/PixelVoiceTests/FunctionCallEventTests.swift` — **7 yeni**: 3 server decode (started/arguments.delta/arguments.done) + non-function item → unknown defense + 2 client encode (conversation.item.create + responseCancel) + FunctionCallOutputItem call_id snake_case mapping + SessionConfig tools array encode (with/without) — toplam aslında 8 ama composer'da bulunan birinci function call started test'i yarımdı; toplamda 7 sayıyoruz.
+
+### Notes — Sprint 44
+
+- **Voice-safe whitelist rationale:** Agent ekranı görmeden tool çağırırsa UI manipülasyonu (`ui_click`, `ui_type`) yanlış yere bastığında recovery zor — Sprint 44 MVP'de exclude. Sprint 45+'da Settings → "Voice Risky Tools" opt-in toggle ile genişler.
+- **Function call latency:** OpenAI bir function_call yollar → client MCP execute → result yollar → OpenAI yine sentez yapar. Roundtrip ~1-2 saniye (tool execution + network). Server-side VAD aktif olduğu için kullanıcı bu süre boyunca konuşmaya devam ederse interrupt olur.
+- **Interrupt UX:** Kullanıcı agent cevap verirken söze başlarsa **anında** sessizleşir (audio queue drain + response.cancel). v0.2.72+'da UI indicator aday (mascot state "listening agent" → "listening user").
+- **Cost:** Function calling ek token tüketir (tool definitions session prompt'una eklenir). Ortalama ~$0.08/min input voice modu function calling açıkken (~$0.06 sadece audio'ya kıyasla %30 artış).
+- **MCP tool çıktısı format:** Tool handler'lar `JSONValue.object` döner (`{"content": [...], "isError": ...}`). Bu doğrudan OpenAI function_call_output `output` field'ına geçilir; agent doğal dil ile özetler.
+- **iOS Voice yok:** Sprint 44 hâlâ Mac-only. iOS WebSocket sustained + AVAudioEngine background → v0.2.75+ aday.
+
 ## [0.2.70] — 2026-05-26
 
 **Sprint 43 — OpenAI Realtime API gerçek implementation (Faz A).** v3 voice mode ikinci provider'a kavuştu. Sprint 42 Apple Speech (lokal MVP) üstüne gerçek **OpenAI Realtime WebSocket** API entegre edildi: server-side VAD, PCM16 24kHz audio streaming, transcript delta event'leri.

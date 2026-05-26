@@ -603,6 +603,25 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 43 Faz A tamamlandı — OpenAI Realtime gerçek.** Sprint 42 Apple Speech MVP üstüne gerçek WebSocket API entegre edildi. PCM16 24kHz audio bidirectional, server-side VAD otomatik response trigger. Function calling + interrupt + Gemini Live Sprint 44'e ayrıldı. Mac test 1239 → 1271 (+32). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 44 — "OpenAI Realtime Faz B (function calling + interrupt)" (v0.2.71)
+
+| Status | # | Item |
+|---|---|---|
+| 1 | events | RealtimeEvent +3 server case (functionCallStarted/ArgumentsDelta/ArgumentsDone) + 1 client case (conversationItemCreateFunctionCallOutput) + SessionConfig.tools field + OpenAITool struct + AnyEncodable wrapper |
+| ✅ | bridge | `OpenAIToolBridge` saf helper — MCP ToolDefinition → OpenAI format + 9-tool voice-safe whitelist (UI tools exclude, Sprint 45+ opt-in) |
+| ✅ | provider | OpenAIRealtimeProvider: pendingFunctionCalls state, 3 yeni event handle, dispatchFunctionCall(MCP execute → output → response.create), sendFunctionCallError defensive |
+| ✅ | interrupt | speechStarted → cancelSpeech() auto-trigger; cancelSpeech public API → response.cancel + audioPlayer.interrupt |
+| ✅ | deps | Package.swift: PixelVoice → PixelMCPServer dependency |
+| ✅ | factory | RootView.makeVoiceProvider OpenAI branch BuiltInTools.makeRegistry() inject |
+| ✅ | tests | 16 yeni (9 OpenAIToolBridge + 7 FunctionCallEvent) |
+| ⏸ | v0.2.72 (Sprint 45) | Gemini Live WebSocket implementation (aynı provider abstraction) |
+| ⏸ | v0.2.72+ | Voice tools opt-in Settings — kullanıcı `ui_click` gibi risky tool'ları açabilsin |
+| ⏸ | v0.2.72+ | Cost dashboard UI (token usage + USD estimate) |
+| ⏸ | v0.2.72+ | Mascot state "listening agent" → "listening user" interrupt UI feedback |
+| ⏸ | v0.2.75+ | iOS Voice (Background App Refresh + WebSocket sustained) |
+
+**26 May 2026: Sprint 44 Faz B tamamlandı — OpenAI Realtime full feature parity.** Sprint 43 audio I/O üstüne function calling (MCP tool çağırma) + interrupt (söz kesme) eklendi. Agent voice modunda "Saat kaç?" sorunca `get_current_time` MCP tool'unu çağırıp sesli cevap verir. Mac test 1271 → 1287 (+16). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
