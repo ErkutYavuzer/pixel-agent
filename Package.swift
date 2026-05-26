@@ -30,7 +30,7 @@ let package = Package(
         .target(name: "PixelRemote", dependencies: ["PixelCore"]),
         .target(name: "PixelLAN", dependencies: ["PixelRemote"]),
         .target(name: "PixelSubagent", dependencies: ["PixelCore"]),
-        .target(name: "PixelMCPServer"),
+        .target(name: "PixelMCPServer", dependencies: ["PixelMemory"]),
         .target(name: "PixelComputerUse", dependencies: ["PixelCore"]),
         .executableTarget(
             name: "pixel-mcp-server",

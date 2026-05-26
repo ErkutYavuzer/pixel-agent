@@ -1,6 +1,7 @@
 import AppKit
 import PixelBackends
 import PixelComputerUse
+import PixelMemory
 import SwiftUI
 
 /// macOS Settings scene — `⌘,` ile açılan standart "Preferences" penceresi
@@ -32,6 +33,7 @@ struct SettingsView: View {
         case .models: ModelsSettingsTab()
         case .connection: ConnectionSettingsTab()
         case .subagent: SubagentSettingsTab()
+        case .memory: MemorySettingsTab()
         case .permissions: PermissionsSettingsTab()
         }
     }
@@ -40,7 +42,7 @@ struct SettingsView: View {
 // MARK: - Tab enum (testable)
 
 enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, models, connection, subagent, permissions
+    case general, models, connection, subagent, memory, permissions
 
     var id: String { rawValue }
 
@@ -50,6 +52,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .models: return "Modeller"
         case .connection: return "Bağlantı"
         case .subagent: return "Subagent"
+        case .memory: return "Hafıza"
         case .permissions: return "İzinler"
         }
     }
@@ -60,6 +63,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .models: return "cpu"
         case .connection: return "wifi"
         case .subagent: return "person.2.crop.square.stack"
+        case .memory: return "brain.head.profile"
         case .permissions: return "lock.shield"
         }
     }
@@ -419,5 +423,172 @@ private struct SubagentSettingsTab: View {
             get: { settings.maxOutputBytes },
             set: { settings.maxOutputBytes = $0 }
         )
+    }
+}
+
+// MARK: - Memory tab (Sprint 36 / v0.2.63)
+
+private struct MemorySettingsTab: View {
+    @State private var entries: [MemoryEntry] = []
+    @State private var loadError: String?
+    @State private var isLoading: Bool = true
+    @State private var isOptimizing: Bool = false
+    @State private var optimizeMessage: String?
+
+    var body: some View {
+        Form {
+            Section {
+                if isLoading {
+                    HStack { ProgressView().controlSize(.small); Text("Yükleniyor…").foregroundStyle(.secondary) }
+                } else if let loadError {
+                    Text("Yüklenemedi: \(loadError)").foregroundStyle(.red).font(.caption)
+                } else if entries.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Henüz hafıza kaydı yok.")
+                            .font(.callout)
+                        Text("Claude / Codex / Gemini CLI MCP integration üzerinden `save_memory` aracı ile entry ekleyebilir, veya gelecekte bu sekmeye manuel ekleme arayüzü gelecek.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    ForEach(entries) { entry in
+                        memoryRow(entry)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Kayıtlar (\(entries.count))")
+                    Spacer()
+                    Button {
+                        Task { await load() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .controlSize(.small)
+                    .help("Listeyi yenile")
+                }
+            } footer: {
+                Text("Her kullanıcı mesajı öncesi PlaybookLearner ilgili entry'leri otomatik olarak system prompt'una ekler. JSONL append-only formatında \(Self.storagePath) konumunda saklanır.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack {
+                    Button {
+                        Task { await optimize() }
+                    } label: {
+                        if isOptimizing {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("Optimize Et", systemImage: "wand.and.sparkles")
+                        }
+                    }
+                    .disabled(isOptimizing || entries.isEmpty)
+                    Spacer()
+                    if let optimizeMessage {
+                        Text(optimizeMessage).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Bakım")
+            } footer: {
+                Text("Optimize: duplicate entry'leri (Jaccard ≥ 0.85) birleştirir + tombstone'ları fiziksel olarak siler. MemoryConsolidator çalıştırır.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 4)
+        .task { await load() }
+    }
+
+    private func memoryRow(_ entry: MemoryEntry) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(entry.category.displayName)
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.purple.opacity(0.18), in: Capsule())
+                    if !entry.tags.isEmpty {
+                        Text("#" + entry.tags.joined(separator: " #"))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                Text(entry.content)
+                    .font(.callout)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 4)
+            Button(role: .destructive) {
+                Task { await delete(entry.id) }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .help("Bu entry'i sil")
+        }
+        .padding(.vertical, 4)
+    }
+
+    @MainActor
+    private func load() async {
+        isLoading = true
+        loadError = nil
+        do {
+            let store = try MemoryStore()
+            let loaded = try await store.loadAll()
+            entries = loaded
+        } catch {
+            loadError = error.localizedDescription
+        }
+        isLoading = false
+    }
+
+    @MainActor
+    private func delete(_ id: UUID) async {
+        do {
+            let store = try MemoryStore()
+            try await store.delete(id: id)
+            await load()
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func optimize() async {
+        isOptimizing = true
+        defer { isOptimizing = false }
+        do {
+            let store = try MemoryStore()
+            let before = try await store.entryCount()
+            // Duplicate consolidation
+            let all = try await store.loadAll()
+            let pairs = MemoryConsolidator.findDuplicates(in: all)
+            for (older, newer) in pairs {
+                let merged = MemoryConsolidator.merge(older: older, newer: newer)
+                try await store.add(merged)
+                try await store.delete(id: older.id)
+            }
+            // Physical compact
+            try await store.compact()
+            let after = try await store.entryCount()
+            optimizeMessage = "Önce: \(before) · Sonra: \(after) · Birleşen: \(pairs.count)"
+            await load()
+        } catch {
+            optimizeMessage = "Hata: \(error.localizedDescription)"
+        }
+    }
+
+    private static var storagePath: String {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        let path = support.appendingPathComponent("pixel-agent/memory.jsonl").path
+        return path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
     }
 }

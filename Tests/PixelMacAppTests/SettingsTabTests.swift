@@ -8,11 +8,13 @@ final class SettingsTabTests: XCTestCase {
         // B1 demo senaryosu için sabit tab seti. Eklenirse hem enum hem
         // SettingsView switch'i güncellenmiş olmalı.
         // Sprint 14 (v0.2.39): subagent 5. tab eklendi.
-        XCTAssertEqual(SettingsTab.allCases.count, 5)
+        // Sprint 36 (v0.2.63): memory 6. tab eklendi.
+        XCTAssertEqual(SettingsTab.allCases.count, 6)
         XCTAssertTrue(SettingsTab.allCases.contains(.general))
         XCTAssertTrue(SettingsTab.allCases.contains(.models))
         XCTAssertTrue(SettingsTab.allCases.contains(.connection))
         XCTAssertTrue(SettingsTab.allCases.contains(.subagent))
+        XCTAssertTrue(SettingsTab.allCases.contains(.memory))
         XCTAssertTrue(SettingsTab.allCases.contains(.permissions))
     }
 

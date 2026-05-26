@@ -18,6 +18,7 @@ struct ChatView: View {
         backend: any ChatBackend,
         backendKind: CLIKind,
         conversationStore: ConversationStore,
+        memoryStore: MemoryStore? = nil,
         subagentManager: SubagentManager,
         incomingRemoteText: Binding<String?>,
         planMode: Bool = false,
@@ -30,6 +31,7 @@ struct ChatView: View {
             wrappedValue: ChatViewModel(
                 backend: backend,
                 conversationStore: conversationStore,
+                memoryStore: memoryStore,
                 onAssistantChunk: onAssistantChunk,
                 onAssistantComplete: onAssistantComplete,
                 onUserMessage: onUserMessage,

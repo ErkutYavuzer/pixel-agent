@@ -33,6 +33,7 @@ struct DualChatHost: View {
         rightTitle: String,
         leftStoreFileName: String,
         rightStoreFileName: String,
+        memoryStore: MemoryStore? = nil,
         subagentManager: SubagentManager,
         planMode: Bool = false
     ) {
@@ -51,13 +52,15 @@ struct DualChatHost: View {
         _leftVM = StateObject(
             wrappedValue: ChatViewModel(
                 backend: leftBackend,
-                conversationStore: leftStore
+                conversationStore: leftStore,
+                memoryStore: memoryStore
             )
         )
         _rightVM = StateObject(
             wrappedValue: ChatViewModel(
                 backend: rightBackend,
-                conversationStore: rightStore
+                conversationStore: rightStore,
+                memoryStore: memoryStore
             )
         )
     }

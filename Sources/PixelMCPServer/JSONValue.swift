@@ -79,6 +79,16 @@ extension JSONValue {
 
     public var intValue: Int? {
         if case .int(let i) = self { return i }
+        if case .double(let d) = self { return Int(d) }
+        return nil
+    }
+
+    /// **Sprint 36 (v0.2.63):** Double getter — JSON wire'da int olarak gelse
+    /// bile (Claude tool params bazen "limit": 5 int olarak gönderir) Double'a
+    /// dönüşür. `min_similarity` gibi 0.0-1.0 aralığındaki float param için.
+    public var doubleValue: Double? {
+        if case .double(let d) = self { return d }
+        if case .int(let i) = self { return Double(i) }
         return nil
     }
 

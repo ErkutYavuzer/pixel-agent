@@ -19,7 +19,8 @@ final class ToolRegistryTests: XCTestCase {
         let registry = BuiltInTools.makeRegistry()
         let result = registry.listResult()
         let tools = result["tools"]?.arrayValue ?? []
-        XCTAssertEqual(tools.count, 14)  // 5 saf-data + 4 bridge + 5 ui_*
+        // Sprint 36 (v0.2.63): +2 memory tool (save_memory, search_memory).
+        XCTAssertEqual(tools.count, 16)  // 5 saf-data + 4 bridge + 5 ui_* + 2 memory
         // alfabetik sıra
         let names = tools.compactMap { $0["name"]?.stringValue }
         XCTAssertEqual(names, names.sorted())
@@ -42,6 +43,9 @@ final class ToolRegistryTests: XCTestCase {
             "ui_type",
             "ui_screenshot",
             "ui_resolve",
+            // Sprint 36 (v0.2.63) — cross-session memory tools.
+            "save_memory",
+            "search_memory",
         ])
         let actual = Set(registry.all().map { $0.name })
         XCTAssertEqual(actual, expected)

@@ -24,6 +24,11 @@ final class ChatViewModel: ObservableObject {
 
     let backend: any ChatBackend
     let conversationStore: ConversationStore
+    /// **Sprint 36 (v0.2.63):** Cross-session persistent memory. `send()`
+    /// öncesi `relevantContext(for:)` çağrılır, sonuç entry'ler `system`
+    /// prompt'una `PlaybookLearner.formatPrompt` ile prepend edilir.
+    /// `nil` ise injection devre dışı (test'lerde veya kullanıcı opt-out).
+    let memoryStore: MemoryStore?
     var onAssistantChunk: ((String, String) -> Void)?
     var onAssistantComplete: ((String, String) -> Void)?
     /// **Sprint 33 (v0.2.59):** Mac user mesajı iOS'a yansıması için callback.
@@ -50,6 +55,7 @@ final class ChatViewModel: ObservableObject {
     init(
         backend: any ChatBackend,
         conversationStore: ConversationStore,
+        memoryStore: MemoryStore? = nil,
         onAssistantChunk: ((String, String) -> Void)? = nil,
         onAssistantComplete: ((String, String) -> Void)? = nil,
         onUserMessage: ((String, String) -> Void)? = nil,
@@ -57,6 +63,7 @@ final class ChatViewModel: ObservableObject {
     ) {
         self.backend = backend
         self.conversationStore = conversationStore
+        self.memoryStore = memoryStore
         self.onAssistantChunk = onAssistantChunk
         self.onAssistantComplete = onAssistantComplete
         self.onUserMessage = onUserMessage
@@ -156,14 +163,27 @@ final class ChatViewModel: ObservableObject {
         let snapshot = Array(messages.dropLast())
         let backend = self.backend
         let store = self.conversationStore
+        let memoryStore = self.memoryStore
         let options = ChatOptions(planMode: planMode)
+        let queryForMemory = trimmed
 
         Task { try? await store.append(userMsg) }
 
         streamTask = Task {
             do {
+                // **Sprint 36 (v0.2.63):** Cross-session memory injection.
+                // `memoryStore` set ise relevant past entries fetch, system
+                // prompt'una formatlanmış prefix olarak prepend.
+                var systemPrompt: String? = nil
+                if let memoryStore {
+                    let entries = (try? await memoryStore.relevantContext(for: queryForMemory)) ?? []
+                    let formatted = PlaybookLearner.formatPrompt(entries)
+                    if !formatted.isEmpty {
+                        systemPrompt = formatted
+                    }
+                }
                 var firstChunkSeen = false
-                let stream = backend.send(messages: snapshot, system: nil, options: options)
+                let stream = backend.send(messages: snapshot, system: systemPrompt, options: options)
                 for try await delta in stream {
                     if Task.isCancelled { break }
                     switch delta {

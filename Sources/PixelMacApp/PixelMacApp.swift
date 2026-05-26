@@ -44,6 +44,10 @@ struct PixelMacApp: App {
 struct RootView: View {
     @State private var backends: [CLIKind: CLIBackend]
     @State private var conversationStores: [CLIKind: ConversationStore] = [:]
+    /// **Sprint 36 (v0.2.63):** Cross-session persistent memory — tek
+    /// instance, backend'den bağımsız (memory kullanıcıya ait). Init'te
+    /// fail olursa nil → injection devre dışı, chat normal çalışır.
+    @State private var memoryStore: MemoryStore?
     @State private var initErrorMessage: String?
 
     init() {
@@ -54,9 +58,12 @@ struct RootView: View {
                 stores[kind] = try ConversationStore(fileName: "conversation-\(kind.rawValue).jsonl")
             }
             _conversationStores = State(initialValue: stores)
+            // Sprint 36: Memory store opsiyonel — fail olursa chat çalışmaya devam.
+            _memoryStore = State(initialValue: try? MemoryStore())
             _initErrorMessage = State(initialValue: nil)
         } catch {
             _conversationStores = State(initialValue: [:])
+            _memoryStore = State(initialValue: nil)
             _initErrorMessage = State(initialValue: "Mesaj depoları açılamadı: \(error.localizedDescription)")
         }
     }
@@ -71,7 +78,7 @@ struct RootView: View {
                     onRetry: rescan
                 )
             } else if !conversationStores.isEmpty {
-                ChatHost(backends: backends, conversationStores: conversationStores)
+                ChatHost(backends: backends, conversationStores: conversationStores, memoryStore: memoryStore)
                     // Backends seti değişirse (rescan) ChatHost re-init → SubagentManager
                     // backendResolver closure'u yeni snapshot ile yakalanır. Trade-off:
                     // aktif subagent kartları kaybolur (rescan nadir bir event).
@@ -153,6 +160,9 @@ enum ChatMode: String, CaseIterable {
 struct ChatHost: View {
     let backends: [CLIKind: CLIBackend]
     let conversationStores: [CLIKind: ConversationStore]
+    /// **Sprint 36 (v0.2.63):** Cross-session memory injection. nil ise chat
+    /// normal çalışır, sadece `PlaybookLearner` prompt prefix atlanır.
+    let memoryStore: MemoryStore?
     @State private var selectedKind: CLIKind
     @State private var secondaryKind: CLIKind
     @State private var mode: ChatMode = .single
@@ -233,9 +243,10 @@ struct ChatHost: View {
         return address
     }
 
-    init(backends: [CLIKind: CLIBackend], conversationStores: [CLIKind: ConversationStore]) {
+    init(backends: [CLIKind: CLIBackend], conversationStores: [CLIKind: ConversationStore], memoryStore: MemoryStore? = nil) {
         self.backends = backends
         self.conversationStores = conversationStores
+        self.memoryStore = memoryStore
         let primary = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
         let secondary = CLIKind.allCases.first(where: { backends[$0] != nil && $0 != primary }) ?? primary
         _selectedKind = State(initialValue: primary)
@@ -405,6 +416,7 @@ struct ChatHost: View {
                     backend: backend,
                     backendKind: selectedKind,
                     conversationStore: store,
+                    memoryStore: memoryStore,
                     subagentManager: subagentManager,
                     incomingRemoteText: $incomingFromRemote,
                     planMode: planMode,
@@ -447,6 +459,7 @@ struct ChatHost: View {
                     rightTitle: secondaryKind.displayName,
                     leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",
                     rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl",
+                    memoryStore: memoryStore,
                     subagentManager: subagentManager,
                     planMode: planMode
                 )

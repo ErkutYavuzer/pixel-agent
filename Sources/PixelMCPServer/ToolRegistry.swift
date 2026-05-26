@@ -102,6 +102,11 @@ public enum BuiltInTools {
         registry.register(uiType)
         registry.register(uiScreenshot)
         registry.register(uiResolve)
+        // Memory tools (Sprint 36 / v0.2.63) — standalone (PixelMemory.MemoryStore
+        // direkt, bridge yok). Mac app çalışmıyor olsa bile agent memory'ye
+        // erişebilir; file-level JSONL append-only, multi-process race minimal.
+        registry.register(MemoryTools.saveMemory)
+        registry.register(MemoryTools.searchMemory)
         return registry
     }
 
