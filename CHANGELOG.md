@@ -12,6 +12,41 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.73] — 2026-05-26
+
+**Hot-fix: Proaktif Tier 2 detector crash (SIGTRAP).** Kullanıcı v0.2.72 sonrası app launch'ta "pixel-agent beklenmedik şekilde kesildi" crash dialog raporladı. Crash log analizi:
+
+```
+Thread 3 [TRIGGERED]: _dispatch_assert_queue_fail
+  swift_task_isCurrentExecutorWithFlagsImpl
+  specialized static MainActor.assumeIsolated<A>(_:file:line:)
+  closure #1 in default argument 2 of WindowDwellDetector.init
+  WindowDwellDetector.tick()
+```
+
+**Kök sebep:** Sprint 39'da yazılan `WindowDwellDetector`, `TypedPauseDetector` ve `CalendarEventDetector`'ın default source closure'ları `MainActor.assumeIsolated { ... }` pattern kullanıyordu. Detector `tick()` actor context'inde (background thread) çalışırken closure çağrılıyor, `assumeIsolated` MainActor olmadığını assert ediyor → SIGTRAP. Sprint 38-44 boyunca silent çalışıyordu (macOS önceki versiyonlarında daha gevşek check); Sequoia 15+ katı concurrency check ile expose oldu.
+
+**Fix:**
+- `WindowSource`, `FrontAppSource`, `EventSource` typealiases'a **`@MainActor` annotation** eklendi.
+- Default closure'lar `{ @MainActor in ... }` formuna geçti (eski `assumeIsolated` wrap kaldırıldı).
+- `tick()` içinde `await MainActor.run { source() }` ile explicit MainActor hop.
+
+**Sonuç:** Proaktif Tier 2 trigger'ları (windowDwell, typedPause, upcomingEvent) artık background tick'ten MainActor source closure'unu güvenli olarak çağırıyor. Crash giderildi.
+
+**Test:** Mac 1312 test (Sprint 45 ile aynı; mevcut testler MockSource kullandığı için bug repro etmiyordu — production-only path). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok**.
+
+### Fixed — Sprint 45.1 hot-fix
+
+- `Sources/PixelMacApp/Proactive/WindowDwellDetector.swift`: WindowSource typealias `@MainActor @Sendable`; default closure `{ @MainActor in WindowDwellDetector.systemWindowInfo() }`; `tick()` `await MainActor.run { windowSource() }`.
+- `Sources/PixelMacApp/Proactive/TypedPauseDetector.swift`: FrontAppSource typealias `@MainActor @Sendable`; default closure update; `tick()` MainActor hop.
+- `Sources/PixelMacApp/Proactive/CalendarEventDetector.swift`: EventSource typealias `@MainActor @Sendable`; default closure update; `tick()` MainActor hop.
+
+### Notes — Sprint 45.1
+
+- **Neden Sprint 38-44 boyunca crash olmadı?** macOS önceki versiyonlarında `MainActor.assumeIsolated` daha tolerant idi — false positive (gerçekte MainActor değil ama assert geçiyor). Sequoia 15+ `swift_task_isCurrentExecutorWithFlagsImpl` katı check yapıyor → SIGTRAP. Bu pattern Swift 6 strict concurrency'de zaten yanlıştı; macOS runtime şimdi yakalıyor.
+- **Test coverage gap:** Sprint 39 detector test'leri `MutableSource` mock'ları kullanıyordu (sync closures); production path `assumeIsolated` kullanıyordu — bug test'lerden saklanmıştı. Future: integration test gerçek `systemWindowInfo()`/`systemFrontAppSource()` çağrısı ile (XCTest ortamında MainActor olmayabilir, dikkat).
+- **Diğer detector'lar etkilenmedi:** `IdleDetector` (CGEventSource pure function — MainActor değil) ve `AppChangeObserver` (NSNotificationCenter `queue: .main`) sorun yok.
+
 ## [0.2.72] — 2026-05-26
 
 **Sprint 45 — Gemini Live WebSocket implementation.** Sprint 43-44 OpenAI Realtime full parity üstüne Google Gemini Live alternatif provider eklendi. Aynı `VoiceProvider` abstraction, farklı protocol + audio format + **~10x ucuz fiyat**.
