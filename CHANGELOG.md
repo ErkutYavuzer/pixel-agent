@@ -10,6 +10,58 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+- CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi (release tag + commit + PROJECT_MEMORY zaten döküman).
+
+## [0.2.62] — 2026-05-26
+
+**Sprint 35 — iOS stale-pairing detection + auto-recovery.** Kullanıcı raporladı: "her seferinde QR kod okutmam gerekiyor, otomatik bağlanmalı açık olduğu zaman". Tanı: Mac side stable (Sprint 34 `PairingCode` UserDefaults persist + signing key Keychain) ama iOS-tarafı eski random code veya değişmiş public key ile reconnect loop'unu sessizce sonsuza dek deniyordu. Banner "Bağlantı koptu" gösterir, kullanıcı manuel olarak Settings → Eşleştirmeyi Unut → yeni QR yolunu bulmak zorundaydı.
+
+Bu release iki güvenlik ağı ekler:
+1. **Connect fail threshold (default 5):** Exponential backoff (2s → 4s → 8s → 16s → 30s) ile ~30 saniyelik fail serisi tamamlandığında stale-pairing flag set edilir. Network kopukluğu bu süre içinde kendini düzeltir; uzun fail = key/code mismatch.
+2. **Verify fail threshold (default 3) + ready timeout (default 8s):** `EnvelopeSigner.verify` her envelope'ı reject ediyorsa veya connect sonrası 8 saniye içinde verify-passed envelope gelmezse Mac public key değişmiş demektir. Bu sinyal daha kesin — 3 ardışık reject yeterli.
+
+Threshold aşılınca iOS `ConnectionLostBanner` prominent kırmızı moda geçer: "Mac eşleştirmeniz değişmiş olabilir — Eşleştirmeyi sıfırlayıp yeni QR'ı tarayın" + tek-tıkla "QR'ı Yeniden Tara" butonu (`forgetAndRescan()`). Banner UserDefaults'taki pairing'i temizler, `ContentView` otomatik `PairingScannerView`'a düşer.
+
+**Test:** Mac 983 → **998** (+15 `ReconnectAttemptTrackerTests` — saf değer tipi: initial state, threshold partitioning, success reset, overflow safety, demo scenario regression; +1 `RemoteEnvelopeTests` regression fix `conversationSync` Sprint 33 v2'den kalan hardcoded set eksiği). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
+### Added — Sprint 35 / iOS stale-pairing detection
+
+#### `Sources/PixelRemote/ReconnectAttemptTracker.swift` (yeni, saf değer tipi)
+- **`ReconnectAttemptTracker`** struct: `Sendable`, `Equatable`. İki bağımsız sayaç (`connectFailureCount`, `verifyFailureCount`) + iki threshold (default 5 / 3).
+- **Constants:** `defaultConnectFailureThreshold = 5`, `defaultVerifyFailureThreshold = 3`, `defaultReadyTimeoutSeconds = 8`.
+- **`isPairingStaleSuspected: Bool`** computed — herhangi bir threshold aşıldığında `true`.
+- **Mutating methods:** `recordConnectFailure()` (overflow-safe), `recordVerifyFailure()` (overflow-safe), `recordSuccess()` (her iki counter sıfırlar).
+- **Defensive init:** negative threshold → 1; negative count → 0.
+- **PixelRemote modülünde** — iOS RemoteSession kullanır, Mac testTarget'ta test edilebilir (saf value type, network bağımlılığı yok).
+
+#### `ios/PixelAgentRemote/RemoteSession.swift` (entegrasyon)
+- **`@Published var pairingStaleSuspected: Bool = false`** — UI binding için tracker'ın aynası.
+- **`establishConnection` catch branch:** `attemptTracker.recordConnectFailure()` + `pairingStaleSuspected` güncelle. PairingInfo bozuk path (mac public key base64 decode fail) `recordVerifyFailure()` çağırır (daha sert sinyal).
+- **Connect success branch:** `readyTimeoutTask` 8 saniyelik Task spawn — verify-passed envelope gelmezse `handleReadyTimeout()` `recordVerifyFailure()` tetikler.
+- **`handle()` verify guard fail:** `recordVerifyFailure()` (key mismatch sinyali).
+- **`handle()` ilk verify-passed envelope:** `hasReceivedVerifiedEnvelope = true` + `readyTimeoutTask.cancel()` + `recordSuccess()` → flag clear.
+- **`forgetAndRescan()`** yeni public method: `disconnect(forget: true)` + tracker fresh init + flag reset. UI banner tek-tıkla çağırır.
+
+#### `ios/PixelAgentRemote/ConnectionLostBanner.swift` (genişletme)
+- **İkili mod:** `pairingStaleSuspected: Bool` parametresi.
+  - **Normal mod** (false): Sprint 11 davranışı korundu — turuncu kapsül, countdown + "Tekrar Dene".
+  - **Stale mod** (true): kırmızı `0.12 opacity` + `0.6 alpha 1.5pt stroke` prominent kart. `exclamationmark.triangle.fill` ikon + bold başlık + açıklayıcı caption + iki buton: "QR'ı Yeniden Tara" (`.borderedProminent` kırmızı) + "Tekrar Dene" (`.bordered` ikincil).
+- **`onForgetAndRescan: () -> Void`** yeni opsiyonel callback.
+
+#### `ios/PixelAgentRemote/ChatView.swift`
+- ConnectionLostBanner call-site iki yeni parametre alır (`pairingStaleSuspected`, `onForgetAndRescan`).
+
+### Fixed — Sprint 33 v2 regression
+
+#### `Tests/PixelRemoteTests/RemoteEnvelopeTests.swift`
+- **`testEnvelopeTypeContainsAllExpectedCases`** hardcoded set'e `conversationSync` eklendi (Sprint 33 v2 'de yeni envelope tipi eklenmiş ama bu regression test güncellenmemişti — failing test).
+
+### Notes — Sprint 35
+
+- **Tek seferlik kullanıcı aksiyonu:** Mevcut iOS install'da saved pairing v0.2.61'e bump sonrası stale kalmış olabilir. Kullanıcı bir kez `forgetAndRescan` (banner butonu) veya Settings → Eşleştirmeyi Unut → yeni QR ile pairing'i yeniler; sonraki tüm açılışlar `loadOrGenerate` Mac code'u stabil + Keychain signing key persist + ready timeout sağlıklı → auto-reconnect çalışır.
+- **Threshold seçimleri:** Connect fail 5 = ~30 saniyelik exponential backoff, gerçek transient network kopukluğu bu süre içinde kendini düzeltir. Verify fail 3 = key mismatch çok güvenilir sinyal (parse race değil). Ready timeout 8 saniye = Mac normalde `hostStatus`/`assistantChunk` push'larını anlık tetikler; 8s sessizlik mismatch göstergesi.
+- **Backward compat:** Yeni `@Published` field + opsiyonel callback + opsiyonel constructor parametreleri additive. Eski iOS app aynı protokol ile bağlanır; iOS-only UX değişikliği.
+- **Future direction:** Mac side teşhis görseli (PairingView'da current code + public key fingerprint kopyalanabilir + auto-refresh on regenerate); iOS Settings'te "Tracker debug" expand (count + threshold gözlemlemek). Şu an gizli — beklenen UX hep healthy.
 
 ## [0.2.55] — 2026-05-25
 

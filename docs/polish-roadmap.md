@@ -442,6 +442,20 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **25 May 2026: Sprint 30 tamamlandı — Test hygiene.** v0.2.37+ documented intermittent LAN test flake root cause analysis: **gerçek test isolation veya port collision değil, Swift toolchain (6.3.2 + Xcode 16+) test target incremental build'inde rare object file corruption** (Heisenbug — print veya clean rebuild ile düzeliyor). Workaround: `scripts/test.sh` clean rebuild önce. Mac test 980 → 983 (+3 LANServiceLifecycleTests). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 35 — "iOS stale-pairing detection + auto-recovery" (v0.2.62)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | saf tip | `Sources/PixelRemote/ReconnectAttemptTracker.swift` — `Sendable Equatable` struct, iki bağımsız sayaç (connect/verify) + threshold'lar (5/3) + ready timeout (8s); overflow-safe |
+| ✅ | iOS wire | `RemoteSession`: `@Published pairingStaleSuspected` + `establishConnection` catch counter + ready timeout task + `handle()` verify guard counter + ilk verify-passed envelope reset |
+| ✅ | iOS UX | `ConnectionLostBanner` ikili mod — normal (Sprint 11 turuncu countdown) + stale prominent kırmızı kart + tek-tıkla "QR'ı Yeniden Tara" butonu |
+| ✅ | iOS recovery | `RemoteSession.forgetAndRescan()` — disconnect(forget:true) + tracker fresh + flag clear; ContentView otomatik PairingScannerView'a düşer |
+| ✅ | tests | 15 ReconnectAttemptTrackerTests (initial state, threshold partitioning, success reset, overflow, demo scenario regression) + 1 RemoteEnvelopeTests regression fix (conversationSync Sprint 33 v2 eksik) |
+| ⏸ | v0.2.63+ | Mac side PairingView teşhis görseli (current code + pk fingerprint kopyalanabilir + regenerate refresh) |
+| ⏸ | v0.2.63+ | iOS Settings → Tracker debug expand (count + threshold gözlemi) |
+
+**26 May 2026: Sprint 35 tamamlandı — iOS stale-pairing detection + auto-recovery.** Sprint 34 Mac side `PairingCode` UserDefaults persist + signing key Keychain'de stabil; ama iOS-tarafı eski random code veya değişmiş public key ile reconnect loop'unu sessizce sonsuza dek deniyordu. Bu release threshold-based detection ekledi (5 connect fail / 3 verify fail / 8s ready timeout) + UI prominent kırmızı banner + tek-tıkla recovery. Mac test 983 → 998 (+15 + 1 regression fix). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
