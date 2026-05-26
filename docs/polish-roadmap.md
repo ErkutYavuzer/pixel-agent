@@ -491,6 +491,25 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 37 tamamlandı — Semantic memory matching.** Sprint 36 word Jaccard'ın kısa metin zayıflığı çözüldü. Apple NLEmbedding (İngilizce sentence, dim=512) + character n-gram (Türkçe + multilingual morphology) + Sprint 36 fallback 3-tier hybrid scorer. "Beni Erkut diye çağır" + "Erkut burada" artık anlamlı skor verir (regression test geçiyor). Mac test 1043 → 1081 (+38). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 38 — "ProactiveEngine MVP (idle + appChange)" (v0.2.65)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | enum | `ProactiveTrigger` + `TriggerKind` (idle/appChange Tier 1; Sprint 39 +3 case rezerv) |
+| ✅ | mute | `SuppressionStore` — kind-level + bundle-level UserDefaults persist |
+| ✅ | rate | `ProactiveRateLimiter` — global cooldown (300s default) + per-kind override + Date injection |
+| ✅ | detector | `IdleDetector` — `CGEventSource.secondsSinceLastEventType` polling 10s, threshold 15dk default, mockable IdleSource |
+| ✅ | detector | `AppChangeObserver` — `NSWorkspace.didActivateApplicationNotification` + per-bundle 60s debounce, self-filter |
+| ✅ | orchestrator | `ProactiveEngine` actor — start/stop, suppression+rate-limit chain, `SystemNotifications.post` delivery |
+| ✅ | UI | Settings → "Proaktif" 7. tab (master toggle + per-kind on/off + idle stepper + suppressed bundles list) |
+| ✅ | lifecycle | `RootView.task` blokunda `proactiveEngine.start()` (SystemNotifications.requestAuthorization sonrası) |
+| ✅ | tests | 43 yeni (9 trigger + 9 suppression + 10 rate-limiter + 8 engine + 7 idle detector) + 1 regression update |
+| ⏸ | v0.2.66+ | Sprint 39 Tier 2 — windowDwell (Accessibility), typedPause (CGEventTap), calendarEvent (EKEventStore) |
+| ⏸ | v0.2.66+ | Hot-reload master toggle (şu an Restart-required) |
+| ⏸ | v0.2.66+ | Notification tap → ChatView pre-fill ("Boştasın, ne yapmak istersin?") |
+
+**26 May 2026: Sprint 38 tamamlandı — ProactiveEngine MVP.** v2'nin pasif UX paterni v3'e MVP olarak indi (idle + appChange, no permission). System notification ile kullanıcıyı yönlendirir; suppression + rate limiter spam'i önler. Sprint 39 Tier 2 (windowDwell, typedPause, calendar) permission-required trigger'lara ayrıldı. Mac test 1081 → 1124 (+43). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

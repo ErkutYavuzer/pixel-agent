@@ -12,6 +12,79 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi (release tag + commit + PROJECT_MEMORY zaten döküman).
 
+## [0.2.65] — 2026-05-26
+
+**Sprint 38 — ProactiveEngine MVP (idle + appChange triggers).** v2'nin (~64k LOC) `ProactiveEngine.swift:14-368` paterni v3'e modüler SPM mimarisinde indi. Agent artık **pasif** olarak çalışıyor — kullanıcı boş kalırsa veya uygulama değiştirirse system notification ile Pixel Agent'a yönlendirir. Tier 1 MVP: idle + appChange (no Accessibility/Calendar permission). Tier 2 (windowDwell, typedPause, calendar) Sprint 39 aday.
+
+**Test:** Mac 1081 → **1124** (+43: 9 ProactiveTrigger + 9 SuppressionStore + 10 ProactiveRateLimiter + 8 ProactiveEngine + 7 IdleDetector). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok** (master toggle default ON ama UserDefaults nil-safe; istemeyen kullanıcı Settings'ten kapatır).
+
+### Added — Sprint 38 / ProactiveEngine MVP
+
+#### `Sources/PixelMacApp/Proactive/ProactiveTrigger.swift` (yeni)
+- **`ProactiveTrigger`** enum 2 case: `.idle(minutes:)`, `.appChanged(name:bundleID:)`. Sprint 39+ üç yeni case rezerv.
+- **`TriggerKind`** payload-free identifier (rate limiter + suppression key) — `idle`, `appChange`. Raw value stable (UserDefaults serialization).
+- `bundleSuppressionKey`, `humanDescription`, `kind` computed properties.
+
+#### `Sources/PixelMacApp/Proactive/SuppressionStore.swift` (yeni)
+- **`SuppressionStore`** value type (`Sendable Equatable`) — UserDefaults-backed mute store. İki seviye: kind-level (tüm idle suspend) + bundle-level (Slack'ten appChange yutulur).
+- `shouldSuppress(_:)`, `setKind(_:suppressed:)`, `setBundle(_:suppressed:)` (trim + lowercase normalize).
+- Persist API: `load(from:)`, `save(to:)`. UserDefaults keys `pixel.proactive.suppressedKinds` + `pixel.proactive.suppressedBundles`.
+
+#### `Sources/PixelMacApp/Proactive/ProactiveRateLimiter.swift` (yeni)
+- **`ProactiveRateLimiter`** value type — global cooldown (default 300s = 5dk) + per-kind override.
+- `canFire(_:now:)` — global pencere check + per-kind cooldown check.
+- `record(kind:at:)`, `setCooldown(_:for:)`, `effectiveCooldown(for:)`.
+- Clock injection (`now: Date`) — test edilebilir.
+
+#### `Sources/PixelMacApp/Proactive/IdleDetector.swift` (yeni)
+- **`IdleDetector`** actor — `CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyInput)` polling (10s tick, threshold default 15 dk).
+- `IdleSource` mock'lanabilir closure — test'lerde sahte idle source.
+- `start()/stop()/tick()` lifecycle + `hasFired` state machine (threshold/2 altına düşünce reset → tekrar tetiklenebilir).
+- Permission YOK — Apple framework public API.
+
+#### `Sources/PixelMacApp/Proactive/AppChangeObserver.swift` (yeni)
+- **`AppChangeObserver`** actor — `NSWorkspace.didActivateApplicationNotification` observer + per-bundle debounce (default 60s).
+- Notification handler **Sendable-safe** — `name + bundleID` sync extract, Task'a primitive olarak pass.
+- Self-filter: pixel-agent kendisinin aktivasyonunu ignore (⌘Tab spam önler).
+
+#### `Sources/PixelMacApp/Proactive/ProactiveEngine.swift` (yeni orchestrator)
+- **`ProactiveEngine`** actor — detector'ları başlat/durdur, `handle(_:)` ile trigger'ı SuppressionStore + RateLimiter zincirinden geçir, `deliver` closure ile SystemNotifications'a yolla.
+- `defaultDelivery` static — `SystemNotifications.post` wrap.
+- `updateSuppression(_:)` Settings UI'dan çağrılır + UserDefaults sync.
+- `currentSuppression()`, `currentlyRunning()`, `format(_:)` debug/UI introspection.
+- Master toggle: `pixel.proactive.masterEnabled` UserDefaults (default ON). Kapalıysa `start()` no-op.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift` (lifecycle)
+- `RootView.proactiveEngine` static singleton.
+- `RootView .task` blokunda `await proactiveEngine.start()` — `SystemNotifications.requestAuthorization` + ControlBridge'den sonra.
+
+#### `Sources/PixelMacApp/SettingsView.swift` (7. tab "Proaktif")
+- `SettingsTab.proactive` (`bell.badge` icon).
+- **`ProactiveSettingsTab`** — 4 section:
+  1. Ana Anahtar: master toggle (Restart-required note)
+  2. Aktif Tetikleyiciler: per-kind on/off checkbox (idle, appChange) + açıklayıcı caption
+  3. Boşta Kalma: stepper 5-120 dk eşiği
+  4. Sustrulan Uygulamalar: bundle ID list (add/remove monospace text)
+- Toggle değişikliği `RootView.proactiveEngine.updateSuppression(_:)` async dispatch.
+
+### Tests — Sprint 38
+
+- `Tests/PixelMacAppTests/ProactiveTriggerTests.swift` — **9 yeni**: kind/bundleSuppressionKey accessors, humanDescription, allCases count, raw value stability, displayName non-empty.
+- `Tests/PixelMacAppTests/SuppressionStoreTests.swift` — **9 yeni**: empty store, kind block, bundle block (own bundle only), normalization (upper/whitespace), set false removes, UserDefaults round-trip, corrupt defaults fallback, idle bundle-independent.
+- `Tests/PixelMacAppTests/ProactiveRateLimiterTests.swift` — **10 yeni**: empty allows, fired blocks itself, global cross-kind block, post-cooldown allows, custom global cooldown, negative clamp, per-kind override, lastFires update, most-recent determines, custom init.
+- `Tests/PixelMacAppTests/ProactiveEngineTests.swift` — **8 yeni**: deliver happy path, suppressed kind blocks, suppressed bundle blocks, rate limit second blocks, format Turkish, format app name, updateSuppression applies, currentSuppression snapshot.
+- `Tests/PixelMacAppTests/IdleDetectorTests.swift` — **7 yeni**: fires above threshold, no-fire below, no-double-fire, mockable reset cycle (NSLock source), fired state exposed.
+- **Regression update** (+1): `SettingsTabTests` 6→7 case (memory→proactive).
+
+### Notes — Sprint 38
+
+- **Sprint 38 TIER 1 — no-permission triggers.** Sprint 39 Tier 2 adayları: `windowDwellTrigger` (Accessibility — front window title), `typedPauseTrigger` (CGEventTap / Accessibility), `calendarEventTrigger` (EKEventStore).
+- **Delivery via SystemNotifications:** Mevcut `PixelTools.SystemNotifications.post` kullanıldı; sound + UN content. Notification handler tap → app aktive (mevcut entitlement).
+- **Lifecycle:** Master toggle kapatılırsa engine `start()` no-op olur ama mevcut detector'lar çalışıyor — değişiklik etkili olması için app restart gerekir (Settings caption uyarı verir). Hot-reload v0.2.66+ aday.
+- **Debounce + suppression chain:** Trigger sıraya: detector debounce (AppChange 60s per-bundle, Idle reset) → SuppressionStore → RateLimiter (5dk global cooldown) → deliver. Üç katman kullanıcıya bildirim spam'i önler.
+- **iOS:** Proaktif tetikleyiciler Mac-only. iOS background execution kısıtlı; iOS proactive sonraki sürümlerde değerlendirilebilir (Background App Refresh tabanlı).
+- **Tests `proactive` taşıdı `subagent`'in altında:** Subagent paterniyle aynı `Sources/PixelMacApp/Proactive/` klasörü.
+
 ## [0.2.64] — 2026-05-26
 
 **Sprint 37 — Semantic memory matching (NLEmbedding + char n-gram hybrid).** Sprint 36'da `TextSimilarityScorer` word Jaccard kısa metinlerde zayıftı — "Beni Erkut diye çağır" + "Erkut burada" düşük skor veriyordu, threshold 0.55'i geçemiyordu. Bu release **3-tier hybrid dispatcher** ekliyor:
