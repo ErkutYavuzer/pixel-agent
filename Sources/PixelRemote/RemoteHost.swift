@@ -78,7 +78,7 @@ public final class RemoteHost: ObservableObject {
         self.relayURL = relayURL
         self.providedTransport = nil
         self.transportBuilder = nil
-        self.pairingCode = PairingCode.generate()
+        self.pairingCode = PairingCode.loadOrGenerate()
 
         let key: Curve25519.Signing.PrivateKey
         if let loaded = try? keyStore.loadOrCreate(service: keyService, account: keyAccount) {
@@ -108,7 +108,7 @@ public final class RemoteHost: ObservableObject {
         self.relayURL = relayURL
         self.providedTransport = transport
         self.transportBuilder = nil
-        self.pairingCode = PairingCode.generate()
+        self.pairingCode = PairingCode.loadOrGenerate()
 
         let key: Curve25519.Signing.PrivateKey
         if let loaded = try? keyStore.loadOrCreate(service: keyService, account: keyAccount) {
@@ -139,7 +139,7 @@ public final class RemoteHost: ObservableObject {
         self.relayURL = relayURL
         self.providedTransport = nil
         self.transportBuilder = transportBuilder
-        self.pairingCode = PairingCode.generate()
+        self.pairingCode = PairingCode.loadOrGenerate()
 
         let key: Curve25519.Signing.PrivateKey
         if let loaded = try? keyStore.loadOrCreate(service: keyService, account: keyAccount) {
@@ -158,7 +158,10 @@ public final class RemoteHost: ObservableObject {
     }
 
     public func regenerateCode() {
-        pairingCode = PairingCode.generate()
+        let fresh = PairingCode.generate()
+        pairingCode = fresh
+        // Sprint 34 (v0.2.61): persist — sonraki launch'larda aynı code.
+        PairingCode.save(fresh)
     }
 
     public func connect() async {

@@ -786,6 +786,16 @@ struct ChatHost: View {
                 incomingFromRemote = text
             }
         }
+        // **Sprint 34 (v0.2.61):** App launch'ında auto-connect — Mac
+        // dinlemeye başlasın, iOS saved pairing ile auto-reconnect olabilsin.
+        // Önceden user PairingView açıp manuel "Bağlan" tıklamak zorundaydı.
+        // pairingCode UserDefaults'tan stable yüklenir; iOS saved pairing
+        // aynı code'u beklediği için match eder.
+        .task {
+            if !remoteHost.isConnected {
+                await remoteHost.connect()
+            }
+        }
         // B5: menü çubuğundan ⌘⇧P / ⌘⇧M — toolbar'daki Toggle/Picker ile aynı
         // state'i değiştirir, böylece UI senkron kalır.
         .onReceive(NotificationCenter.default.publisher(for: AppCommand.togglePlanMode.notificationName)) { _ in
