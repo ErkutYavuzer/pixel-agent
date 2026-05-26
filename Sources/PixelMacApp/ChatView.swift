@@ -13,6 +13,8 @@ struct ChatView: View {
     @Binding var incomingRemoteText: String?
     let backendKind: CLIKind
     let planMode: Bool
+    // Sprint 42 (v0.2.69): Voice session — Apple Speech provider.
+    @StateObject private var voiceSession = VoiceSession(provider: RootView.voiceProvider)
 
     init(
         backend: any ChatBackend,
@@ -66,11 +68,17 @@ struct ChatView: View {
                 },
                 onCancel: viewModel.cancelStream,
                 onDispatchSubagent: dispatchSubagent,
-                subagentDisabled: subagentManager.isCapReached
+                subagentDisabled: subagentManager.isCapReached,
+                onToggleVoice: toggleVoice,
+                isVoiceActive: voiceSession.isActive
             )
         }
         .onAppear {
             viewModel.planMode = planMode
+            // Sprint 42 (v0.2.69): VoiceSession bu ChatView'ın viewModel'ına
+            // bağlanır — transcript composer'a inject, final segment send'e
+            // gider.
+            voiceSession.attach(to: viewModel)
             // C1: Subagent terminal status'unda sonucu ana chat'e mesaj olarak
             // düşür. Single mode'da yalnızca bu ChatView aktif olduğu için
             // tek subscriber bizizdir; DualChatHost da kendi onAppear'ında
@@ -96,6 +104,16 @@ struct ChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: .proactivePromptInject)) { note in
             guard let draft = note.userInfo?["draft"] as? String, !draft.isEmpty else { return }
             viewModel.injectDraft(draft)
+        }
+    }
+
+    /// **Sprint 42 (v0.2.69):** Voice toggle — mic FAB button. Aktif iken
+    /// stopCapture, değilse startCapture.
+    private func toggleVoice() {
+        if voiceSession.isActive {
+            voiceSession.stopCapture()
+        } else {
+            voiceSession.startCapture()
         }
     }
 

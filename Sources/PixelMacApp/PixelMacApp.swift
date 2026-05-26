@@ -7,6 +7,7 @@ import PixelMemory
 import PixelRemote
 import PixelSubagent
 import PixelTools
+import PixelVoice
 import SwiftUI
 
 @main
@@ -104,6 +105,13 @@ struct RootView: View {
     /// boyunca tek instance. App kapanışında implicit stop (process exit
     /// detector task'ları cancel eder).
     static let proactiveEngine = ProactiveEngine()
+
+    /// **Sprint 42 (v0.2.69):** Voice provider singleton — AppleVoice
+    /// (lokal, ücretsiz). Sprint 43-44'te kullanıcı Settings'ten provider
+    /// seçer (Apple/OpenAI/Gemini). Şu an MVP'de sabit AppleVoiceProvider.
+    static let voiceProvider: any PixelVoice.VoiceProvider = AppleVoiceProvider(
+        locale: Locale(identifier: "tr-TR")
+    )
 
     /// MCP server'ın bundle-bağımlı tool isteklerini dinleyen Unix socket
     /// sunucusunu (`ControlSocketServer`) açılışta başlatır. Hata olursa

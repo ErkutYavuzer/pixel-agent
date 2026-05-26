@@ -16,6 +16,13 @@ struct ChatComposer: View {
     /// `true` ise subagent butonu disabled — havuz dolu olduğunda kullanılır.
     var subagentDisabled: Bool = false
 
+    /// **Sprint 42 (v0.2.69):** Voice toggle callback. nil → mic button
+    /// render edilmez (geriye uyumluluk, test'ler).
+    var onToggleVoice: (() -> Void)? = nil
+
+    /// **Sprint 42:** Voice session aktif mi — mic ikonu state.
+    var isVoiceActive: Bool = false
+
     /// A8: TextField fokusta mı? `@FocusState` SwiftUI'ın native fokus
     /// takibi — animate ile birlikte halo'yu yumuşatır.
     @FocusState private var isComposerFocused: Bool
@@ -92,6 +99,18 @@ struct ChatComposer: View {
                 Button("Durdur", action: onCancel)
                     .keyboardShortcut(.escape, modifiers: [])
             } else {
+                // Sprint 42 (v0.2.69): Voice toggle mic button. Aktif iken
+                // kırmızı tint, ikonu mic.fill; aksi takdirde mic.circle.
+                if let toggleVoice = onToggleVoice {
+                    Button(action: { performHaptic(); toggleVoice() }) {
+                        Image(systemName: isVoiceActive ? "mic.fill" : "mic.circle")
+                            .foregroundStyle(isVoiceActive ? .red : .primary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(isVoiceActive
+                          ? "Konuşmayı durdur (mikrofonu kapat)"
+                          : "Konuşma modunu başlat (Apple Speech)")
+                }
                 if let dispatch = onDispatchSubagent {
                     Button(action: { performHaptic(); dispatch() }) {
                         Image(systemName: "person.2.wave.2")

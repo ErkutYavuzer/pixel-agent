@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "PixelSubagent", targets: ["PixelSubagent"]),
         .library(name: "PixelMCPServer", targets: ["PixelMCPServer"]),
         .library(name: "PixelComputerUse", targets: ["PixelComputerUse"]),
+        .library(name: "PixelVoice", targets: ["PixelVoice"]),
         .executable(name: "PixelMacApp", targets: ["PixelMacApp"]),
         .executable(name: "pixel-mcp-server", targets: ["pixel-mcp-server"]),
     ],
@@ -32,6 +33,7 @@ let package = Package(
         .target(name: "PixelSubagent", dependencies: ["PixelCore"]),
         .target(name: "PixelMCPServer", dependencies: ["PixelMemory"]),
         .target(name: "PixelComputerUse", dependencies: ["PixelCore"]),
+        .target(name: "PixelVoice", dependencies: ["PixelCore"]),
         .executableTarget(
             name: "pixel-mcp-server",
             dependencies: ["PixelMCPServer"]
@@ -49,6 +51,7 @@ let package = Package(
                 "PixelSubagent",
                 "PixelMCPServer",
                 "PixelComputerUse",
+                "PixelVoice",
             ]
         ),
         .testTarget(name: "PixelCoreTests", dependencies: ["PixelCore"]),
@@ -61,6 +64,7 @@ let package = Package(
         .testTarget(name: "PixelSubagentTests", dependencies: ["PixelSubagent"]),
         .testTarget(name: "PixelMCPServerTests", dependencies: ["PixelMCPServer"]),
         .testTarget(name: "PixelComputerUseTests", dependencies: ["PixelComputerUse"]),
+        .testTarget(name: "PixelVoiceTests", dependencies: ["PixelVoice"]),
         .testTarget(name: "PixelMacAppTests", dependencies: ["PixelMacApp", "PixelMCPServer"]),
     ],
     swiftLanguageModes: [.v6]

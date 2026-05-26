@@ -2,6 +2,7 @@ import AppKit
 import PixelBackends
 import PixelComputerUse
 import PixelMemory
+import PixelVoice
 import SwiftUI
 
 /// macOS Settings scene — `⌘,` ile açılan standart "Preferences" penceresi
@@ -35,6 +36,7 @@ struct SettingsView: View {
         case .subagent: SubagentSettingsTab()
         case .memory: MemorySettingsTab()
         case .proactive: ProactiveSettingsTab()
+        case .voice: VoiceSettingsTab()
         case .permissions: PermissionsSettingsTab()
         }
     }
@@ -43,7 +45,7 @@ struct SettingsView: View {
 // MARK: - Tab enum (testable)
 
 enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, models, connection, subagent, memory, proactive, permissions
+    case general, models, connection, subagent, memory, proactive, voice, permissions
 
     var id: String { rawValue }
 
@@ -55,6 +57,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .subagent: return "Subagent"
         case .memory: return "Hafıza"
         case .proactive: return "Proaktif"
+        case .voice: return "Sesli Mod"
         case .permissions: return "İzinler"
         }
     }
@@ -67,6 +70,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .subagent: return "person.2.crop.square.stack"
         case .memory: return "brain.head.profile"
         case .proactive: return "bell.badge"
+        case .voice: return "mic"
         case .permissions: return "lock.shield"
         }
     }
@@ -894,5 +898,147 @@ private struct ProactiveSettingsTab: View {
     private func removeBundle(_ bundle: String) {
         suppressedBundles.removeAll { $0 == bundle }
         Task { await applySuppression() }
+    }
+}
+
+// MARK: - Voice tab (Sprint 42 / v0.2.69)
+
+private struct VoiceSettingsTab: View {
+    @State private var selectedProvider: VoiceProviderKind = .apple
+    @State private var openaiKey: String = ""
+    @State private var geminiKey: String = ""
+    @State private var openaiKeyMasked: Bool = true
+    @State private var geminiKeyMasked: Bool = true
+    @State private var loadedKeys: Bool = false
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Sağlayıcı", selection: $selectedProvider) {
+                    ForEach(VoiceProviderKind.allCases, id: \.self) { provider in
+                        HStack {
+                            Text(provider.displayName)
+                            if !provider.isAvailable {
+                                Text("(yakında)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .tag(provider)
+                    }
+                }
+                Text(selectedProvider.description)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } header: {
+                Text("Voice Provider")
+            } footer: {
+                Text("ChatComposer'da mikrofon butonuna tıklayınca aktif olur. Apple Speech lokal ve ücretsiz; OpenAI/Gemini Sprint 43-44'te eklenecek.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            // API key fields — şimdilik display-only (Sprint 43+'da aktif olacak).
+            Section {
+                apiKeyField(
+                    title: "OpenAI Realtime API Key",
+                    text: $openaiKey,
+                    masked: $openaiKeyMasked,
+                    placeholder: "sk-proj-...",
+                    onSave: { saveOpenAIKey() }
+                )
+                apiKeyField(
+                    title: "Gemini Live API Key",
+                    text: $geminiKey,
+                    masked: $geminiKeyMasked,
+                    placeholder: "AIza...",
+                    onSave: { saveGeminiKey() }
+                )
+            } header: {
+                Text("API Anahtarları")
+            } footer: {
+                Text("Sprint 43-44'te aktif edilecek. Şimdi kaydedebilirsin — ilgili provider geldiğinde otomatik kullanılır. UserDefaults'a kaydedilir (v0.3+ Keychain'e taşınacak).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Button("Mikrofon ve Konuşma Tanıma İzinleri") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .controlSize(.small)
+            } header: {
+                Text("İzinler")
+            } footer: {
+                Text("Apple Speech için Microphone + Speech Recognition izinleri gerekir. İlk mic butonu tıklandığında macOS sorar.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding(.horizontal, 4)
+        .task {
+            if !loadedKeys {
+                await loadKeys()
+                loadedKeys = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func apiKeyField(
+        title: String,
+        text: Binding<String>,
+        masked: Binding<Bool>,
+        placeholder: String,
+        onSave: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption.bold())
+            HStack(spacing: 6) {
+                Group {
+                    if masked.wrappedValue {
+                        SecureField(placeholder, text: text)
+                    } else {
+                        TextField(placeholder, text: text)
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .font(.caption.monospaced())
+                Button {
+                    masked.wrappedValue.toggle()
+                } label: {
+                    Image(systemName: masked.wrappedValue ? "eye" : "eye.slash")
+                }
+                .buttonStyle(.borderless)
+                Button("Kaydet", action: onSave)
+                    .controlSize(.small)
+                    .disabled(text.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    @MainActor
+    private func loadKeys() async {
+        let store = VoiceCredentialsStore()
+        openaiKey = await store.openaiKey() ?? ""
+        geminiKey = await store.geminiKey() ?? ""
+    }
+
+    private func saveOpenAIKey() {
+        let value = openaiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            await VoiceCredentialsStore().setOpenAIKey(value.isEmpty ? nil : value)
+        }
+    }
+
+    private func saveGeminiKey() {
+        let value = geminiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            await VoiceCredentialsStore().setGeminiKey(value.isEmpty ? nil : value)
+        }
     }
 }
