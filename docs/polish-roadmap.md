@@ -547,6 +547,22 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 40 tamamlandı — smooth handoff.** Sprint 38-39 notification tap'i muğlaktı (sadece app aktivasyon). Sprint 40 trigger-spesifik hazır prompt'la ChatView composer'ı otomatik doldurur. **Confirm-first UX** (auto-send YOK) — kullanıcı kontrolünde. Mac test 1150 → 1180 (+30). iOS BUILD SUCCEEDED. Breaking change yok pratikte (Delivery typealias 3-arg ama dış API uyumlu).
 
+## Sprint 41 — "Otomatik memory capture" (v0.2.68)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | detect | `CaptureIntentDetector` saf helper — 28 TR + 24 EN pattern, substring case-insensitive; `detectCategory` per-kategori priority |
+| ✅ | instruction | `MemoryCaptureInstruction` saf helper — baseInstruction (kalıcı talimat) + contextualPrefix (intent hint) + assembleSystemPrompt (PlaybookLearner + base + contextual section order) |
+| ✅ | wire | `ChatViewModel.send()` → assembleSystemPrompt → backend system param |
+| ✅ | mcp | `save_memory` description'a "NE ZAMAN ÇAĞIR/ÇAĞIRMA" + TR+EN trigger örnekleri + format kuralı |
+| ✅ | UI | Settings → Hafıza tab'a "Otomatik Capture" section ("Otomatik Öğrenme" toggle, default ON) |
+| ✅ | tests | 32 yeni (17 CaptureIntent + 15 MemoryCaptureInstruction); Mac 1180 → 1212 |
+| ⏸ | v0.2.69+ | Capture inline UI feedback — "(Hafızaya kaydedildim: …)" notu özel chip render |
+| ⏸ | v0.2.69+ | Recipe tag extraction — "her seferinde X yap" cümlesinden gerçek workflow steps yakala |
+| ⏸ | v0.2.69+ | Pattern listesi expansion — gerçek kullanım veri toplaması ile FN/FP balanslama |
+
+**26 May 2026: Sprint 41 tamamlandı — pasif öğrenme.** Sprint 36 manuel `save_memory` → Sprint 41 agent kendi tetikliyor. System prompt iki katmanlı: baseInstruction (kalıcı) + contextualPrefix (CaptureIntentDetector pattern hit'inde inline hint). Agent format kuralı "(Hafızaya kaydedildim: …)" ile kullanıcı bildirir. Mac test 1180 → 1212 (+32). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

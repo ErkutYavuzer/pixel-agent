@@ -12,6 +12,61 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.68] — 2026-05-26
+
+**Sprint 41 — Otomatik memory capture (Sprint 36 follow-up).** Agent artık **pasif olarak öğreniyor**. Sprint 36 `MemoryStore + PlaybookLearner` manuel `save_memory` MCP tool sağladı; Sprint 37 semantic matching ekledi. Sprint 41 system prompt'a kalıcı talimat + capture intent detection ile agent'ın **sessizce kendi tetiklemesini** sağlar.
+
+**İki katmanlı sistem prompt:**
+
+1. **`MemoryCaptureInstruction.baseInstruction`** — her mesajda eklenen kalıcı talimat: profile/preference/task/project bilgisi yakalarsa `save_memory` aracını çağırmasını söyler; "(Hafızaya kaydedildim: …)" cevap notu format kuralı.
+2. **`MemoryCaptureInstruction.contextualPrefix(for:)`** — `CaptureIntentDetector` kullanıcı mesajında niyet pattern bulduğunda ek hint inject eder: "kullanıcı muhtemelen kalıcı bilgi bildiriyor; bu turda save_memory'i özellikle değerlendir. Önerilen kategori: `profile`."
+
+**`CaptureIntentDetector`** TR+EN substring pattern listesi (28+24 keyword) — embedding gerekmez (Sprint 37'den ders: TR sentence embedding yok; pattern hızlı + yüksek precision). Pattern → `MemoryCategory` mapping (kullanıcı doğru kategoride kaydeder).
+
+**`save_memory` MCP description geliştirildi:** "NE ZAMAN ÇAĞIR" / "NE ZAMAN ÇAĞIRMA" listesi + TR+EN trigger örnekleri + "(Hafızaya kaydedildim: …)" format kuralı.
+
+**Settings → Hafıza** tab'a yeni "Otomatik Capture" section ("Otomatik Öğrenme" toggle, default ON).
+
+**Test:** Mac 1180 → **1212** (+32: 17 CaptureIntentDetector + 15 MemoryCaptureInstruction). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok** (toggle default ON ama UserDefaults nil-safe; istemeyen kullanıcı opt-out edebilir).
+
+### Added — Sprint 41 / Otomatik memory capture
+
+#### `Sources/PixelMemory/CaptureIntentDetector.swift` (yeni saf helper)
+- **`turkishPatterns: [String]`** — 28 keyword (kategori bazlı: profile/preference/task/project).
+- **`englishPatterns: [String]`** — 24 keyword.
+- **`hasCaptureIntent(_:) -> Bool`** — substring case-insensitive lookup, herhangi bir TR veya EN pattern hit.
+- **`detectCategory(_:) -> MemoryCategory?`** — match olan pattern hangi kategori (priority: profile → project → task → preference). nil ise intent yok.
+
+#### `Sources/PixelMemory/MemoryCaptureInstruction.swift` (yeni saf helper)
+- **`autoCaptureEnabledDefaultsKey`** — UserDefaults `"pixel.memory.autoCaptureEnabled"`, default true.
+- **`baseInstruction`** — kalıcı talimat (5-cümle Turkish, 4 kategori örneği, "Hafızaya kaydedildim" format).
+- **`isAutoCaptureEnabled(defaults:)`** — UserDefaults nil-safe.
+- **`contextualPrefix(for userMessage:) -> String?`** — `CaptureIntentDetector` pozitif ise hint string + kategori önerisi; aksi nil.
+- **`assembleSystemPrompt(playbookSection:userMessage:defaults:) -> String?`** — Sprint 36 PlaybookLearner output + base + contextual prefix birleştirici. Auto-capture OFF + boş playbook → nil. Section sırası: playbook → base → contextual.
+
+#### `Sources/PixelMacApp/ChatViewModel.swift` (entegrasyon)
+- `send()` streamTask içinde `PlaybookLearner.formatPrompt(entries)` çıktısı + `MemoryCaptureInstruction.assembleSystemPrompt(...)` → tek `systemPrompt: String?`. CLIBackend system parametresine geçer.
+
+#### `Sources/PixelMCPServer/MemoryTools.swift` (description geliştirme)
+- `save_memory` description'a "NE ZAMAN ÇAĞIR (Sprint 41)" + "NE ZAMAN ÇAĞIRMA" + 4 kategori TR+EN trigger örnekleri + "(Hafızaya kaydedildim: …)" format kuralı.
+
+#### `Sources/PixelMacApp/SettingsView.swift`
+- Hafıza tab'ına "Otomatik Capture" yeni section: `Toggle("Otomatik Öğrenme")` `@AppStorage(MemoryCaptureInstruction.autoCaptureEnabledDefaultsKey)`. Default ON.
+
+### Tests — Sprint 41
+
+- `Tests/PixelMemoryTests/CaptureIntentDetectorTests.swift` — **17 yeni**: TR profile/preference/task/project patterns, EN profile/preference/task/project patterns, casual no-match negatives, empty/whitespace, case-insensitivity, detectCategory per-kategori + nil for non-intent, **Sprint 36 demo regression "Beni Erkut diye çağır" → profile**.
+- `Tests/PixelMemoryTests/MemoryCaptureInstructionTests.swift` — **15 yeni**: baseInstruction içerik check (kategoriler + recipe + Hafızaya kaydedildim), isAutoCaptureEnabled UserDefaults 3 variant, contextualPrefix nil/intent + kategori hint, assembleSystemPrompt 5 case (no playbook+no intent, playbook+no intent, intent contextual prefix, disabled strips, disabled empty playbook → nil), section order playbook→base→contextual.
+
+### Notes — Sprint 41
+
+- **Pasif öğrenme paradigması:** Sprint 36 manuel `save_memory` MCP çağrısı kullanıcının veya agent'ın explicit kararıyla çalışırdı. Sprint 41 system prompt instruction + capture intent detection ile agent kendi sessizce tetikleniyor. Format kuralı ("Hafızaya kaydedildim: …") cevap notu ile kullanıcı feedback alır.
+- **`(Hafızaya kaydedildim: …)` format:** Agent kayıt sonrası ana cevabında tek satırlık not bırakır. UI'da bu özel olarak işaretlenmemeiştir (gelecek sprint aday); kullanıcı görür ama bildirilmez. Memory entry görmek için Settings → Hafıza tab.
+- **TR+EN dual pattern list:** Kullanıcı karışık dil yazabilir (örn "I prefer kısa cevap"). İki listeyi de tarar; herhangi bir hit yeterli.
+- **Yanlış pozitif tolerance:** Pattern listesi conservative tutuldu — günlük konuşmada doğal cümleler hit etmez. Yine de %100 değil; agent yine kendi judgment'ı ile filter eder (description'da "NE ZAMAN ÇAĞIRMA" kuralları).
+- **Opt-out scenario:** Settings → Hafıza → "Otomatik Öğrenme" kapatılırsa system prompt'a instruction inject edilmez. Sprint 36 davranışı (manuel `save_memory` explicit kullanıcı isteği) yine çalışır.
+- **MCP tool description'a güvenmek:** Claude CLI 2.1.128+ tool description'ı agent'a tam olarak gösterir. Codex/Gemini de benzer. Description'daki TR+EN trigger örnekleri agent'ın doğru pattern'i öğrenmesini sağlar.
+
 ## [0.2.67] — 2026-05-26
 
 **Sprint 40 — Notification tap → ChatView draft inject (smooth handoff).** Sprint 38-39 proaktif bildirimleri kullanıcıyı uyarıyordu ama "tıklayınca ne olur?" muğlaktı (default app aktivasyon). Sprint 40 tap'i yakalayıp **trigger-spesifik hazır prompt** ile ChatView composer'ını otomatik dolduruyor. Kullanıcı düzenleyip Enter ile gönderir — **auto-send YOK** (confirm-first UX).
