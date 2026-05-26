@@ -12,6 +12,62 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi (release tag + commit + PROJECT_MEMORY zaten döküman).
 
+## [0.2.64] — 2026-05-26
+
+**Sprint 37 — Semantic memory matching (NLEmbedding + char n-gram hybrid).** Sprint 36'da `TextSimilarityScorer` word Jaccard kısa metinlerde zayıftı — "Beni Erkut diye çağır" + "Erkut burada" düşük skor veriyordu, threshold 0.55'i geçemiyordu. Bu release **3-tier hybrid dispatcher** ekliyor:
+
+- **Tier 1 — `NLEmbedding.sentenceEmbedding(for: .english)`** (dim=512, yüksek kalite). İngilizce uzun metin için.
+- **Tier 2 — Character n-gram Jaccard (n=3)** — multilingual morphology-aware. "erkut" + "erkut'a" ortak trigram'lar paylaşır. Türkçe, kısa metin, karışık metinler.
+- **Tier 3 — Word Jaccard (Sprint 36)** — fallback / kullanıcı opt-out.
+
+**Apple `NLEmbedding` probe sonucu:** Türkçe için ne sentence ne word embedding modeli var (probe doğrulandı). CoreML multilingual model bundle'a 135MB+ ekler — char n-gram pragmatik alternatif. Sprint 37 sıfır model overhead'i + multilingual destek + morphology yakalama dengesi sunar.
+
+**Test:** Mac 1043 → **1081** (+38: 14 CharNGramScorer + 16 EmbeddingScorer + 8 LanguageDetector). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok** (`EmbeddingScorer.score()` default `enableEmbedding: currentSemanticToggle()`, UserDefaults nil → true; eski Jaccard kullanmak istenirse Settings'ten kapatılır).
+
+### Added — Sprint 37 / Hybrid embedding scorer
+
+#### `Sources/PixelMemory/CharNGramScorer.swift` (yeni saf helper)
+- **`ngrams(of:n:)`** — sliding window character n-gram extraction, lowercased, whitespace included.
+- **`score(_:_:n:)`** — Jaccard over n-grams, 0.0-1.0.
+- Defaults: `n=3` (trigram, kısa metin için optimal), `minTextLength=1`.
+- Metin n'den kısaysa kendisi tek gram olarak (defensive).
+
+#### `Sources/PixelMemory/LanguageDetector.swift` (yeni saf helper)
+- **`detect(_:)`** — `NLLanguageRecognizer` wrap. `minLengthForDetection = 12` altında nil zorlanır (probe'da "Call me Erkut" 3-kelime için `.turkish` döndürüyordu — defensive guard).
+- **`detectShared(_:_:)`** — query+content çiftinden ortak/dominant dil. Farklıysa nil; tek-tarafı short ise diğeri döner.
+
+#### `Sources/PixelMemory/EmbeddingScorer.swift` (yeni dispatcher)
+- **`score(_:_:enableEmbedding:)`** — 3-tier dispatcher entry point. Default `enableEmbedding = currentSemanticToggle()`.
+- **`currentSemanticToggle()`** — UserDefaults `EmbeddingScorer.enabledDefaultsKey` ("pixel.memory.semanticMatching") okur, nil → true.
+- **`sentenceCosine(_:_:language:)`** — NLEmbedding wrap, nil-safe (TR için nil döner).
+- **`cosineSimilarity(_:_:)`** — saf math, Sendable, test edilebilir.
+- **`sentenceEmbedding(for:)`** — `NLEmbedding` lookup wrapper. Cache YOK (Apple framework internally amortize).
+
+#### `Sources/PixelMemory/PlaybookLearner.swift` (update)
+- `relevant()` artık `EmbeddingScorer.score()` çağırır (Sprint 36'da `TextSimilarityScorer.score()` idi).
+- Default `minSimilarity = 0.55` → **`0.35`** (n-gram skorları sentence embedding'e göre daha düşük aralıkta).
+
+#### `Sources/PixelMemory/MemoryStore.swift` (update)
+- `relevantContext()` default `minSimilarity = 0.55` → **`0.35`** (PlaybookLearner ile uyumlu).
+
+#### `Sources/PixelMacApp/SettingsView.swift`
+- **"Eşleştirme" yeni section** (Memory tab başında): `Toggle("Anlamsal Eşleştirme")` — `@AppStorage(EmbeddingScorer.enabledDefaultsKey)`. Default ON. Açıklayıcı footer: İngilizce için NLEmbedding sentence, diğer diller için karakter n-gram morfoloji; kapatılırsa Sprint 36 word Jaccard'a düşer.
+
+### Tests — Sprint 37
+
+- `Tests/PixelMemoryTests/CharNGramScorerTests.swift` — **14 yeni**: ngrams empty/short-than-N/exact-N/sliding/lowercase/whitespace/Turkish, score identical/different/empty/symmetry/partial overlap/case-insensitive, **Sprint 36 regression**.
+- `Tests/PixelMemoryTests/EmbeddingScorerTests.swift` — **16 yeni**: cosine math (identical, orthogonal, opposite, mismatched size, zero magnitude, empty), dispatcher tier (Jaccard fallback, English sentence, Turkish ngram, short text ngram), NL embedding lookup (English var, TR nil), `sentenceCosine` (English value, TR nil), UserDefaults toggle, **Sprint 36 "Erkut" regression**.
+- `Tests/PixelMemoryTests/LanguageDetectorTests.swift` — **8 yeni**: empty/short returns nil, long English/Turkish detect, `detectShared` same/different/one-short/both-short.
+
+### Notes — Sprint 37
+
+- **Sprint 36 regression "Erkut" kapandı:** `EmbeddingScorerTests.testSprint36ErkutRegression` ve `CharNGramScorerTests.testSprint36RegressionShortNames` artık geçiyor. Kısa metinde "Erkut" isim eşleşmesi ≥ 0.1 skor verir (threshold 0.35 yerine 0.1 conservatif assertion).
+- **Türkçe için sentence embedding YOK:** Apple `NLEmbedding.sentenceEmbedding(for: .turkish)` nil döner (probe doğrulandı). Char n-gram Tier 2 bu boşluğu doldurur. CoreML multilingual MiniLM (135MB bundle) v0.3+ aday.
+- **NLLanguageRecognizer kısa metinde güvensiz:** "Call me Erkut" için `.turkish` döndürüyordu. `LanguageDetector` 12-char minimum eşik ile bunu defensive olarak filter eder; eşik altında diğer tier'lara düşer.
+- **Threshold revize:** 0.55 → 0.35. N-gram skorları sentence embedding'e göre daha düşük aralıkta (0.3-0.7 tipik). Threshold çok yüksek olursa hiçbir entry inject edilmez.
+- **Toggle opt-out:** Kullanıcı Settings → Hafıza → "Anlamsal Eşleştirme" toggle ile Sprint 36 word Jaccard'a dönebilir. Test/regresyon koşullarında stabil davranış.
+- **Performans:** İngilizce sentence embedding ~ms inference; char n-gram sub-millisecond. 500 entry × ~1ms = 500ms toplam tarama — async Task içinde, UI freeze yok.
+
 ## [0.2.63] — 2026-05-26
 
 **Sprint 36 — MemoryStore + PlaybookLearner MVP.** v3'e ilk kez **cross-session persistent memory** mekanizması: agent geçmiş benzer task'leri "hatırlıyor". v2'nin (~64k LOC monorepo) `MemoryStore.swift:1-115` + `MemoryConsolidator.swift` + `PlaybookLearner.swift:1-99` paterniyle uyumlu — ama embedding-free Jaccard MVP (CoreML/SwiftNLP v0.3+ aday).

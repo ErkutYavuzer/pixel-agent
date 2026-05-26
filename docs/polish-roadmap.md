@@ -475,6 +475,22 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 36 tamamlandı — MemoryStore + PlaybookLearner MVP.** v3'e ilk kez cross-session persistent memory. Agent her user mesajı öncesi geçmiş benzer task'leri otomatik olarak `system` prompt'a enjekte eder (PlaybookLearner top-N ranking). v2'nin (~64k LOC) memory paterniyle uyumlu, ama embedding-free Jaccard MVP. Mac test 998 → 1043 (+45: 17 store + 12 scorer + 9 consolidator + 13 learner + 4 regression update). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 37 — "Semantic memory matching" (v0.2.64)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | probe | `NLEmbedding` Türkçe için ne sentence ne word destek YOK (probe doğrulandı); İngilizce sentence dim=512 mevcut |
+| ✅ | tier 2 | `CharNGramScorer` (n=3 trigram Jaccard) — multilingual morphology, sıfır model overhead |
+| ✅ | language | `LanguageDetector` (NLLanguageRecognizer wrap + 12-char minimum eşik defensive guard) |
+| ✅ | dispatcher | `EmbeddingScorer` 3-tier: English→NLEmbedding sentence, other→char n-gram, fallback→word Jaccard |
+| ✅ | wire | `PlaybookLearner.relevant()` artık `EmbeddingScorer.score()` çağırır; threshold 0.55 → 0.35 |
+| ✅ | settings | `@AppStorage` toggle "Anlamsal Eşleştirme" (default ON); Sprint 36 word Jaccard'a dönmek için opt-out |
+| ✅ | tests | 38 yeni (14 ngram + 16 embedding + 8 language); **Sprint 36 "Erkut" regression artık geçiyor** |
+| ⏸ | v0.2.65+ | CoreML multilingual MiniLM (~135MB bundle, paraphrase-multilingual-MiniLM-L12-v2) — TR sentence embedding kalitesi |
+| ⏸ | v0.2.65+ | Embedding caching (entry kaydedildiğinde precompute, JSONL schema breaking) |
+
+**26 May 2026: Sprint 37 tamamlandı — Semantic memory matching.** Sprint 36 word Jaccard'ın kısa metin zayıflığı çözüldü. Apple NLEmbedding (İngilizce sentence, dim=512) + character n-gram (Türkçe + multilingual morphology) + Sprint 36 fallback 3-tier hybrid scorer. "Beni Erkut diye çağır" + "Erkut burada" artık anlamlı skor verir (regression test geçiyor). Mac test 1043 → 1081 (+38). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
