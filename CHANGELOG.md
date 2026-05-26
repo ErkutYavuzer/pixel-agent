@@ -12,6 +12,92 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.72] — 2026-05-26
+
+**Sprint 45 — Gemini Live WebSocket implementation.** Sprint 43-44 OpenAI Realtime full parity üstüne Google Gemini Live alternatif provider eklendi. Aynı `VoiceProvider` abstraction, farklı protocol + audio format + **~10x ucuz fiyat**.
+
+**Fiyat karşılaştırması** (2026 Q1):
+- OpenAI Realtime: $0.06/min input + $0.24/min output
+- **Gemini 2.0 Flash Realtime: $0.006/min input + $0.024/min output** (~10x ucuz)
+
+**Format farkları:**
+- **Audio input:** Gemini 16 kHz mono PCM16 (OpenAI 24 kHz)
+- **Audio output:** Gemini 24 kHz (OpenAI ile aynı — `RealtimeAudioPlayer` reuse)
+- **Protocol:** `BidiGenerateContent` JSON tree (OpenAI'den çok farklı)
+- **Tool format:** `tools[].functionDeclarations[]` (no `type: "function"` field — OpenAI'den fark)
+- **Interrupt:** Server `serverContent.interrupted: true` flag (OpenAI'de client `response.cancel` event'i)
+
+**Akış:**
+1. Settings → Sesli Mod → "Gemini Live" provider seç + API key gir + restart
+2. ChatComposer mic FAB tıkla → `GeminiLiveProvider.start()`
+3. WebSocket `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=<API_KEY>`
+4. `setup` event yolla — model="models/gemini-2.0-flash-exp", system_instruction, tools, response_modalities=["AUDIO"]
+5. Mic capture: AVAudioConverter (Apple → PCM16 **16 kHz mono**) → base64 → `realtime_input.media_chunks[mime_type="audio/pcm;rate=16000"]`
+6. Server VAD → otomatik response
+7. Server `serverContent.modelTurn.parts[].inlineData` (audio/pcm 24 kHz) → `audioPlayer.schedule(samples:)`
+8. Server `toolCall.functionCalls[]` → MCP dispatch → `tool_response.function_responses[]`
+9. Server `serverContent.interrupted: true` → `audioPlayer.interrupt()` (kullanıcı kesti)
+
+**Test:** Mac 1287 → **1312** (+25: 19 GeminiEvent + 6 GeminiToolBridge; +1 Sprint 43-44 regression update). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok**.
+
+### Added — Sprint 45 / Gemini Live
+
+#### `Sources/PixelVoice/GeminiEvent.swift` (yeni)
+- **`GeminiClientEvent` enum** (Encodable, 3 case):
+  - `.setup(config: GeminiSetupConfig)` — connection açılışı (tek seferlik).
+  - `.realtimeInput(audioBase64: String)` — mic chunk + `media_chunks[mime_type="audio/pcm;rate=16000"]`.
+  - `.toolResponse(functionResponses:)` — function call sonucu (id + name + response).
+- **`GeminiSetupConfig` struct** — model (default `models/gemini-2.0-flash-exp`), generation_config (response_modalities=["AUDIO"]), system_instruction, tools.
+- **`GeminiSystemInstruction` + `GeminiTextPart`** — system prompt yapısı.
+- **`GeminiTools` + `GeminiFunctionDeclaration`** — function calling tools yapısı (Gemini format: no `type: "function"` field).
+- **`GeminiMediaChunk`** — `mime_type` + `data` (base64).
+- **`GeminiFunctionResponse` + `GeminiToolResponseWrapper`** — tool response format.
+- **`GeminiServerEvent` enum** (manual decode, 8 case):
+  - `.setupComplete`, `.audioChunk(base64:)`, `.textChunk(text:)`, `.interrupted`, `.turnComplete`, `.toolCall(calls:)`, `.error(message:)`, `.unknown(snippet:)`.
+- **`GeminiToolCallRequest` struct** (`Sendable`-safe — `argsJSON: Data`).
+- **Decode behavior:** Audio öncelik (modelTurn.parts'ta hem audio hem text varsa audio yields); `interrupted: true` ve `turnComplete: true` flag detect.
+
+#### `Sources/PixelVoice/GeminiToolBridge.swift` (yeni saf helper)
+- **`convert(_ tool:) -> GeminiFunctionDeclaration`** — MCP ToolDefinition → Gemini format.
+- **`voiceTools(from registry:includeAll:) -> [GeminiTools]`** — voice-safe whitelist (OpenAIToolBridge.voiceSafeToolNames reuse) + `[GeminiTools]` array wrapping (Gemini setup spec).
+- Empty registry → empty array (setup'ta omit edilmeli).
+
+#### `Sources/PixelVoice/GeminiLiveProvider.swift` (yeni)
+- **`GeminiLiveProvider` actor** — `VoiceProvider` conformance.
+- `endpointBase` constant + key query param runtime build.
+- `inputSampleRate = 16_000` constant (Gemini spec).
+- `start()`: API key oku → WebSocket bağlantı (query param key) → setup event → audioPlayer (24kHz reuse) → mic capture 16kHz target → receive loop.
+- Mic capture: AVAudioConverter Apple format → PCM16 **16 kHz** mono → base64 → `realtime_input`.
+- Receive loop: GeminiServerEvent decode + handle.
+- `handle()`: audio chunk → audioPlayer.schedule; text chunk → accumulate `.interim`; interrupted → audioPlayer.interrupt; turnComplete → `.final` yield; toolCall → `dispatchToolCall` per call.
+- `cancelSpeech()`: audioPlayer.interrupt (Gemini'de explicit client cancel event yok; server kullanıcının yeni input'u ile handle eder).
+- `dispatchToolCall(_:)` — MCP execute + `tool_response.function_responses[]` yolla.
+- `sendToolError` defensive.
+
+#### `Sources/PixelVoice/VoiceCredentialsStore.swift`
+- **`VoiceProviderKind.geminiLive.isAvailable = true`** (Sprint 45 aktif).
+- Display name `"Gemini Live"`; description fiyat karşılaştırması + 16kHz/24kHz audio format detayı.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **`RootView.makeVoiceProvider()` `.geminiLive` branch** — `BuiltInTools.makeRegistry()` ile `GeminiLiveProvider(toolRegistry:)` inject (artık Apple fallback değil).
+
+### Tests — Sprint 45
+
+- `Tests/PixelVoiceTests/GeminiEventTests.swift` — **19 yeni**: 5 setup encode (model field, generation_config AUDIO modality, system_instruction, tools, omit tools); 1 realtime_input 16kHz mime_type; 1 tool_response encode; 8 server decode (setupComplete, audioChunk, textChunk, audio-over-text priority, interrupted, turnComplete, toolCall, error); 1 corrupt JSON nil; 1 unknown case; 2 GeminiToolCallRequest argsJSON + equatable.
+- `Tests/PixelVoiceTests/GeminiToolBridgeTests.swift` — **6 yeni**: convert preserve name+description; Gemini format (no `type: "function"`); voice tools whitelist filter; includeAll bypass; empty registry → empty; Gemini spec shape (`tools[].functionDeclarations[]`).
+- **Sprint 43-44 regression update** — `VoiceCredentialsStoreTests.testRealtimeProvidersAvailability`: Gemini artık `isAvailable=true`.
+
+### Notes — Sprint 45
+
+- **VoiceProvider abstraction çalışıyor:** OpenAI (Sprint 43-44) + Gemini (Sprint 45) tamamen aynı `VoiceProvider` protokolüyle uyumlu. `VoiceSession`, `ChatView`, `ChatComposer` mic FAB — hepsi provider-agnostik. Provider swap için sadece Settings'ten seçim + restart.
+- **Türkçe destek:** Gemini 2.0 Flash multilingual + Türkçe iyi. `system_instruction` Turkish prompt ile aktif.
+- **Cost-conscious choice:** Demo + günlük voice için Gemini Live (~10x ucuz). Yüksek kalite + tool calling reliability için OpenAI Realtime. Apple Speech tamamen ücretsiz (network yok).
+- **Audio format farkı performansı:** Gemini'nin 16kHz input avantajı bandwidth — saniyede ~64KB vs OpenAI 96KB (24kHz). Hafif network'lerde Gemini daha az kesinti.
+- **Interrupt UX farkı:** OpenAI'de client `response.cancel` event'i + audio drain. Gemini'de sadece audio drain — server kendi `interrupted: true` flag'iyle bildirim yapar (asymmetric).
+- **Gemini API key:** [Google AI Studio](https://aistudio.google.com/app/apikey) `AIza...` formatında. Settings → Sesli Mod → "Gemini Live API Key" → Kaydet → app restart.
+- **iOS Voice yok:** Mac-only Sprint 45 (OpenAI + Gemini ikisi de). iOS v0.2.75+ aday.
+- **Function calling test edilmedi gerçek API ile:** Test'ler codec/encode/decode unit-level; gerçek WebSocket roundtrip kullanıcı test edecek (API key + cüzdan gerektiği için CI'da otomatize edilemez).
+
 ## [0.2.71] — 2026-05-26
 
 **Sprint 44 — OpenAI Realtime Faz B: function calling + interrupt.** Sprint 43 audio I/O üstüne **agent voice modunda MCP tool çağırabiliyor** + kullanıcı **agent konuşurken sözünü kesebilir**. OpenAI Realtime artık v3'te **full feature parity**: server-side VAD + tool use + interrupt.

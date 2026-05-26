@@ -622,6 +622,23 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 44 Faz B tamamlandı — OpenAI Realtime full feature parity.** Sprint 43 audio I/O üstüne function calling (MCP tool çağırma) + interrupt (söz kesme) eklendi. Agent voice modunda "Saat kaç?" sorunca `get_current_time` MCP tool'unu çağırıp sesli cevap verir. Mac test 1271 → 1287 (+16). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 45 — "Gemini Live WebSocket" (v0.2.72)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | events | `GeminiEvent` — 3 client (setup/realtime_input/tool_response) + 8 server (setupComplete/audio/text/interrupted/turnComplete/toolCall/error/unknown) + `GeminiSetupConfig` + functionDeclarations format |
+| ✅ | bridge | `GeminiToolBridge` — MCP → Gemini convert; voice-safe whitelist reuse `OpenAIToolBridge.voiceSafeToolNames`; `tools[].functionDeclarations[]` Gemini spec shape |
+| ✅ | provider | `GeminiLiveProvider` actor — BidiGenerateContent WebSocket (key query param); 16 kHz mic input + 24 kHz audio output (player reuse); function calling; serverContent.interrupted → audio drain |
+| ✅ | factory | RootView.makeVoiceProvider .geminiLive branch → GeminiLiveProvider(toolRegistry:) inject (Apple fallback artık değil) |
+| ✅ | settings | VoiceProviderKind.geminiLive.isAvailable=true; display name + fiyat karşılaştırma description |
+| ✅ | tests | 25 yeni (19 GeminiEvent + 6 GeminiToolBridge) + 1 Sprint 43-44 regression update |
+| ⏸ | v0.2.73+ | Voice tools opt-in (ui_click vs whitelist genişletme) — Settings toggle |
+| ⏸ | v0.2.73+ | Cost dashboard UI (token usage + USD estimate per provider) |
+| ⏸ | v0.2.73+ | Mascot state "listening agent" → "listening user" interrupt feedback |
+| ⏸ | v0.2.75+ | iOS Voice (Background App Refresh + sustained WebSocket) |
+
+**26 May 2026: Sprint 45 tamamlandı — Gemini Live alternatif provider.** Sprint 43-44 OpenAI Realtime full parity üstüne Google Gemini Live eklendi. Aynı `VoiceProvider` abstraction, ~10x ucuz fiyat ($0.006/min input + $0.024/min output vs OpenAI $0.06/$0.24). Audio format farkı (16kHz input / 24kHz output vs OpenAI 24/24) + protocol farkı (BidiGenerateContent JSON tree) abstraction altında gizli. Mac test 1287 → 1312 (+25). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
