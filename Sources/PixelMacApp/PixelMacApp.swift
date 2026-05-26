@@ -94,11 +94,17 @@ struct RootView: View {
             // Sprint 40 (v0.2.67): UNUserNotificationCenter delegate kayıt.
             // Bildirim tap'i yakalanıp ChatView draft inject edilir.
             NotificationActionDispatcher.shared.register()
+            // Sprint 47 (v0.2.75): Relay launcher — npx wrangler dev otomatik.
+            // UserDefaults toggle (default ON) kapalıysa no-op; production
+            // Cloudflare URL kullanan kullanıcılar kapatabilir.
+            await MainActor.run { Self.relayLauncher.start() }
             await Self.startControlBridge()
-            // Sprint 38 (v0.2.65): Proaktif tetikleyiciler başlat. Master toggle
-            // (`pixel.proactive.masterEnabled` UserDefaults) kapalıysa engine
-            // no-op olur. Idle 15dk default; appChange 60s debounce.
+            // Sprint 38 (v0.2.65): Proaktif tetikleyiciler başlat.
             await Self.proactiveEngine.start()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+            // Sprint 47 (v0.2.75): App quit → wrangler subprocess SIGTERM.
+            Self.relayLauncher.stop()
         }
     }
 
@@ -106,6 +112,11 @@ struct RootView: View {
     /// boyunca tek instance. App kapanışında implicit stop (process exit
     /// detector task'ları cancel eder).
     static let proactiveEngine = ProactiveEngine()
+
+    /// **Sprint 47 (v0.2.75):** Relay launcher singleton — app launch'ta
+    /// `npx wrangler dev` subprocess başlatır, app kapanırken kill eder.
+    /// `@MainActor` ObservableObject — Settings UI binding için.
+    @MainActor static let relayLauncher = RelayLauncher()
 
     /// **Sprint 42-45:** Voice provider factory — UserDefaults'tan aktif
     /// provider okur, runtime'da instance üretir. Apple (lokal), OpenAI
@@ -246,16 +257,14 @@ struct ChatHost: View {
     @State private var customModelKind: CLIKind?
     @State private var customModelDraft: String = ""
 
-    /// `PIXEL_RELAY_URL` env var varsa onu kullan; yoksa LAN IP (en0/en1) ile WebSocket URL üret;
-    /// hiçbiri yoksa `ws://localhost:8787` (sadece Mac-local test için).
+    /// **Sprint 47 (v0.2.75):** Resolution chain → `RelayURLResolver`:
+    /// 1. UserDefaults `pixel.relay.customURL` (Settings'ten kullanıcı override)
+    /// 2. `PIXEL_RELAY_URL` env var (geriye uyumlu)
+    /// 3. Production Cloudflare URL (`wrangler deploy` sonrası)
+    /// 4. LAN IP (en0/en1 auto-detect)
+    /// 5. localhost fallback
     static var defaultRelayURL: String {
-        if let envURL = ProcessInfo.processInfo.environment["PIXEL_RELAY_URL"], !envURL.isEmpty {
-            return envURL
-        }
-        if let lanIP = detectLANIPv4() {
-            return "ws://\(lanIP):8787"
-        }
-        return "ws://localhost:8787"
+        RelayURLResolver.resolve()
     }
 
     private static func detectLANIPv4() -> String? {

@@ -220,43 +220,84 @@ private struct BackendModelRow: View {
 // MARK: - Connection tab
 
 private struct ConnectionSettingsTab: View {
-    private var relayURL: String {
-        ProcessInfo.processInfo.environment["PIXEL_RELAY_URL"]
-            ?? Self.defaultRelayURL()
-    }
+    @AppStorage(RelayURLResolver.customURLDefaultsKey) private var customURL: String = ""
+    @AppStorage(RelayLauncher.autoStartEnabledDefaultsKey) private var autoStartEnabled: Bool = true
+    @ObservedObject private var launcher = RootView.relayLauncher
 
-    private var isEnvOverride: Bool {
-        ProcessInfo.processInfo.environment["PIXEL_RELAY_URL"] != nil
+    private var resolvedSource: RelayURLResolver.Source {
+        RelayURLResolver.resolveSource()
     }
 
     var body: some View {
         Form {
+            // Sprint 47 (v0.2.75): Relay launcher status
             Section {
-                LabeledContent("Relay URL") {
+                Toggle(isOn: $autoStartEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Wrangler'ı Otomatik Başlat")
+                        Text("App açıldığında `npx wrangler dev` subprocess'i otomatik tetiklenir; kapanırken SIGTERM. Production Cloudflare URL kullanıyorsanız kapatın.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack {
+                    statusIcon
+                    Text(statusLabel)
+                        .font(.callout)
+                    Spacer()
+                    Button("Yeniden Başlat") {
+                        launcher.manualRestart()
+                    }
+                    .controlSize(.small)
+                    .disabled(!autoStartEnabled)
+                }
+                if let error = launcher.lastError {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                Text("Yerel Relay (Wrangler)")
+            } footer: {
+                Text("`brew install node` gerekli. Bundle'daki veya `~/Projects/pixel-agent/relay/` repo dizinindeki `wrangler.toml`'i kullanır. Subprocess 5sn cooldown ile max 3 kez restart eder.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                LabeledContent("Aktif URL") {
                     HStack {
-                        Text(relayURL)
+                        Text(resolvedSource.url)
                             .font(.caption.monospaced())
                             .lineLimit(1)
                             .truncationMode(.middle)
                         Button {
                             NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(relayURL, forType: .string)
+                            NSPasteboard.general.setString(resolvedSource.url, forType: .string)
                         } label: {
                             Image(systemName: "doc.on.doc")
                         }
                         .controlSize(.small)
-                        .help("Panoya kopyala")
                     }
                 }
-                if isEnvOverride {
-                    Text("`PIXEL_RELAY_URL` env değişkeni aktif — bu değer UserDefaults yerine geçer.")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                LabeledContent("Kaynak", value: resolvedSource.displayName)
+
+                HStack {
+                    TextField("Özel URL (örn wss://my-relay.workers.dev)", text: $customURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption.monospaced())
+                    Button("Temizle") {
+                        customURL = ""
+                    }
+                    .controlSize(.small)
+                    .disabled(customURL.isEmpty)
                 }
             } header: {
-                Text("Relay")
+                Text("Relay URL")
             } footer: {
-                Text("LAN için relay gerek değildir; Bonjour discovery zaten paralel devrede (ADR-0023 MergeTransport).")
+                Text("Öncelik: Özel URL > PIXEL_RELAY_URL env > Production Cloudflare > LAN IP > localhost. Production deploy için: `cd relay && npx wrangler deploy` (Cloudflare hesabı gerekir).")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -274,6 +315,30 @@ private struct ConnectionSettingsTab: View {
         }
         .formStyle(.grouped)
         .padding(.horizontal, 4)
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        if !autoStartEnabled {
+            Image(systemName: "minus.circle.fill")
+                .foregroundStyle(.secondary)
+        } else if launcher.isRunning {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        } else if launcher.lastError != nil {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+        } else {
+            Image(systemName: "circle.dotted")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var statusLabel: String {
+        if !autoStartEnabled { return "Devre dışı" }
+        if launcher.isRunning { return "Çalışıyor (port 8787)" }
+        if launcher.lastError != nil { return "Hata" }
+        return "Başlatılmamış"
     }
 
     private static func defaultRelayURL() -> String {
