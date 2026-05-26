@@ -12,6 +12,75 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi (release tag + commit + PROJECT_MEMORY zaten döküman).
 
+## [0.2.66] — 2026-05-26
+
+**Sprint 39 — ProactiveEngine Tier 2 (windowDwell + typedPause + calendarEvent). v2 paritesi tamamlandı.** Sprint 38 Tier 1 (idle + appChange) üstüne 3 yeni trigger eklendi:
+
+- **`typedPause`** — `CGEventSource.secondsSinceLastEventType(eventType: .keyDown)` polling. Aktif yazma (≥2 ardışık poll) + 8-30sn pause window. **Permission YOK** (CGEventTap değil, public API).
+- **`windowDwell`** — `AXUIElementCopyAttributeValue(kAXFocusedWindow, kAXTitle)` + NSWorkspace frontmost. Aynı pencere 15dk+ → fire. **Accessibility permission gerek** (yoksa title boş; bundle bazında dwell hâlâ çalışır).
+- **`upcomingEvent`** — `EKEventStore.predicateForEvents` + 12dk lookahead. 3-10dk window'da event varsa fire. **Calendar permission gerek** (yoksa detector no-op).
+
+v2 (`ProactiveEngine.swift:200-317`) Tier 2 paterninin v3'e modüler çevirisi tamamlandı.
+
+**Test:** Mac 1124 → **1150** (+26 net: +30 yeni Tier 2 + 5 Sprint 38 TriggerKind regression update). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok** (Trigger enum case eklemesi additive; TriggerKind allCases 2→5 ama UserDefaults serialize raw value stable).
+
+### Added — Sprint 39 / ProactiveEngine Tier 2
+
+#### `Sources/PixelMacApp/Proactive/ProactiveTrigger.swift` (genişletme)
+- **3 yeni case:** `.windowDwell(app:title:minutes:bundleID:)`, `.typedPause(app:bundleID:)`, `.upcomingEvent(title:minutesUntil:location:)`.
+- **TriggerKind** +3: `windowDwell`, `typedPause`, `calendar`. Raw value stable.
+- **`PermissionRequirement` yeni enum** — `.none`, `.accessibility`, `.calendar`. Settings UI permission badge'i için.
+- `humanDescription` Turkish copy 3 yeni case için.
+
+#### `Sources/PixelMacApp/Proactive/TypedPauseDetector.swift` (yeni)
+- **Actor** — polling state machine: typingActiveStreak (≥2 ardışık aktif tick gerek), pause window [8s, 30s], >30s ise streak reset.
+- `KeyDownIdleSource` + `FrontAppSource` mockable closures (test'lerde NSLock-backed mutable source).
+- Self filter (kendi pixel-agent kendisinde tetiklemez).
+- Per-bundle dedup: `typedPauseFiredFor` flag.
+- **Permission YOK** — CGEventSource public API.
+
+#### `Sources/PixelMacApp/Proactive/WindowDwellDetector.swift` (yeni)
+- **Actor** — frontmost app + AX title polling. Per-window dwell counter, threshold 15dk default.
+- `WindowSource` mockable; `systemWindowInfo()` AX wrap (`AXUIElementCreateApplication` + `kAXFocusedWindowAttribute` + `kAXTitleAttribute`).
+- `WindowInfo` struct (`appName`, `bundleID`, `title`).
+- Permission yoksa title boş → bundle bazında dwell hâlâ çalışır.
+- Self filter, per-window dedup (`dwellFiredForCurrentWindow`).
+
+#### `Sources/PixelMacApp/Proactive/CalendarEventDetector.swift` (yeni)
+- **Actor** — `EKEventStore` polling 60s. `nextUpcoming(withinMinutes: 12)` query, 3-10dk fire window.
+- `UpcomingEvent` value type (`title`, `startDate`, `location`, `dedupKey: "title@unix_start"`).
+- `isCalendarAuthorized()` static `EKEventStore.authorizationStatus(for: .event)` check.
+- `requestAccessIfNeeded()` macOS 14+ `requestFullAccessToEvents` async.
+- `EventSource` mockable — testlerde EventKit dependency yok.
+- Per-event dedup via `dedupKey`.
+
+#### `Sources/PixelMacApp/Proactive/ProactiveEngine.swift` (wire-up)
+- 3 yeni detector property + start/stop lifecycle.
+- `format(_:)` 3 yeni case ile genişledi (Turkish copy: windowDwell — "N dakikadır penceredesin", typedPause — "yazmayı bıraktın gibi", upcomingEvent — "N dk sonra: X @ Y, hazırlık için").
+
+#### `Sources/PixelMacApp/SettingsView.swift` (Proaktif tab genişletme)
+- **Aktif Tetikleyiciler** section'a per-kind permission badge (checkmark.seal.fill yeşil ya da exclamationmark.triangle.fill turuncu) — bu trigger çalışması için izin var mı yok mu görünür.
+- **İzinler** yeni section:
+  - **Accessibility** — System Settings deep-link (windowDwell için).
+  - **Calendar** — `CalendarEventDetector.requestAccessIfNeeded()` async tetik.
+  - **Durumu Yenile** butonu (`AXIsProcessTrusted` + EKEventStore.authorizationStatus refresh).
+- `refreshPermissionStatuses()` `.task` blok'ta + manuel refresh.
+
+### Tests — Sprint 39
+
+- `Tests/PixelMacAppTests/TypedPauseDetectorTests.swift` — **9 yeni**: pause window happy path, below min streak, below lower bound, above upper bound + reset, dedup same bundle, retyping fires again, self filter, nil front app, stop cancels.
+- `Tests/PixelMacAppTests/WindowDwellDetectorTests.swift` — **7 yeni**: accumulates dwell, resets on window change, fires once, no fire when nil, self bundle filtered, title variant changes key, empty title bundle-only dwell.
+- `Tests/PixelMacAppTests/CalendarEventDetectorTests.swift` — **7 yeni**: 3-10 dk window, below lower bound, above upper bound, dedup same event, fires for new event, no fire when nil, dedupKey format.
+- **Regression update** — `ProactiveTriggerTests` Sprint 38 testleri +5 yeni: allCases 2→5, raw value stable +3 case, permissionRequirements per-kind, Tier 2 humanDescriptions, Tier 2 bundleSuppressionKeys.
+
+### Notes — Sprint 39
+
+- **v2 paritesi tamamlandı.** `ProactiveEngine.swift:14-368` 5 trigger enum case'in tamamı v3'e modüler SPM mimarisinde indi. Pratikte v3'ün proaktif yetenekleri v2 ile fonksiyonel olarak eşdeğer + daha test edilebilir + Sendable-safe + permission-aware.
+- **TypedPause permission YOK:** Beklenmedik iyi haber — `CGEventSource.secondsSinceLastEventType` `.keyDown` event type için public API; CGEventTap (capture) değil, sadece "son keyDown ne zaman" int. v2'de de aynı yaklaşım. Bu yüzden ek izin diyaloğu çıkmaz.
+- **WindowDwell Accessibility downgrade:** Permission yoksa AX title nil → key sadece bundleID + "". Aynı app içinde farklı pencere değişikliği yakalanmaz (Safari'de tab değiştirsen dwell sayıcı reset olmaz). v2 paterniyle uyumlu.
+- **Calendar permission flow:** Settings → İzinler → Calendar "Aç" tıkla → `requestFullAccessToEvents` macOS Calendar permission dialog'u açar. Granted sonrası detector tick'leri event döner; reddedildiyse detector no-op olarak çalışır (hata yok).
+- **TriggerKind raw value compatibility:** Sprint 38 UserDefaults'a yazılmış `["idle", "appChange"]` suppression listeleri Sprint 39'da hâlâ çalışır (additive, missing case'ler decode'da skip).
+
 ## [0.2.65] — 2026-05-26
 
 **Sprint 38 — ProactiveEngine MVP (idle + appChange triggers).** v2'nin (~64k LOC) `ProactiveEngine.swift:14-368` paterni v3'e modüler SPM mimarisinde indi. Agent artık **pasif** olarak çalışıyor — kullanıcı boş kalırsa veya uygulama değiştirirse system notification ile Pixel Agent'a yönlendirir. Tier 1 MVP: idle + appChange (no Accessibility/Calendar permission). Tier 2 (windowDwell, typedPause, calendar) Sprint 39 aday.

@@ -510,6 +510,24 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 38 tamamlandı — ProactiveEngine MVP.** v2'nin pasif UX paterni v3'e MVP olarak indi (idle + appChange, no permission). System notification ile kullanıcıyı yönlendirir; suppression + rate limiter spam'i önler. Sprint 39 Tier 2 (windowDwell, typedPause, calendar) permission-required trigger'lara ayrıldı. Mac test 1081 → 1124 (+43). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 39 — "ProactiveEngine Tier 2 (v2 paritesi)" (v0.2.66)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | enum | `ProactiveTrigger` +3 case (windowDwell/typedPause/upcomingEvent); TriggerKind 2→5 |
+| ✅ | enum | `PermissionRequirement` yeni enum (.none/.accessibility/.calendar) — Settings UI badge için |
+| ✅ | detector | `TypedPauseDetector` actor — CGEventSource keyDown polling, 8-30s pause window state machine, **permission YOK** |
+| ✅ | detector | `WindowDwellDetector` actor — AXUIElement title polling + per-window dwell counter, Accessibility downgrade (title boş → bundle bazında) |
+| ✅ | detector | `CalendarEventDetector` actor — EKEventStore polling 60s, 3-10dk fire window, dedupKey "title@unix_start", Calendar permission |
+| ✅ | engine | ProactiveEngine 3 yeni detector lifecycle + format() Turkish copy 3 yeni case |
+| ✅ | UI | Settings → Proaktif tab: per-kind permission badge (✓/⚠), İzinler section (Accessibility deep-link + Calendar requestAccess + Durumu Yenile) |
+| ✅ | tests | 30 yeni (9 TypedPause + 7 WindowDwell + 7 Calendar + 5 ProactiveTrigger Sprint 38 update + 2 humanDescription/bundle key); Mac 1124 → 1150 |
+| ⏸ | v0.2.67+ | Notification tap → ChatView pre-fill ("Proaktif uyarı: ..." kontekst) |
+| ⏸ | v0.2.67+ | Calendar event metadata Inline (location → harita link, attendees → ChatView'da listele) |
+| ⏸ | v0.2.67+ | iOS proactive (Background App Refresh — sınırlı, calendar widget) |
+
+**26 May 2026: Sprint 39 tamamlandı — v2 paritesi.** v2'nin 5 trigger enum case'in tamamı v3'e modüler SPM mimarisinde indi. typedPause permission YOK (CGEventSource public API). windowDwell Accessibility (yoksa downgrade). upcomingEvent Calendar (yoksa no-op). Settings UI permission badge + System Settings deep-link. Mac test 1124 → 1150 (+26 net). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
