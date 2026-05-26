@@ -622,6 +622,8 @@ private struct ProactiveSettingsTab: View {
     @State private var suppressedKinds: Set<TriggerKind> = []
     @State private var suppressedBundles: [String] = []
     @State private var newBundleDraft: String = ""
+    @State private var accessibilityGranted: Bool = false
+    @State private var calendarGranted: Bool = false
 
     var body: some View {
         Form {
@@ -643,7 +645,10 @@ private struct ProactiveSettingsTab: View {
                     HStack(alignment: .top, spacing: 10) {
                         Toggle(isOn: kindSuppressedBinding(for: kind)) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(kind.displayName)
+                                HStack(spacing: 6) {
+                                    Text(kind.displayName)
+                                    permissionBadge(for: kind)
+                                }
                                 Text(kind.description)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
@@ -655,7 +660,44 @@ private struct ProactiveSettingsTab: View {
             } header: {
                 Text("Aktif Tetikleyiciler")
             } footer: {
-                Text("İşaretli kalanlar çalışır; kaldırılanlar suspend edilir.")
+                Text("İşaretli kalanlar çalışır; kaldırılanlar suspend edilir. İzin gerektiren trigger'lar için aşağıdaki bölüme bakın.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                // Accessibility (windowDwell için)
+                permissionRow(
+                    title: "Accessibility",
+                    description: "Pencere başlığı okuma — windowDwell trigger için.",
+                    granted: accessibilityGranted,
+                    openAction: {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                )
+                // Calendar (upcomingEvent için)
+                permissionRow(
+                    title: "Calendar",
+                    description: "Yaklaşan toplantı bildirimi — upcomingEvent trigger için.",
+                    granted: calendarGranted,
+                    openAction: {
+                        Task {
+                            _ = await CalendarEventDetector.requestAccessIfNeeded()
+                            await refreshPermissionStatuses()
+                        }
+                    }
+                )
+
+                Button("Durumu Yenile") {
+                    Task { await refreshPermissionStatuses() }
+                }
+                .controlSize(.small)
+            } header: {
+                Text("İzinler")
+            } footer: {
+                Text("İzin verilmemiş trigger'lar uygulama içinde no-op olur (hata yok).")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -713,10 +755,62 @@ private struct ProactiveSettingsTab: View {
         }
         .formStyle(.grouped)
         .padding(.horizontal, 4)
-        .task { await reloadSuppression() }
+        .task {
+            await reloadSuppression()
+            await refreshPermissionStatuses()
+        }
     }
 
     // MARK: - Helpers
+
+    @ViewBuilder
+    private func permissionBadge(for kind: TriggerKind) -> some View {
+        switch kind.permissionRequirement {
+        case .none:
+            EmptyView()
+        case .accessibility:
+            Image(systemName: accessibilityGranted ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(accessibilityGranted ? .green : .orange)
+                .font(.caption2)
+                .help(accessibilityGranted ? "Accessibility izni var" : "Accessibility izni gerek")
+        case .calendar:
+            Image(systemName: calendarGranted ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(calendarGranted ? .green : .orange)
+                .font(.caption2)
+                .help(calendarGranted ? "Calendar izni var" : "Calendar izni gerek")
+        }
+    }
+
+    @ViewBuilder
+    private func permissionRow(
+        title: String,
+        description: String,
+        granted: Bool,
+        openAction: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: granted ? "checkmark.seal.fill" : "xmark.seal.fill")
+                .foregroundStyle(granted ? .green : .orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.callout)
+                Text(description).font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !granted {
+                Button("Aç") { openAction() }
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private func refreshPermissionStatuses() async {
+        // Accessibility — AXIsProcessTrusted (sync API)
+        accessibilityGranted = AXIsProcessTrusted()
+        // Calendar — EKEventStore status (MainActor)
+        calendarGranted = await MainActor.run {
+            CalendarEventDetector.isCalendarAuthorized()
+        }
+    }
 
     private func kindSuppressedBinding(for kind: TriggerKind) -> Binding<Bool> {
         Binding(

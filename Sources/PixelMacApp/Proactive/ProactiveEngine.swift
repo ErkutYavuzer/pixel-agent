@@ -30,6 +30,10 @@ public actor ProactiveEngine {
 
     private var idleDetector: IdleDetector?
     private var appObserver: AppChangeObserver?
+    private var typedPauseDetector: TypedPauseDetector?
+    private var windowDwellDetector: WindowDwellDetector?
+    private var calendarDetector: CalendarEventDetector?
+
     private var rateLimiter: ProactiveRateLimiter
     private var suppression: SuppressionStore
     private let deliver: Delivery
@@ -83,14 +87,48 @@ public actor ProactiveEngine {
         )
         await observer.start()
         appObserver = observer
+
+        // Sprint 39 (v0.2.66): Tier 2 detector'lar
+        // TypedPause — permission YOK
+        let typed = TypedPauseDetector(onFire: { [weak self] name, bundle in
+            await self?.handle(.typedPause(app: name, bundleID: bundle))
+        })
+        await typed.start()
+        typedPauseDetector = typed
+
+        // WindowDwell — Accessibility permission gerek (yoksa title boş, dwell
+        // bundle bazında çalışır)
+        let dwell = WindowDwellDetector(onFire: { [weak self] name, bundle, title, minutes in
+            await self?.handle(.windowDwell(
+                app: name, title: title, minutes: minutes, bundleID: bundle
+            ))
+        })
+        await dwell.start()
+        windowDwellDetector = dwell
+
+        // Calendar — EKEventStore permission gerek (yoksa detector no-op olur,
+        // tick'lerde event source nil döner, fire çıkmaz)
+        let calendar = CalendarEventDetector(onFire: { [weak self] title, minutesUntil, location in
+            await self?.handle(.upcomingEvent(
+                title: title, minutesUntil: minutesUntil, location: location
+            ))
+        })
+        await calendar.start()
+        calendarDetector = calendar
     }
 
     /// **Sprint 38:** Engine durdur. Detector'lar cancel olur.
     public func stop() async {
         await idleDetector?.stop()
         await appObserver?.stop()
+        await typedPauseDetector?.stop()
+        await windowDwellDetector?.stop()
+        await calendarDetector?.stop()
         idleDetector = nil
         appObserver = nil
+        typedPauseDetector = nil
+        windowDwellDetector = nil
+        calendarDetector = nil
         isRunning = false
     }
 
@@ -134,6 +172,23 @@ public actor ProactiveEngine {
             return (
                 title: "Pixel Agent — \(name)",
                 body: "Bu uygulamayla ilgili sorularınız için Pixel Agent'a yazabilirsiniz."
+            )
+        case .windowDwell(let app, let title, let minutes, _):
+            let titleSuffix = title.isEmpty ? "" : " — \(title)"
+            return (
+                title: "Pixel Agent — \(app)\(titleSuffix)",
+                body: "\(minutes) dakikadır bu pencerede çalışıyorsun. Tıkanan bir şey var mı?"
+            )
+        case .typedPause(let app, _):
+            return (
+                title: "Pixel Agent — \(app)",
+                body: "Yazmayı bıraktın gibi görünüyor. Yardım ister misin?"
+            )
+        case .upcomingEvent(let title, let minutesUntil, let location):
+            let locSuffix = location.map { " @ \($0)" } ?? ""
+            return (
+                title: "Pixel Agent — yaklaşan toplantı",
+                body: "\(minutesUntil) dk sonra: \(title)\(locSuffix). Hazırlık için Pixel Agent'a danışabilirsin."
             )
         }
     }
