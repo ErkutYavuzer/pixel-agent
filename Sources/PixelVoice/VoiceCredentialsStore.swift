@@ -73,7 +73,7 @@ public enum VoiceProviderKind: String, CaseIterable, Sendable, Codable {
     public var displayName: String {
         switch self {
         case .apple: return "Apple Speech (lokal)"
-        case .openaiRealtime: return "OpenAI Realtime (Sprint 43)"
+        case .openaiRealtime: return "OpenAI Realtime"
         case .geminiLive: return "Gemini Live (Sprint 44)"
         }
     }
@@ -83,18 +83,23 @@ public enum VoiceProviderKind: String, CaseIterable, Sendable, Codable {
         case .apple:
             return "SFSpeechRecognizer + AVSpeechSynthesizer. Lokal, ücretsiz, sıfır API key, ~100ms latency. Function calling ve interrupt zayıf."
         case .openaiRealtime:
-            return "OpenAI Realtime WebSocket API. Server-side VAD, interruptible, function calling, ~$0.06/min input. (Sprint 43'te tam destek.)"
+            return "OpenAI Realtime WebSocket API. Server-side VAD otomatik segment + response. PCM16 24kHz audio. ~$0.06/min input, ~$0.24/min output. Function calling Sprint 44'te."
         case .geminiLive:
             return "Gemini Live WebSocket API. Server-side VAD, interruptible, multimodal. (Sprint 44'te tam destek.)"
         }
     }
 
     /// **Sprint 42:** Provider kullanıma hazır mı? `apple` her zaman true;
-    /// `openaiRealtime`/`geminiLive` Sprint 43-44'te aktif olacak.
+    /// `openaiRealtime` Sprint 43'te aktif; `geminiLive` Sprint 44.
     public var isAvailable: Bool {
         switch self {
         case .apple: return true
-        case .openaiRealtime, .geminiLive: return false  // Sprint 43-44
+        case .openaiRealtime: return true   // Sprint 43 (v0.2.70)
+        case .geminiLive: return false      // Sprint 44
         }
     }
+
+    /// **Sprint 43 (v0.2.70):** UserDefaults toggle anahtarı — aktif provider.
+    /// nil → default `.apple` (geriye uyumluluk).
+    public static let activeProviderDefaultsKey = "pixel.voice.activeProvider"
 }

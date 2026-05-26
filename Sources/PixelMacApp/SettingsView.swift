@@ -904,17 +904,21 @@ private struct ProactiveSettingsTab: View {
 // MARK: - Voice tab (Sprint 42 / v0.2.69)
 
 private struct VoiceSettingsTab: View {
-    @State private var selectedProvider: VoiceProviderKind = .apple
+    @AppStorage(VoiceProviderKind.activeProviderDefaultsKey) private var activeProviderRaw: String = VoiceProviderKind.apple.rawValue
     @State private var openaiKey: String = ""
     @State private var geminiKey: String = ""
     @State private var openaiKeyMasked: Bool = true
     @State private var geminiKeyMasked: Bool = true
     @State private var loadedKeys: Bool = false
 
+    private var selectedProvider: VoiceProviderKind {
+        VoiceProviderKind(rawValue: activeProviderRaw) ?? .apple
+    }
+
     var body: some View {
         Form {
             Section {
-                Picker("Sağlayıcı", selection: $selectedProvider) {
+                Picker("Sağlayıcı", selection: $activeProviderRaw) {
                     ForEach(VoiceProviderKind.allCases, id: \.self) { provider in
                         HStack {
                             Text(provider.displayName)
@@ -924,17 +928,20 @@ private struct VoiceSettingsTab: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .tag(provider)
+                        .tag(provider.rawValue)
                     }
                 }
                 Text(selectedProvider.description)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Text("Provider değişikliği için uygulamayı yeniden başlatın.")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
             } header: {
                 Text("Voice Provider")
             } footer: {
-                Text("ChatComposer'da mikrofon butonuna tıklayınca aktif olur. Apple Speech lokal ve ücretsiz; OpenAI/Gemini Sprint 43-44'te eklenecek.")
+                Text("ChatComposer'da mikrofon butonuna tıklayınca aktif olur. Apple Speech lokal ve ücretsiz; OpenAI Realtime API key + cüzdan gerek.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

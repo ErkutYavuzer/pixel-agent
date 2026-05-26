@@ -106,12 +106,27 @@ struct RootView: View {
     /// detector task'ları cancel eder).
     static let proactiveEngine = ProactiveEngine()
 
-    /// **Sprint 42 (v0.2.69):** Voice provider singleton — AppleVoice
-    /// (lokal, ücretsiz). Sprint 43-44'te kullanıcı Settings'ten provider
-    /// seçer (Apple/OpenAI/Gemini). Şu an MVP'de sabit AppleVoiceProvider.
-    static let voiceProvider: any PixelVoice.VoiceProvider = AppleVoiceProvider(
-        locale: Locale(identifier: "tr-TR")
-    )
+    /// **Sprint 42-43:** Voice provider factory — UserDefaults'tan aktif
+    /// provider okur, runtime'da instance üretir. Apple (lokal) veya OpenAI
+    /// Realtime (WebSocket, Sprint 43). Gemini Live Sprint 44'te.
+    static func makeVoiceProvider() -> any PixelVoice.VoiceProvider {
+        let raw = UserDefaults.standard.string(forKey: VoiceProviderKind.activeProviderDefaultsKey)
+        let kind = raw.flatMap { VoiceProviderKind(rawValue: $0) } ?? .apple
+        switch kind {
+        case .apple:
+            return AppleVoiceProvider(locale: Locale(identifier: "tr-TR"))
+        case .openaiRealtime:
+            return OpenAIRealtimeProvider()
+        case .geminiLive:
+            // Sprint 44 aday — şu an Apple fallback
+            return AppleVoiceProvider(locale: Locale(identifier: "tr-TR"))
+        }
+    }
+
+    /// **Sprint 42:** Voice provider singleton — `makeVoiceProvider()`
+    /// app launch'ta bir kez çağrılır. Provider değişince app restart
+    /// gerekir (Settings'te uyarı).
+    static let voiceProvider: any PixelVoice.VoiceProvider = makeVoiceProvider()
 
     /// MCP server'ın bundle-bağımlı tool isteklerini dinleyen Unix socket
     /// sunucusunu (`ControlSocketServer`) açılışta başlatır. Hata olursa
