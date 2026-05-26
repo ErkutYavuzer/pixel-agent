@@ -36,14 +36,63 @@ final class RelayURLResolverTests: XCTestCase {
         XCTAssertEqual(url, "wss://env.example.com")
     }
 
-    func testFallbackToLANOrLocalhost() {
+    func testFallbackResolvesToProductionOrLowerTier() {
+        // **Sprint 49 (v0.2.77):** productionURL non-nil olduğunda 3. tier
+        // bağlanır. Custom + env yoksa production URL döner.
         let url = RelayURLResolver.resolve(defaults: defaults, environment: [:])
         XCTAssertTrue(
             url.hasPrefix("ws://") || url.hasPrefix("wss://"),
-            "LAN veya localhost fallback bir WS URL döndürmeli"
+            "Fallback bir WS URL döndürmeli"
         )
-        // En azından localhost
-        XCTAssertTrue(url.contains("8787"), "Port 8787 her fallback'te")
+        if let prod = RelayURLResolver.productionURL {
+            XCTAssertEqual(url, prod, "productionURL non-nil ise 3. tier seçilmeli")
+        } else {
+            XCTAssertTrue(url.contains("8787"), "productionURL nil ise LAN/localhost port 8787")
+        }
+    }
+
+    // MARK: - Sprint 49 — Production URL
+
+    func testProductionURLIsConfigured() {
+        // Sprint 49 sonrası productionURL set'li olmalı (wss:// + workers.dev).
+        guard let prod = RelayURLResolver.productionURL else {
+            XCTFail("Sprint 49+: productionURL hardcoded set olmalı")
+            return
+        }
+        XCTAssertTrue(prod.hasPrefix("wss://"),
+                      "Production URL TLS WebSocket olmalı (wss://)")
+        XCTAssertTrue(prod.contains("workers.dev") || prod.contains("."),
+                      "Production URL bir domain içermeli")
+    }
+
+    func testSourceProductionWhenNoOverrides() {
+        // Custom yok + env yok + productionURL var → .production source
+        let source = RelayURLResolver.resolveSource(defaults: defaults, environment: [:])
+        if RelayURLResolver.productionURL != nil {
+            if case .production(let url) = source {
+                XCTAssertEqual(url, RelayURLResolver.productionURL)
+            } else {
+                XCTFail("productionURL set'liyken .production bekleniyordu, oldu: \(source)")
+            }
+        }
+    }
+
+    func testProductionStillOverridableByCustom() {
+        // Sprint 49 sonrası bile custom override en yüksek öncelikli.
+        defaults.set("wss://my-override.example.com", forKey: RelayURLResolver.customURLDefaultsKey)
+        let url = RelayURLResolver.resolve(defaults: defaults, environment: [:])
+        XCTAssertEqual(url, "wss://my-override.example.com",
+                       "Custom URL productionURL'i ezmeli")
+    }
+
+    func testProductionStillOverridableByEnv() {
+        // Env override (PIXEL_RELAY_URL) production'dan daha öncelikli.
+        let url = RelayURLResolver.resolve(
+            defaults: defaults,
+            environment: ["PIXEL_RELAY_URL": "wss://my-env.example.com"]
+        )
+        XCTAssertEqual(url, "wss://my-env.example.com",
+                       "Env URL productionURL'i ezmeli")
     }
 
     // MARK: - Source classification
@@ -71,12 +120,14 @@ final class RelayURLResolverTests: XCTestCase {
     }
 
     func testSourceFallback() {
+        // **Sprint 49 (v0.2.77):** productionURL non-nil ise .production
+        // bekleniyor; nil ise LAN/localhost.
         let source = RelayURLResolver.resolveSource(defaults: defaults, environment: [:])
         switch source {
-        case .lan, .localhost:
-            break  // Beklenen
+        case .production, .lan, .localhost:
+            break  // Beklenen — productionURL set'liyse .production, değilse LAN/localhost
         default:
-            XCTFail("LAN veya localhost fallback bekleniyordu, oldu: \(source)")
+            XCTFail("Production veya LAN/localhost fallback bekleniyordu, oldu: \(source)")
         }
     }
 

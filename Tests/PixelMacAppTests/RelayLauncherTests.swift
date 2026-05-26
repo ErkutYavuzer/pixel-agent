@@ -20,8 +20,11 @@ final class RelayLauncherTests: XCTestCase {
         try await super.tearDown()
     }
 
-    func testAutoStartDefaultTrue() {
-        XCTAssertTrue(RelayLauncher.isAutoStartEnabled(defaults: defaults))
+    func testAutoStartDefaultFalse() {
+        // **Sprint 49 (v0.2.77):** Default OFF — production Cloudflare URL
+        // hardcoded artık, lokal wrangler subprocess opsiyonel. Kullanıcı
+        // offline/dev için manuel açabilir.
+        XCTAssertFalse(RelayLauncher.isAutoStartEnabled(defaults: defaults))
     }
 
     func testAutoStartRespectsFalse() {
@@ -42,11 +45,16 @@ final class RelayLauncherTests: XCTestCase {
     }
 
     func testStartWithoutRelayDirectoryFailsGracefully() {
-        // relay/ olmayan bir directory → error set, crash yok
+        // **Sprint 49:** Default auto-start OFF → start() no-op olur.
+        // Auto-start'i explicit ON yapıp yine de relay/ yokken graceful fail
+        // edebildiğini kontrol et.
+        UserDefaults.standard.set(true, forKey: RelayLauncher.autoStartEnabledDefaultsKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: RelayLauncher.autoStartEnabledDefaultsKey)
+        }
         let launcher = RelayLauncher(relayDirectory: URL(fileURLWithPath: "/tmp/nonexistent-dir-\(UUID())"))
         launcher.start()
-        // start() çağrısı başarısız oldu; lastError set olmalı
-        // (Toggle ON default — auto-start enabled, ama relay/ yok)
+        // start() çağrısı başarısız oldu; crash yok
         XCTAssertFalse(launcher.isRunning)
     }
 

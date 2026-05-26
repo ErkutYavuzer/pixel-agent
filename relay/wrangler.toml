@@ -9,4 +9,6 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["RelaySession"]
+# SQLite-backed Durable Objects (free plan compatible).
+# new_classes (key-value DO) requires Workers Paid; new_sqlite_classes is free.
+new_sqlite_classes = ["RelaySession"]

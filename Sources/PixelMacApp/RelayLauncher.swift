@@ -57,11 +57,15 @@ final class RelayLauncher: ObservableObject {
     }
 
     /// **Sprint 47:** UserDefaults nil-safe.
+    /// **Sprint 49 (v0.2.77):** Default **false** — production Cloudflare URL
+    /// artık var (`RelayURLResolver.productionURL`), lokal wrangler subprocess
+    /// opsiyonel. Kullanıcı offline/dev için manuel açabilir. Explicit set'li
+    /// kullanıcılar (Sprint 47-48'de true/false yapanlar) etkilenmez.
     static func isAutoStartEnabled(defaults: UserDefaults = .standard) -> Bool {
         if let stored = defaults.object(forKey: autoStartEnabledDefaultsKey) as? Bool {
             return stored
         }
-        return true  // default ON
+        return false  // Sprint 49: default OFF (production URL handles iOS connection)
     }
 
     /// **Sprint 47:** Production app bundle Resources/relay/ veya dev repo

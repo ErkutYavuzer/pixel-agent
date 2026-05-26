@@ -22,8 +22,11 @@ public enum RelayURLResolver: Sendable {
     public static let envVarName = "PIXEL_RELAY_URL"
 
     /// **Sprint 47:** Production Cloudflare URL — `wrangler deploy` sonrası
-    /// hardcoded. Şu an `nil` (kullanıcı kendi deploy etmeli).
-    public static let productionURL: String? = nil
+    /// hardcoded. **Sprint 49 (v0.2.77):** `wrangler deploy` çalıştırıldı,
+    /// public production URL aktif. `wss://` (WebSocket over TLS) — Cloudflare
+    /// Worker Durable Object endpoint'i. iOS + Mac aynı public URL'e bağlanır;
+    /// kullanıcı Mac sleep/quit'te de relay her zaman ayakta (Cloudflare edge).
+    public static let productionURL: String? = "wss://pixel-agent-relay.erkutyavuzer.workers.dev"
 
     /// **Sprint 47:** Resolve order ile relay URL döndür.
     /// `defaults` ve `environment` test edilebilirlik için inject edilir.

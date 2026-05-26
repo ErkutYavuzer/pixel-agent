@@ -679,6 +679,18 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **27 May 2026: Sprint 48 tamamlandı — Homebrew kullanıcılar için relay portability.** Sprint 47'de relay launcher dev repo path'ine veya bundle resources'a bağımlıydı; Homebrew install kullanıcıları repo'yu klonlamadan kullanamıyordu. Sprint 48 relay kaynak dosyalarını bundle Resources'a (node_modules HARIÇ) kopyalıyor, ilk launch'ta writable Application Support'a açıyor, async `npm install` tetikliyor. Bundle 7.9 MB kalır (delta ~60KB). Mac test 1355 → 1364 (+9). iOS xcodebuild BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 49 — "Production Cloudflare deploy + hardcoded URL" (v0.2.77)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | deploy | `wrangler deploy` çalıştırıldı — public URL `pixel-agent-relay.erkutyavuzer.workers.dev`; SQLite DO migration (`new_classes` → `new_sqlite_classes`) free plan compat için |
+| ✅ | resolver | `RelayURLResolver.productionURL` = `"wss://pixel-agent-relay.erkutyavuzer.workers.dev"` (Sprint 47'de nil placeholder) |
+| ✅ | launcher | `RelayLauncher.isAutoStartEnabled` default `false` — production URL artık var, yerel wrangler opsiyonel; explicit set'li kullanıcılar etkilenmez |
+| ✅ | tests | +4 yeni RelayURLResolverTests + 2 mevcut tier-expectation update + 2 mevcut RelayLauncherTests update (default false) |
+| ⏸ | post-deploy | workers.dev subdomain dashboard activate (kullanıcı one-time UI iş — TLS handshake doğrulaması sonrası iOS canlı production URL'e bağlanır) |
+
+**27 May 2026: Sprint 49 tamamlandı — Production relay default.** Sprint 47-48'de lokal wrangler subprocess + bundle copy + lazy npm install ile iOS bağlantı sorunu büyük ölçüde çözülmüştü; Sprint 49 son boşluğu (Mac sleep/quit'te relay düşüyor) Cloudflare edge deploy ile kapatıyor. Fresh Homebrew install kullanıcısı için: app açıldığında **hiç wrangler subprocess yok**, RelayURLResolver doğrudan public wss:// URL seçer, npm install ilk launch akışı tetiklenmez. Settings'ten kullanıcı offline/dev için manual açabilir. Mac test 1364 → 1368 (+4 net). iOS BUILD SUCCEEDED. Breaking change: auto-start default true→false (explicit set'liler etkilenmez).
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

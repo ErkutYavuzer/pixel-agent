@@ -12,6 +12,46 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.77] — 2026-05-27
+
+**Sprint 49 — Production Cloudflare Worker deploy + hardcoded production URL.** Sprint 47'de `RelayLauncher` lokal `wrangler dev` subprocess'ini otomatik başlatıyordu; bu Mac restart'ta + bundle copy'de büyük UX iyileştirmeydi ama hâlâ **Mac sleep/quit'te relay düşüyordu**. Sprint 49 production Cloudflare Worker deploy ile son boşluğu kapatıyor: relay artık Cloudflare edge'inde her zaman ayakta, iOS Mac'tan bağımsız olarak public URL'e bağlanır.
+
+**Adımlar:**
+
+1. **`wrangler deploy`** çalıştırıldı (free plan compat için `new_classes` → `new_sqlite_classes` migration). Public URL: `pixel-agent-relay.erkutyavuzer.workers.dev`.
+2. **`RelayURLResolver.productionURL`** artık hardcoded `wss://pixel-agent-relay.erkutyavuzer.workers.dev`. Resolver chain 3. tier (custom > env > **production** > LAN > localhost).
+3. **`RelayLauncher.isAutoStartEnabled` default `false`** — yerel wrangler subprocess opsiyonel. Production URL handles iOS connection by default. Kullanıcı offline/dev için Settings'ten açabilir.
+
+**Sonuç:** Fresh Homebrew install kullanıcısı app'i açtığında **hiç wrangler subprocess'i başlamaz**, RelayURLResolver doğrudan production Cloudflare URL'i seçer, iOS pairing aynı public URL'e bağlanır. Mac sleep/quit etkilemez. ~30sn npm install ilk launch akışı da artık tetiklenmez (default OFF).
+
+**Test:** Mac 1364 → **1368** (+4: testProductionURLIsConfigured + testSourceProductionWhenNoOverrides + testProductionStillOverridableByCustom + testProductionStillOverridableByEnv; 2 mevcut test updated: testFallbackResolvesToProductionOrLowerTier + testSourceFallback). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change:** auto-start default true → false. Sprint 47-48 kullanıcıları (explicit set'liler) etkilenmez; sadece sıfırdan kuran/UserDefaults sıfırlayanlar default-off.
+
+### Added — Sprint 49 / Production Cloudflare deploy
+
+#### `Sources/PixelMacApp/RelayURLResolver.swift`
+- **`productionURL`** static: `"wss://pixel-agent-relay.erkutyavuzer.workers.dev"`. Sprint 47'de placeholder `nil`'di; Sprint 49 deploy sonrası hardcoded.
+
+#### `relay/wrangler.toml`
+- **Migration `new_classes` → `new_sqlite_classes`** — Cloudflare Workers free plan compat. SQLite-backed Durable Objects key-value DO'lardan farklı backend ama API uyumlu.
+
+### Changed — Sprint 49
+
+#### `Sources/PixelMacApp/RelayLauncher.swift`
+- **`isAutoStartEnabled` default `false`** — production URL artık var, yerel wrangler subprocess opsiyonel. Explicit `true`/`false` set'li UserDefaults değerleri öncelikli.
+
+### Tests — Sprint 49
+
+- `Tests/PixelMacAppTests/RelayURLResolverTests.swift` — **+4 yeni**: productionURL configured + wss:// prefix + Source.production when no overrides + custom-override-precedence + env-override-precedence. 2 mevcut test updated (fallback tier expectations).
+- `Tests/PixelMacAppTests/RelayLauncherTests.swift` — **2 mevcut test güncellendi**: `testAutoStartDefaultFalse` (eskiden True bekliyordu) + `testStartWithoutRelayDirectoryFailsGracefully` (artık explicit true set ile test).
+
+### Notes — Sprint 49
+
+- **Free plan SQLite DO:** Cloudflare 2024'te Workers free plan'i Durable Object'lere açtı ama yalnızca SQLite-backed (`new_sqlite_classes`); key-value DO'lar paid plan'a kaldı. Migration tag aynı (`v1`), backend tipi farklı — kod tarafında transparan (aynı `DurableObjectStub` API).
+- **Workers.dev subdomain activation:** Cloudflare yeni hesaplarda workers.dev erişimini default kapalı tutuyor; dashboard'da bir kerelik "Activate" tıklaması gerek. Bu commit sonrası TLS handshake doğrulanırsa iOS production URL'e direkt bağlanır.
+- **Lokal wrangler hâlâ destekli:** Settings → Bağlantı → "Wrangler'ı Otomatik Başlat" toggle'ı offline development için açılabilir; bundle copy + lazy npm install (Sprint 48) çalışmaya devam eder.
+- **Backward compat:** Sprint 47-48 kullanıcıları auto-start'ı explicit `true` set ettiyse (Settings toggle'ı kullanmamış olsalar bile UI'da görmüş olabilirler), upgrade'de değişmez. Yalnızca hiç dokunmamışlar artık OFF default.
+- **iOS pairing değişmez:** Saved pairing URL üzerinden çalışır; production URL ResolverInfo'dan gelir, pairing payload değişmez.
+
 ## [0.2.76] — 2026-05-27
 
 **Sprint 48 — Relay bundle copy + lazy npm install.** Sprint 47'de RelayLauncher Mac app launch'ta `npx wrangler dev` subprocess'i otomatik başlatıyor; ancak `relayDirectory` sadece dev repo path'inde (`/Users/erkut/Projects/pixel-agent/relay`) veya production'da Bundle Resources'da bulunabiliyordu — **Homebrew install kullanıcıları repo'yu klonlamadan relay'i kullanamıyordu**. Sprint 48 bu son boşluğu kapatıyor: `relay/` kaynak dosyaları artık `PixelAgent.app/Contents/Resources/relay/` altında bundle'lanır (node_modules HARIÇ), ilk launch'ta Application Support'a kopyalanır ve `npm install` async tetiklenir.
