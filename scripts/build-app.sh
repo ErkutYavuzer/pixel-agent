@@ -19,8 +19,8 @@ APP_NAME="PixelAgent"
 APP_BUNDLE="${APP_NAME}.app"
 EXECUTABLE_NAME="${APP_NAME}"
 BUNDLE_ID="dev.erkutyavuzer.pixel-agent"
-VERSION="0.2.68"
-BUILD="68"
+VERSION="0.2.69"
+BUILD="69"
 
 echo "→ swift build -c ${CONFIG}"
 swift build -c "${CONFIG}"
@@ -75,6 +75,10 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
     <array>
         <string>_pixel-agent._tcp</string>
     </array>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Sesli komut için mikrofona erişim. Tamamı lokal (Apple Speech) çalışır.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Konuşmayı metne çevirmek için Apple konuşma tanıma servisi. Lokal çalışır.</string>
 </dict>
 </plist>
 EOF

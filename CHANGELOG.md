@@ -12,6 +12,90 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.69] — 2026-05-26
+
+**Sprint 42 — Realtime Voice Faz 1: Foundation + Apple Speech MVP.** v3'e ilk kez **sesli mod**. v2'nin (~64k LOC) `Realtime/*.swift` (9 dosya, GeminiLiveSession + OpenAIRealtimeVoiceProvider + RealtimeAudioIO) paterninin foundation katmanı modüler SPM mimarisinde indi.
+
+**Pragmatik scope kararı:** Tam OpenAI Realtime / Gemini Live WebSocket implementation tek sprint'te = 6+ saat iş + API key + cüzdan yakar. Incremental yaklaşım:
+
+- **Sprint 42 (bu release):** Foundation + Apple Speech (SFSpeechRecognizer + AVSpeechSynthesizer; lokal, ücretsiz, sıfır API key)
+- **Sprint 43:** OpenAI Realtime WebSocket gerçek
+- **Sprint 44:** Gemini Live WebSocket gerçek
+
+**Apple Speech avantajları:** Sıfır maliyet, lokal/privacy, hızlı (~100ms), provider abstraction'ı doğrular. Tam Realtime değil (interrupt zayıf, function calling YOK) ama %80 UX'i karşılar.
+
+**Akış:**
+1. Kullanıcı ChatComposer mic FAB butonuna tıklar
+2. `VoiceSession.startCapture()` → `AppleVoiceProvider.start()` → SFSpeechRecognitionTask
+3. Interim transcript → `viewModel.draft` (canlı preview)
+4. Final segment → `viewModel.send(text:)` (otomatik gönder)
+5. Agent cevap streaming → `onAssistantComplete` → `provider.speak(text)` (AVSpeechSynthesizer TTS)
+6. Mic tekrar tıkla → `stopCapture()`
+
+**Test:** Mac 1212 → **1239** (+27: 7 MockVoiceProvider + 7 TranscriptEvent + 13 VoiceCredentialsStore). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok** (yeni library + opsiyonel composer parametre).
+
+### Added — Sprint 42 / Voice Foundation
+
+#### `Sources/PixelVoice/` (yeni library, Package.swift'e eklendi)
+- **`VoiceProvider` protocol** (`Sendable`) — `start()`, `stop()`, `speak(_:)`, `cancelSpeech()`, `transcriptEvents: AsyncStream`, `providerName`, `isAuthorized()`.
+- **`TranscriptEvent` enum** — `.interim(text:)` / `.final(text:)` / `.error(message:)` + `text` accessor + `isFinal` Bool.
+- **`MockVoiceProvider` actor** — programmable test harness, `enqueue(_:)` scripted events, `snapshotSpokenTexts()` introspection.
+- **`AppleVoiceProvider` actor** — SFSpeechRecognizer + AVSpeechSynthesizer wrapper. `tr-TR` locale default; permission flow (`SFSpeechRecognizer.requestAuthorization` + `AVCaptureDevice.requestAccess`); audio engine tap → recognition request; cancel speech.
+- **`VoiceCredentialsStore` struct** (`@unchecked Sendable`) — UserDefaults-backed API key store; `setOpenAIKey/openaiKey/setGeminiKey/geminiKey/hasKey(for:)`. Sprint 43-44'te kullanılacak.
+- **`VoiceProviderKind` enum** — `.apple` / `.openaiRealtime` / `.geminiLive` + displayName/description/isAvailable.
+- **`VoiceError` enum** — notAuthorized / recognizerUnavailable / audioEngineFailure.
+
+#### `Sources/PixelMacApp/VoiceSession.swift` (yeni)
+- **`VoiceSession` ObservableObject (@MainActor)** — `VoiceProvider` stream → ChatViewModel köprüsü.
+- `@Published isActive/lastError/liveTranscript`.
+- `startCapture()` / `stopCapture()` lifecycle + `attach(to viewModel:)`.
+- `speakAssistantReply(_:)` agent cevap TTS; `interruptSpeech()` cancel.
+- Transcript handle: interim → `viewModel.injectDraft(text)`, final → `viewModel.send(text:)`.
+
+#### `Sources/PixelMacApp/ChatComposer.swift` (genişletme)
+- **Yeni opsiyonel params:** `onToggleVoice: (() -> Void)?` + `isVoiceActive: Bool`.
+- Mic FAB button — aktif iken `mic.fill` kırmızı, değilse `mic.circle` primary. `.help` tooltip.
+- Subagent dispatch ile aynı pattern (opsiyonel callback).
+
+#### `Sources/PixelMacApp/ChatView.swift` (entegrasyon)
+- `@StateObject voiceSession = VoiceSession(provider: RootView.voiceProvider)`.
+- `.onAppear` `voiceSession.attach(to: viewModel)`.
+- `toggleVoice()` helper — mic button → start/stop.
+- ChatComposer'a `onToggleVoice: toggleVoice, isVoiceActive: voiceSession.isActive` geçer.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **`RootView.voiceProvider: any VoiceProvider`** singleton — sabit `AppleVoiceProvider(locale: tr-TR)`. Sprint 43-44'te provider picker (Settings).
+
+#### `Sources/PixelMacApp/SettingsView.swift` (8. tab)
+- **`SettingsTab.voice`** `mic` icon, "Sesli Mod" tab.
+- **`VoiceSettingsTab`** struct — 3 section:
+  1. **Voice Provider:** Picker (apple/openai/gemini) + description caption
+  2. **API Anahtarları:** OpenAI + Gemini secure field + eye toggle + Kaydet button
+  3. **İzinler:** "Mikrofon ve Konuşma Tanıma" System Settings deep-link
+
+#### `scripts/build-app.sh` (Mac Info.plist)
+- **`NSMicrophoneUsageDescription`** — "Sesli komut için mikrofona erişim..."
+- **`NSSpeechRecognitionUsageDescription`** — "Konuşmayı metne çevirmek için..."
+
+### Tests — Sprint 42
+
+- `Tests/PixelVoiceTests/MockVoiceProviderTests.swift` — **7 yeni**: start/stop state, speak text capture, isAuthorized true, providerName, transcript stream receives events, cancelSpeech no-op.
+- `Tests/PixelVoiceTests/TranscriptEventTests.swift` — **7 yeni**: text accessor interim/final/error, isFinal accessor, equatable variants.
+- `Tests/PixelVoiceTests/VoiceCredentialsStoreTests.swift` — **13 yeni**: empty store, set/read OpenAI, set/read Gemini, set nil removes, set whitespace removes, hasKey 3 provider, VoiceProviderKind 4 testler.
+- **Regression update** — `SettingsTabTests` 7→8 case (voice eklendi).
+
+### Notes — Sprint 42
+
+- **Sprint 42 KASITLA Apple Speech MVP:** Tam Realtime tek sprint riskli — provider abstraction + working voice mode + UI iskelet öncelik. OpenAI/Gemini Realtime WebSocket Sprint 43-44.
+- **Apple Speech limitasyonları (Sprint 43+'da aşılır):**
+  - **Interrupt zayıf** — agent konuşurken kullanıcı sözünü kesemez (TTS queue'da). OpenAI Realtime server-side VAD ile düzgün interrupt.
+  - **Function calling YOK** — voice modunda MCP tool çağrısı yok (sadece text → CLI backend → text → speak).
+  - **Türkçe destek vardır** — `tr-TR` locale default; iyi çalışıyor.
+- **`VoiceCredentialsStore` placeholder:** Sprint 42'de UserDefaults — Settings UI'da kaydedebilirsin, Sprint 43-44'te WebSocket provider okuyacak. Şu an Apple Speech key gerektirmediği için kullanılmaz. v0.3+ Keychain migration aday.
+- **Otomatik send:** Final transcript segment automatically `viewModel.send(text:)` çağırır — voice akışı doğal. Sprint 40 "confirm-first UX" pattern'ı voice modu için değil (kullanıcı zaten konuşma kararını verdi).
+- **iOS voice yok:** Mac-only Sprint 42. iOS Background App Refresh + AVAudioEngine için extra permission infrastructure gerek — v0.2.70+ aday.
+- **Permission flow:** İlk mic button tıklandığında macOS dialog: Microphone (✓) + Speech Recognition (✓). Settings → Sesli Mod → "Mikrofon ve Konuşma Tanıma İzinleri" deep-link System Settings'e götürür (kullanıcı reddetmişse aç).
+
 ## [0.2.68] — 2026-05-26
 
 **Sprint 41 — Otomatik memory capture (Sprint 36 follow-up).** Agent artık **pasif olarak öğreniyor**. Sprint 36 `MemoryStore + PlaybookLearner` manuel `save_memory` MCP tool sağladı; Sprint 37 semantic matching ekledi. Sprint 41 system prompt'a kalıcı talimat + capture intent detection ile agent'ın **sessizce kendi tetiklemesini** sağlar.

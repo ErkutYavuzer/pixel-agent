@@ -563,6 +563,27 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 41 tamamlandı — pasif öğrenme.** Sprint 36 manuel `save_memory` → Sprint 41 agent kendi tetikliyor. System prompt iki katmanlı: baseInstruction (kalıcı) + contextualPrefix (CaptureIntentDetector pattern hit'inde inline hint). Agent format kuralı "(Hafızaya kaydedildim: …)" ile kullanıcı bildirir. Mac test 1180 → 1212 (+32). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 42 — "Realtime Voice Faz 1: Foundation + Apple Speech" (v0.2.69)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | library | `PixelVoice` yeni SPM target — Package.swift ekleme + Sendable provider abstraction |
+| ✅ | protocol | `VoiceProvider` + `TranscriptEvent` (interim/final/error) |
+| ✅ | mock | `MockVoiceProvider` test harness — programmable events |
+| ✅ | apple | `AppleVoiceProvider` actor — SFSpeechRecognizer + AVSpeechSynthesizer; tr-TR locale; permission flow |
+| ✅ | credentials | `VoiceCredentialsStore` struct — OpenAI/Gemini API key (Sprint 43-44 için skeleton) |
+| ✅ | session | `VoiceSession` ObservableObject (@MainActor) — provider stream → ChatViewModel köprüsü; interim → injectDraft, final → send(text:) |
+| ✅ | UI | ChatComposer mic FAB button (mic.fill kırmızı aktif, mic.circle pasif) + ChatView toggleVoice wire |
+| ✅ | settings | Settings → "Sesli Mod" 8. tab — provider picker + API key fields (skeleton) + System Settings deep-link |
+| ✅ | plist | Mac build-app.sh NSMicrophoneUsageDescription + NSSpeechRecognitionUsageDescription |
+| ✅ | tests | 27 yeni (7 mock + 7 transcript + 13 credentials) + 1 SettingsTab regression update |
+| ⏸ | v0.2.70 | OpenAI Realtime WebSocket implementation (Sprint 43) |
+| ⏸ | v0.2.71 | Gemini Live WebSocket implementation (Sprint 44) |
+| ⏸ | v0.2.72+ | Function calling voice mode (MCP tool çağrısı sesli) |
+| ⏸ | v0.2.72+ | iOS voice (Background App Refresh + AVAudioEngine extra config) |
+
+**26 May 2026: Sprint 42 Faz 1 tamamlandı — Apple Speech MVP.** v3'e ilk kez sesli mod. Foundation + AppleVoiceProvider lokal/ücretsiz/sıfır-API-key. Sprint 43-44'te OpenAI Realtime + Gemini Live aynı provider abstraction'ı kullanacak — sadece provider swap. Mac test 1212 → 1239 (+27). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
