@@ -1,6 +1,7 @@
 #if canImport(AVFoundation)
 import AVFoundation
 import Foundation
+import PixelMCPServer
 
 /// **Sprint 43 (v0.2.70):** OpenAI Realtime API WebSocket provider.
 ///
@@ -34,6 +35,7 @@ public actor OpenAIRealtimeProvider: VoiceProvider {
     public static let endpoint = URL(string: "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17")!
 
     private let credentialsStore: VoiceCredentialsStore
+    private let toolRegistry: ToolRegistry?
     private let audioEngine: AVAudioEngine
     private let audioPlayer: RealtimeAudioPlayer
     private var webSocketTask: URLSessionWebSocketTask?
@@ -41,11 +43,27 @@ public actor OpenAIRealtimeProvider: VoiceProvider {
     private var isRunning: Bool = false
     private var continuation: AsyncStream<TranscriptEvent>.Continuation?
     private var accumulatedTranscript: String = ""
+    /// **Sprint 44 (v0.2.71):** Function call argument'larını biriktir
+    /// (`function_call_arguments.delta` chunk'ları). `.done` event'inde dispatch.
+    private var pendingFunctionCalls: [String: PendingFunctionCall] = [:]
 
-    public init(credentialsStore: VoiceCredentialsStore = VoiceCredentialsStore()) {
+    /// **Sprint 44 (v0.2.71):** `toolRegistry` set ise voice modunda
+    /// function calling aktif; nil ise sadece konuşma (Sprint 43 davranışı).
+    public init(
+        credentialsStore: VoiceCredentialsStore = VoiceCredentialsStore(),
+        toolRegistry: ToolRegistry? = nil
+    ) {
         self.credentialsStore = credentialsStore
+        self.toolRegistry = toolRegistry
         self.audioEngine = AVAudioEngine()
         self.audioPlayer = RealtimeAudioPlayer()
+    }
+
+    /// **Sprint 44 (v0.2.71):** Biriken function call metadata.
+    private struct PendingFunctionCall {
+        let callID: String
+        let name: String
+        var argumentsBuffer: String  // delta chunk'lar burada birleşir
     }
 
     public nonisolated var transcriptEvents: AsyncStream<TranscriptEvent> {
@@ -85,8 +103,15 @@ public actor OpenAIRealtimeProvider: VoiceProvider {
         task.resume()
         self.webSocketTask = task
 
-        // 2. Session config — server-side VAD aktif
-        let config = SessionConfig()
+        // 2. Session config — server-side VAD aktif + Sprint 44 voice-safe
+        // tool listesi (varsa).
+        let tools: [OpenAITool]?
+        if let toolRegistry {
+            tools = OpenAIToolBridge.voiceTools(from: toolRegistry)
+        } else {
+            tools = nil
+        }
+        let config = SessionConfig(tools: tools)
         let sessionEvent = RealtimeClientEvent.sessionUpdate(config: config)
         try await sendEvent(sessionEvent)
 
@@ -122,8 +147,11 @@ public actor OpenAIRealtimeProvider: VoiceProvider {
         // No-op (Sprint 44'te muhtemelen `response.create` + manual text turn).
     }
 
+    /// **Sprint 44 (v0.2.71):** Kullanıcı agent konuşurken sözünü kesti veya
+    /// manuel cancel. `response.cancel` event'i + audioPlayer drain.
     public func cancelSpeech() async {
-        // Sprint 44 aday: response.cancel + audioPlayer.interrupt()
+        try? await sendEvent(.responseCancel)
+        await audioPlayer.interrupt()
     }
 
     // MARK: - Mic capture
@@ -236,14 +264,89 @@ public actor OpenAIRealtimeProvider: VoiceProvider {
                 continuation?.yield(.final(text: accumulatedTranscript))
                 accumulatedTranscript = ""
             }
-        case .speechStarted, .speechStopped:
-            // Sprint 44 aday: UI feedback (mascot listening state)
+        case .speechStarted:
+            // Sprint 44 (v0.2.71): Kullanıcı söze başladı — agent şu an
+            // konuşuyorsa interrupt (response.cancel + audio drain).
+            await cancelSpeech()
+        case .speechStopped:
+            // VAD speech sonu — server otomatik response.create tetikler.
             break
         case .error(let msg):
             continuation?.yield(.error(message: msg))
+
+        // MARK: - Sprint 44 (v0.2.71) — Function calling
+
+        case .functionCallStarted(let callID, let name):
+            pendingFunctionCalls[callID] = PendingFunctionCall(
+                callID: callID,
+                name: name,
+                argumentsBuffer: ""
+            )
+
+        case .functionCallArgumentsDelta(let callID, let delta):
+            // Chunk biriktir; tam JSON gelene kadar parse etme.
+            pendingFunctionCalls[callID]?.argumentsBuffer += delta
+
+        case .functionCallArgumentsDone(let callID, let arguments):
+            // Argümanlar tamamlandı — pending'ten al, MCP'ye dispatch.
+            guard var pending = pendingFunctionCalls[callID] else { return }
+            pending.argumentsBuffer = arguments  // override (delta'lar tam toplandıysa)
+            pendingFunctionCalls.removeValue(forKey: callID)
+            await dispatchFunctionCall(pending)
+
         case .unknown:
             break
         }
+    }
+
+    /// **Sprint 44 (v0.2.71):** Function call'u MCP registry'e dispatch et,
+    /// sonucu `conversation.item.create` (function_call_output) ile yolla,
+    /// `response.create` ile agent sentezi devam ettir.
+    private func dispatchFunctionCall(_ call: PendingFunctionCall) async {
+        guard let registry = toolRegistry else {
+            await sendFunctionCallError(
+                callID: call.callID,
+                message: "Tool registry yok (voice'da tool desteği etkin değil)"
+            )
+            return
+        }
+        guard let tool = registry.find(call.name) else {
+            await sendFunctionCallError(
+                callID: call.callID,
+                message: "Tool bulunamadı: \(call.name)"
+            )
+            return
+        }
+
+        // Argument JSON string → JSONValue (whole object — ToolDefinition
+        // handler `JSONValue?` alır, properties'i içeride subscript ile okur).
+        let argsData = Data(call.argumentsBuffer.utf8)
+        let argsObject = (try? JSONDecoder().decode(JSONValue.self, from: argsData)) ?? .object([:])
+
+        let result = await tool.handler(argsObject)
+        // result is JSONValue object — { content: [...], isError: ... }
+        let outputData = (try? JSONEncoder().encode(result)) ?? Data("{}".utf8)
+        let outputString = String(data: outputData, encoding: .utf8) ?? "{}"
+
+        try? await sendEvent(.conversationItemCreateFunctionCallOutput(
+            callID: call.callID,
+            output: outputString
+        ))
+        // Agent'ı tetikle: tool sonucuna göre sentez yapsın.
+        try? await sendEvent(.responseCreate)
+    }
+
+    /// **Sprint 44 (v0.2.71):** Tool çalışmadı (yok / argüman parse fail) —
+    /// yine de output event'i yolla, agent kullanıcıya açıklasın.
+    private func sendFunctionCallError(callID: String, message: String) async {
+        let errorOutput = """
+        {"content":[{"type":"text","text":"\(message)"}],"isError":true}
+        """
+        try? await sendEvent(.conversationItemCreateFunctionCallOutput(
+            callID: callID,
+            output: errorOutput
+        ))
+        try? await sendEvent(.responseCreate)
     }
 }
 

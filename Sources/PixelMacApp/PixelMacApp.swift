@@ -7,6 +7,7 @@ import PixelMemory
 import PixelRemote
 import PixelSubagent
 import PixelTools
+import PixelMCPServer
 import PixelVoice
 import SwiftUI
 
@@ -106,9 +107,10 @@ struct RootView: View {
     /// detector task'ları cancel eder).
     static let proactiveEngine = ProactiveEngine()
 
-    /// **Sprint 42-43:** Voice provider factory — UserDefaults'tan aktif
+    /// **Sprint 42-44:** Voice provider factory — UserDefaults'tan aktif
     /// provider okur, runtime'da instance üretir. Apple (lokal) veya OpenAI
-    /// Realtime (WebSocket, Sprint 43). Gemini Live Sprint 44'te.
+    /// Realtime (Sprint 43 audio I/O + Sprint 44 function calling + interrupt).
+    /// Gemini Live Sprint 45'te.
     static func makeVoiceProvider() -> any PixelVoice.VoiceProvider {
         let raw = UserDefaults.standard.string(forKey: VoiceProviderKind.activeProviderDefaultsKey)
         let kind = raw.flatMap { VoiceProviderKind(rawValue: $0) } ?? .apple
@@ -116,9 +118,13 @@ struct RootView: View {
         case .apple:
             return AppleVoiceProvider(locale: Locale(identifier: "tr-TR"))
         case .openaiRealtime:
-            return OpenAIRealtimeProvider()
+            // Sprint 44 (v0.2.71): MCP tool registry inject — agent voice
+            // modunda voice-safe tool'ları çağırabilsin (get_current_time,
+            // save_memory, vs.). OpenAIToolBridge.voiceSafeToolNames whitelist.
+            let registry = BuiltInTools.makeRegistry()
+            return OpenAIRealtimeProvider(toolRegistry: registry)
         case .geminiLive:
-            // Sprint 44 aday — şu an Apple fallback
+            // Sprint 45 aday — şu an Apple fallback
             return AppleVoiceProvider(locale: Locale(identifier: "tr-TR"))
         }
     }
