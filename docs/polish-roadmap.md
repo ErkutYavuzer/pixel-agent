@@ -639,6 +639,46 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 45 tamamlandı — Gemini Live alternatif provider.** Sprint 43-44 OpenAI Realtime full parity üstüne Google Gemini Live eklendi. Aynı `VoiceProvider` abstraction, ~10x ucuz fiyat ($0.006/min input + $0.024/min output vs OpenAI $0.06/$0.24). Audio format farkı (16kHz input / 24kHz output vs OpenAI 24/24) + protocol farkı (BidiGenerateContent JSON tree) abstraction altında gizli. Mac test 1287 → 1312 (+25). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 46 — "Voice tools opt-in" (v0.2.74)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | prefs | `VoiceToolPreferences` saf helper — per-tool UserDefaults override (`pixel.voice.tool.<name>` default risky tool'lar için false; safe tool'lar için true) + `isToolEnabled(_:)` accessor + `riskyTools` static Set |
+| ✅ | bridge | `OpenAIToolBridge.voiceSafeTools(from:preferences:)` + `GeminiToolBridge.functionDeclarations(from:preferences:)` — eski static `voiceSafeToolNames` alias + per-tool runtime filter |
+| ✅ | settings | Settings → Sesli Mod → "Voice Tools" section — tüm BuiltInTools listelendi, her tool için Toggle; risky badge (turuncu) UI manipulation + subagent için |
+| ✅ | tests | 6 yeni VoiceToolPreferences + 4 OpenAI/Gemini bridge regression update |
+
+**26 May 2026: Sprint 46 tamamlandı — Voice tool opt-in.** Sprint 44 OpenAI Realtime function calling whitelist'i Sprint 45'te Gemini Live'a aynen yansıtıldı; ancak whitelist hardcoded'du. Sprint 46 kullanıcıya per-tool aktivasyon kontrolü verdi: ui_click, subagent_dispatch, install_command gibi risky tool'lar default kapalı, kullanıcı bilinçli olarak açar. Mac test 1312 → 1335 (+23). iOS değişmedi (voice Mac-only). Breaking change yok. **Hot-fix v0.2.73:** Tier 2 detector SIGTRAP düzeltildi (MainActor.assumeIsolated → await MainActor.run pattern).
+
+## Sprint 47 — "Relay launcher otomatik + URL resolver" (v0.2.75)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | launcher | `RelayLauncher` @MainActor ObservableObject — `npx wrangler dev` subprocess otomatik spawn + watchdog (5sn cooldown, max 3 restart) + SIGTERM/SIGKILL graceful exit |
+| ✅ | resolver | `RelayURLResolver` saf enum — 5-tier fallback: UserDefaults custom > PIXEL_RELAY_URL env > production Cloudflare > LAN IP > localhost; `.Source` introspection for UI |
+| ✅ | deploy | `scripts/deploy-relay.sh` — `wrangler whoami` + `wrangler deploy` Cloudflare deploy automation; production URL extract + kullanıcı talimat |
+| ✅ | lifecycle | RootView.relayLauncher singleton + `.task` start + `NSApplication.willTerminateNotification → stop()` |
+| ✅ | settings | ConnectionSettingsTab — Yerel Relay section (auto-start toggle + status badge + manuel restart) + Relay URL section (aktif URL + kaynak + özel URL field) + LAN section (Bonjour info) |
+| ✅ | tests | 20 yeni: 13 RelayURLResolverTests + 7 RelayLauncherTests |
+| ⏸ | v0.2.76 | Bundle relay copy (build-app.sh Resources/relay/ — Homebrew install kullanıcılar için) |
+
+**27 May 2026: Sprint 47 tamamlandı — Relay otomatik başlatma.** Kullanıcı v0.2.74'te iOS bağlanmıyor crash report → root cause: Cloudflare Worker relay (port 8787) ayakta değildi (Mac restart sonrası wrangler manuel başlatma gerek). 3 katman çözüm: launcher subprocess + URL resolver fallback chain + Cloudflare deploy script. Settings UI'da kullanıcı override edebilir. Mac test 1335 → 1355 (+20). iOS değişmedi (Mac side). Breaking change yok (PIXEL_RELAY_URL env korunur). **Tagging gecikmesi:** Sprint 48 ile bundle'lanarak v0.2.76 olarak release edildi.
+
+## Sprint 48 — "Relay bundle copy + lazy npm install" (v0.2.76)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | build | `scripts/build-app.sh` — `relay/{wrangler.toml, package.json, package-lock.json, src/, README.md}` → `Contents/Resources/relay/`; node_modules HARIÇ (167 MB → 7.9 MB bundle delta ~60KB) |
+| ✅ | copy | `RelayLauncher.ensureWritableCopy(from:to:)` — idempotent kopya; ilk seferde full copy; sonrasında package-lock byte-diff check (eşitse no-op; farklıysa src/ + config üzerine, node_modules korunur) |
+| ✅ | dir | `RelayLauncher.writableRelayDirectory` static URL — `~/Library/Application Support/pixel-agent/relay/` |
+| ✅ | install | `runNpmInstall(in:npxPath:) async` — `npm install --no-audit --no-fund --prefer-offline`; npm path npx'ten türetilir; hata → lastError + user instruction |
+| ✅ | state | `@Published var isInstallingDependencies: Bool` — Settings UI ProgressView için |
+| ✅ | start | `start()` refactor: ensureWritableCopy → check node_modules → runNpmInstall (gerekirse async) → launchWranglerProcess |
+| ✅ | ui | ConnectionSettingsTab — `statusIcon` ProgressView + `statusLabel` "İlk kurulum: npm install çalışıyor (~30 sn)" |
+| ✅ | tests | 9 yeni RelayLauncherCopyTests — writableRelayDirectory path; isInstallingDependencies initial false; first-time create + parent create + lock-match skip (user marker preserved) + lock-diff overwrite + node_modules preserved + optional README skip |
+
+**27 May 2026: Sprint 48 tamamlandı — Homebrew kullanıcılar için relay portability.** Sprint 47'de relay launcher dev repo path'ine veya bundle resources'a bağımlıydı; Homebrew install kullanıcıları repo'yu klonlamadan kullanamıyordu. Sprint 48 relay kaynak dosyalarını bundle Resources'a (node_modules HARIÇ) kopyalıyor, ilk launch'ta writable Application Support'a açıyor, async `npm install` tetikliyor. Bundle 7.9 MB kalır (delta ~60KB). Mac test 1355 → 1364 (+9). iOS xcodebuild BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

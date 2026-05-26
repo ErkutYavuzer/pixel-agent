@@ -27,6 +27,9 @@ final class RelayLauncher: ObservableObject {
     @Published private(set) var isRunning: Bool = false
     @Published private(set) var lastError: String?
     @Published private(set) var didStartOnce: Bool = false
+    /// **Sprint 48 (v0.2.76):** İlk launch'ta `npm install` çalışıyor mu?
+    /// Settings UI ProgressView için. ~30sn'lik network operation.
+    @Published private(set) var isInstallingDependencies: Bool = false
 
     private var process: Process?
     private var restartCount: Int = 0
@@ -34,11 +37,23 @@ final class RelayLauncher: ObservableObject {
     private var watchdogTask: Task<Void, Never>?
 
     /// **Sprint 47:** Production'da `.app/Contents/Resources/relay/`, dev
-    /// build'de repo'nun `relay/` dizini.
+    /// build'de repo'nun `relay/` dizini. **Sprint 48 (v0.2.76):** writable
+    /// kopya kaynağı.
     private let relayDirectory: URL?
 
     init(relayDirectory: URL? = nil) {
         self.relayDirectory = relayDirectory ?? Self.defaultRelayDirectory()
+    }
+
+    /// **Sprint 48 (v0.2.76):** Bundle Resources/relay (read-only) yerine
+    /// kullanılan writable kopya. `~/Library/Application Support/PixelAgent/
+    /// relay/`. node_modules burada install edilir.
+    static var writableRelayDirectory: URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        return support
+            .appendingPathComponent("pixel-agent", isDirectory: true)
+            .appendingPathComponent("relay", isDirectory: true)
     }
 
     /// **Sprint 47:** UserDefaults nil-safe.
@@ -66,16 +81,17 @@ final class RelayLauncher: ObservableObject {
         return nil
     }
 
-    /// **Sprint 47:** Wrangler subprocess başlat. Idempotent. UserDefaults
-    /// toggle kapalıysa no-op.
+    /// **Sprint 47-48:** Wrangler subprocess başlat. Idempotent.
+    /// **Sprint 48:** Bundle Resources/relay → writable Application Support
+    /// copy + lazy npm install + wrangler dev chain.
     func start() {
         guard Self.isAutoStartEnabled() else {
             lastError = nil
             return
         }
-        guard !isRunning else { return }
-        guard let relayDir = relayDirectory else {
-            lastError = "relay/ dizini bulunamadı (production bundle Resources/relay altında olmalı)"
+        guard !isRunning, !isInstallingDependencies else { return }
+        guard let sourceDir = relayDirectory else {
+            lastError = "relay/ kaynak dizini bulunamadı (bundle Resources veya dev repo)"
             return
         }
 
@@ -85,10 +101,40 @@ final class RelayLauncher: ObservableObject {
             return
         }
 
+        // Sprint 48 (v0.2.76): Writable copy + lazy npm install
+        let runtimeDir = Self.writableRelayDirectory
+        do {
+            try Self.ensureWritableCopy(from: sourceDir, to: runtimeDir)
+        } catch {
+            lastError = "Relay kopyalanamadı: \(error.localizedDescription)"
+            return
+        }
+
+        let nodeModulesPath = runtimeDir.appendingPathComponent("node_modules")
+        if !FileManager.default.fileExists(atPath: nodeModulesPath.path) {
+            // Lazy npm install — async, sonra wrangler launch
+            Task { [weak self] in
+                guard let self else { return }
+                await self.runNpmInstall(in: runtimeDir, npxPath: npxPath)
+                // npm install bittiyse ve hata yoksa wrangler launch
+                let installError = await self.lastError
+                if installError == nil {
+                    await MainActor.run { self.launchWranglerProcess(at: runtimeDir, npxPath: npxPath) }
+                }
+            }
+            return
+        }
+
+        launchWranglerProcess(at: runtimeDir, npxPath: npxPath)
+    }
+
+    /// **Sprint 48 (v0.2.76):** Wrangler subprocess'i `runtimeDir`'de spawn et.
+    /// `start()` ya doğrudan ya da `npm install` bittikten sonra çağırır.
+    private func launchWranglerProcess(at runtimeDir: URL, npxPath: String) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: npxPath)
         proc.arguments = ["wrangler", "dev", "--ip", "0.0.0.0", "--port", "8787"]
-        proc.currentDirectoryURL = relayDir
+        proc.currentDirectoryURL = runtimeDir
         proc.environment = EnvironmentBuilder.augmentedEnvironment()
 
         // Pipe stderr/stdout, log'lara yansıt
@@ -173,6 +219,87 @@ final class RelayLauncher: ObservableObject {
         // 500ms grace + restart
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.start()
+        }
+    }
+
+    // MARK: - Sprint 48 (v0.2.76) — Writable copy + npm install
+
+    /// **Sprint 48:** Bundle Resources/relay → Application Support/relay
+    /// kopyala (idempotent). Kaynak değişmişse (package-lock fark) destinasyonu
+    /// güncelle; node_modules dokunulmaz (separate state).
+    static func ensureWritableCopy(from source: URL, to destination: URL) throws {
+        let fm = FileManager.default
+
+        if !fm.fileExists(atPath: destination.path) {
+            try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.copyItem(at: source, to: destination)
+            return
+        }
+
+        // package-lock.json fark var mı? Yoksa kopya gerek değil.
+        let srcLock = source.appendingPathComponent("package-lock.json")
+        let dstLock = destination.appendingPathComponent("package-lock.json")
+        if let srcData = try? Data(contentsOf: srcLock),
+           let dstData = try? Data(contentsOf: dstLock),
+           srcData == dstData {
+            return
+        }
+
+        // Diff var → src + config dosyalarını üzerine kopyala (node_modules
+        // dokunulmaz).
+        for item in ["wrangler.toml", "package.json", "package-lock.json", "src", "README.md"] {
+            let srcURL = source.appendingPathComponent(item)
+            let dstURL = destination.appendingPathComponent(item)
+            guard fm.fileExists(atPath: srcURL.path) else { continue }
+            if fm.fileExists(atPath: dstURL.path) {
+                try fm.removeItem(at: dstURL)
+            }
+            try fm.copyItem(at: srcURL, to: dstURL)
+        }
+    }
+
+    /// **Sprint 48:** `npm install` çalıştır. UI binding için
+    /// `isInstallingDependencies` true. ~30sn network operation. Hata
+    /// olursa lastError'a yansıt.
+    private func runNpmInstall(in directory: URL, npxPath: String) async {
+        await MainActor.run { self.isInstallingDependencies = true }
+        defer {
+            Task { @MainActor in self.isInstallingDependencies = false }
+        }
+
+        // npm path — npx'in yanında durur (Homebrew layout)
+        let npmPath = npxPath.replacingOccurrences(of: "/npx", with: "/npm")
+        guard FileManager.default.fileExists(atPath: npmPath) else {
+            await MainActor.run {
+                self.lastError = "npm bulunamadı (\(npmPath)). `brew install node` ile kurun."
+            }
+            return
+        }
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: npmPath)
+        proc.arguments = ["install", "--no-audit", "--no-fund", "--prefer-offline"]
+        proc.currentDirectoryURL = directory
+        proc.environment = EnvironmentBuilder.augmentedEnvironment()
+
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = pipe
+
+        do {
+            try proc.run()
+        } catch {
+            await MainActor.run {
+                self.lastError = "npm install başlatılamadı: \(error.localizedDescription)"
+            }
+            return
+        }
+
+        proc.waitUntilExit()
+        if proc.terminationStatus != 0 {
+            await MainActor.run {
+                self.lastError = "npm install başarısız (exit \(proc.terminationStatus)). İnternet bağlantınızı kontrol edin veya production Cloudflare URL kullanın."
+            }
         }
     }
 }

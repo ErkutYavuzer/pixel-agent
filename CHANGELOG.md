@@ -12,6 +12,122 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.76] — 2026-05-27
+
+**Sprint 48 — Relay bundle copy + lazy npm install.** Sprint 47'de RelayLauncher Mac app launch'ta `npx wrangler dev` subprocess'i otomatik başlatıyor; ancak `relayDirectory` sadece dev repo path'inde (`/Users/erkut/Projects/pixel-agent/relay`) veya production'da Bundle Resources'da bulunabiliyordu — **Homebrew install kullanıcıları repo'yu klonlamadan relay'i kullanamıyordu**. Sprint 48 bu son boşluğu kapatıyor: `relay/` kaynak dosyaları artık `PixelAgent.app/Contents/Resources/relay/` altında bundle'lanır (node_modules HARIÇ), ilk launch'ta Application Support'a kopyalanır ve `npm install` async tetiklenir.
+
+**Akış:**
+1. **Build-time:** `scripts/build-app.sh` `relay/{wrangler.toml, package.json, package-lock.json, src/, README.md}` dosyalarını `Contents/Resources/relay/` altına kopyalar. `node_modules` (~167MB) bundle'a dahil edilmez — bundle hâlâ 7.9 MB.
+2. **First launch:** `RelayLauncher.start()` → `ensureWritableCopy(from: bundleResources, to: ~/Library/Application Support/pixel-agent/relay)` (idempotent, `package-lock.json` diff check).
+3. **node_modules yoksa:** `runNpmInstall()` async — `npm install --no-audit --no-fund --prefer-offline` (~30 sn ilk kurulum). `isInstallingDependencies` @Published bool — Settings UI ProgressView gösterir.
+4. **Install bittiğinde:** `launchWranglerProcess(at: runtimeDir)` — Sprint 47'deki normal akış devam eder.
+
+**Update path:** Mac app update'lerinde `ensureWritableCopy` `package-lock.json` byte-eşitliğini kontrol eder; fark varsa src/ + config dosyalarını üzerine yazar, `node_modules` dokunmaz (separate state). Kullanıcı bağımlılıkları yeniden install etmez — yalnızca lock değiştiğinde.
+
+**Test:** Mac 1355 → **1364** (+9 RelayLauncherCopyTests). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok**.
+
+### Added — Sprint 48 / Relay bundle + lazy install
+
+#### `scripts/build-app.sh`
+- `relay/wrangler.toml`, `package.json`, `package-lock.json`, `src/`, `README.md` (varsa) → `Contents/Resources/relay/`. `node_modules` HARIÇ.
+- Bundle size: 7.9 MB (öncesi 7.9 MB; +~60 KB delta).
+
+#### `Sources/PixelMacApp/RelayLauncher.swift` (Sprint 48 extension)
+- **`@Published private(set) var isInstallingDependencies: Bool`** — Settings UI ProgressView için ~30sn npm install state.
+- **`static var writableRelayDirectory: URL`** — `~/Library/Application Support/pixel-agent/relay/` (node_modules burada install edilir).
+- **`static func ensureWritableCopy(from:to:)`** — idempotent kopya; ilk seferde tüm dizini kopyalar, sonrasında `package-lock.json` byte-eşitliğine bakar; farklıysa yalnızca config + src/ üzerine yazar, `node_modules` korunur.
+- **`private func runNpmInstall(in:npxPath:) async`** — `npm install --no-audit --no-fund --prefer-offline`; npm path npx'in yanından türetilir (Homebrew layout); hata olursa `lastError` set, kullanıcıya internet veya production URL önerir.
+- **`start()` refactor:** `ensureWritableCopy → check node_modules → runNpmInstall (async, gerekirse) → launchWranglerProcess`. `isRunning && isInstallingDependencies` guard çift install önler.
+- **`launchWranglerProcess(at:npxPath:)`** — eski `start()` body'sinin spawn kısmı; install sonrası veya doğrudan çağrılır.
+
+#### `Sources/PixelMacApp/SettingsView.swift` (ConnectionSettingsTab)
+- **`statusIcon`** — `isInstallingDependencies` true ise `ProgressView`. (Sprint 47 yeşil/turuncu/gri tier'ları korunur.)
+- **`statusLabel`** — `"İlk kurulum: npm install çalışıyor (~30 sn)"`.
+
+### Tests — Sprint 48
+
+- `Tests/PixelMacAppTests/RelayLauncherCopyTests.swift` — **9 yeni**: writableRelayDirectory path format (Application Support suffix, absolute); `isInstallingDependencies` initial false; `ensureWritableCopy` first-time create + nested parent create + lock-match skip (user marker preserved) + lock-diff overwrite (src content updated) + node_modules preserved on update + optional README skip.
+
+### Notes — Sprint 48
+
+- **Homebrew kullanıcıları artık dev repo'ya ihtiyaç duymaz** — `brew install --cask ErkutYavuzer/tap/pixel-agent` sonrası app açar açmaz relay otomatik kurulur. İlk launch'ta ~30sn `npm install` (~25 paket, wrangler dahil); sonraki launch'larda ms cinsinden başlar.
+- **Bundle boyutu kontrolü:** node_modules ~167 MB bundle'ı şişirirdi. Lazy install ile bundle 7.9 MB kalır; bağımlılıklar kullanıcının yerel npm cache'inden gelir (prefer-offline).
+- **Update senaryosu:** `brew upgrade pixel-agent` yeni `package-lock.json` taşırsa, kullanıcı app'i bir sonraki açışta `ensureWritableCopy` lock diff'i algılar, src/ + config'i günceller, **npm install otomatik tetiklenmez** (mevcut node_modules yetiyorsa); fakat eğer install başarısızsa veya kullanıcı manuel sildiyse `runNpmInstall` tekrar çalışır.
+- **Sprint 47 unchanged paths:** dev repo path (`/Users/erkut/Projects/pixel-agent/relay`) hâlâ fallback olarak deteksiyon zincirinde — sourceDir bulunduğu sürece tüm akış aynı; sadece `runtimeDir` (writable) farklı.
+
+## [0.2.75] — 2026-05-27
+
+**Sprint 47 — Relay launcher otomatik + URL resolver fallback chain.** Kullanıcı v0.2.74'te iOS bağlantı kuramıyor diye crash dialog raporladı; root cause: **Cloudflare Worker relay server (port 8787) ayakta değildi**. Mac restart sonrası kullanıcı manuel `cd relay && npx wrangler dev` yapmak zorundaydı — kötü UX. Sprint 47 bu sorunu yapısal olarak çözüyor.
+
+**3 katman çözüm:**
+
+1. **`RelayLauncher` actor** — Mac app launch'ta `npx wrangler dev` subprocess otomatik tetiklenir. App kapanırken SIGTERM ile graceful exit. Subprocess crash'inde 5sn cooldown + max 3 restart watchdog.
+
+2. **`RelayURLResolver` saf helper** — 5-tier fallback chain: UserDefaults custom URL > `PIXEL_RELAY_URL` env > production Cloudflare > LAN IP > localhost. Settings'ten kullanıcı override edebilir.
+
+3. **`scripts/deploy-relay.sh`** — Cloudflare Worker deploy automation (wrangler login + deploy + URL extract). Kullanıcı production URL kullanmak isterse tek tıkla.
+
+**Yeni Settings UI:** Bağlantı tab artık 3 section:
+- **Yerel Relay (Wrangler):** Otomatik başlat toggle + status (yeşil ✓ çalışıyor / turuncu ⚠ hata / gri devre dışı) + manuel "Yeniden Başlat" butonu + lastError display
+- **Relay URL:** Aktif URL + kaynak (Özel/Env/Cloudflare/LAN/localhost) + özel URL editable field
+- **LAN:** _pixel-agent._tcp Bonjour info (mevcut)
+
+**Test:** Mac 1335 → **1355** (+20: 13 RelayURLResolver + 7 RelayLauncher). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok** (`PIXEL_RELAY_URL` env hâlâ destekleniyor, LAN IP detect korundu).
+
+### Added — Sprint 47 / Relay launcher + URL resolver
+
+#### `Sources/PixelMacApp/RelayLauncher.swift` (yeni)
+- **`RelayLauncher` @MainActor ObservableObject** — `npx wrangler dev` subprocess lifecycle manager.
+- `start()`: `npx` PATH'te ara (Homebrew Apple Silicon + Intel + sistem) → `Process()` spawn → stdout/stderr pipe → watchdog Task.
+- `stop()`: SIGTERM + 1sn grace + SIGKILL force-kill fallback.
+- `manualRestart()`: Settings UI "Yeniden Başlat" buton hook.
+- **Crash recovery:** beklenmedik exit → 5sn cooldown → max 3 restart → "Manuel kontrol gerek" error.
+- **Auto-start toggle:** `pixel.relay.autoStartEnabled` UserDefaults default true. Production URL kullanıcılar kapatabilir.
+- **Relay directory detection:**
+  1. App bundle `Resources/relay/` (production — Sprint 48+ build-app.sh copy)
+  2. Dev repo `/Users/erkut/Projects/pixel-agent/relay`
+- **EnvironmentBuilder.augmentedEnvironment()** reuse — Sprint v0.2.17 PATH augment Node.js bulmak için yeterli.
+
+#### `Sources/PixelMacApp/RelayURLResolver.swift` (yeni saf helper)
+- **`RelayURLResolver` enum** — `Sendable`.
+- `resolve(defaults:environment:) -> String` — 5-tier priority chain.
+- `resolveSource(...) -> Source` — UI display + introspection.
+- **`Source` enum** — `.custom(String)`, `.environment(String)`, `.production(String)`, `.lan(ip:)`, `.localhost`. `url` + `displayName` accessor'lar.
+- `setCustomURL(_:defaults:)` — UserDefaults `pixel.relay.customURL`. Empty/whitespace → clear.
+- `detectLANIPv4()` — Sprint 6.1'den taşındı (saf helper, test edilebilir).
+- `productionURL: String?` — şu an `nil`; `wrangler deploy` sonrası kullanıcı hardcoded ekler veya Settings custom URL field'a yapıştırır.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- **`RootView.relayLauncher` @MainActor static** singleton.
+- **`RootView .task`** blok: `relayLauncher.start()` çağrısı SystemNotifications + ControlBridge ile birlikte.
+- **`NSApplication.willTerminateNotification` observer**: app quit → `relayLauncher.stop()`.
+- **`defaultRelayURL`** artık `RelayURLResolver.resolve()` çağırır (eski inline env+LAN+localhost mantığı resolver'a taşındı).
+
+#### `Sources/PixelMacApp/SettingsView.swift` (ConnectionSettingsTab refactor)
+- 3 yeni section: Yerel Relay (Wrangler) + Relay URL + LAN.
+- @AppStorage'la `customURL` + `autoStartEnabled` bind.
+- @ObservedObject `launcher` — isRunning/lastError state göster.
+- TextField "Özel URL" — kullanıcı production wss:// URL yapıştırabilir.
+
+#### `scripts/deploy-relay.sh` (yeni)
+- `wrangler whoami` auth check; gerek varsa `wrangler login`.
+- `wrangler deploy` çalıştır.
+- Sonuç URL'ini kullanıcıya yapıştırma talimatı.
+
+### Tests — Sprint 47
+
+- `Tests/PixelMacAppTests/RelayURLResolverTests.swift` — **13 yeni**: priority chain (custom > env > LAN/localhost); source classification (.custom/.environment/.lan/.localhost); URL accessor; displayNames; setCustomURL persist + nil clear + whitespace clear; empty string falls through to env; LAN detect format check.
+- `Tests/PixelMacAppTests/RelayLauncherTests.swift` — **7 yeni**: autoStart UserDefaults 3 variant; initial state; missing directory graceful fail; stop when not running no-op; default relay directory detection.
+
+### Notes — Sprint 47
+
+- **Şu anki sprint **iOS bağlantı sorununu çözer** — kullanıcı bir dahaki Mac restart sonrası `wrangler dev`'i manuel başlatmak zorunda değil. App ile birlikte launcher subprocess'i tetikler.
+- **Production Cloudflare deploy hâlâ önerilir:** Lokal wrangler subprocess Mac uyku-uyanma sırasında veya app kapalıyken çalışmaz. Cloud-managed bir relay (5 dk'lık deploy) iOS'un her zaman bağlanabilmesini garanti eder. `scripts/deploy-relay.sh` bunu kolaylaştırır.
+- **Node.js bağımlılığı:** `RelayLauncher.locateNpx()` `/opt/homebrew/bin/npx`, `/usr/local/bin/npx`, `/usr/bin/npx` arıyor. `brew install node` yoksa lastError gösterilir; kullanıcı production URL'e geçebilir.
+- **Bundle relay directory:** Sprint 48+ aday — `build-app.sh` `relay/` klasörünü `PixelAgent.app/Contents/Resources/relay/` altına kopyalasın ki Homebrew install kullanıcılar `node_modules`'a dokunmak zorunda kalmasın.
+- **Subprocess güvenliği:** App quit'te SIGTERM + 1sn grace + SIGKILL. App crash'inde subprocess orphan kalabilir; sistem reboot temizler veya `pkill -f wrangler` manuel.
+- **iOS değişmedi** — sadece Mac side launcher. iOS hâlâ saved pairing URL'e bağlanmaya çalışır; Mac relay'i artık her zaman ayakta olduğu için bağlantı stabil.
+
 ## [0.2.74] — 2026-05-26
 
 **Sprint 46 — Voice tools opt-in (per-tool UserDefaults override).** Sprint 44'teki `OpenAIToolBridge.voiceSafeToolNames` static whitelist artık kullanıcı tarafından **per-tool override** edilebilir. Settings → Sesli Mod → "Voice Tools" section'da tüm BuiltInTools listelenir, her tool için Toggle. Risky tool'lar (UI manipulation, subagent) turuncu badge'le default kapalıdır — kullanıcı bilinçli aktive edebilir.

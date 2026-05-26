@@ -19,8 +19,8 @@ APP_NAME="PixelAgent"
 APP_BUNDLE="${APP_NAME}.app"
 EXECUTABLE_NAME="${APP_NAME}"
 BUNDLE_ID="dev.erkutyavuzer.pixel-agent"
-VERSION="0.2.74"
-BUILD="74"
+VERSION="0.2.76"
+BUILD="76"
 
 echo "→ swift build -c ${CONFIG}"
 swift build -c "${CONFIG}"
@@ -43,6 +43,20 @@ cp "${MAC_BINARY}" "${APP_BUNDLE}/Contents/MacOS/${EXECUTABLE_NAME}"
 # path'i otomatik bulur ve IDE'lere config snippet'i üretir.
 cp "${MCP_BINARY}" "${APP_BUNDLE}/Contents/MacOS/pixel-mcp-server"
 chmod +x "${APP_BUNDLE}/Contents/MacOS/pixel-mcp-server"
+
+# Sprint 48 (v0.2.76): relay/ kaynak dosyalarını Resources/relay'a kopyala.
+# node_modules HARIÇ (167MB bundle'ı şişirir) — ilk launch'ta RelayLauncher
+# Application Support'a kopyalayıp `npm install` çalıştırır. Bu sayede
+# Homebrew install kullanıcılar dev repo path'ine ihtiyaç duymaz.
+if [ -d "${REPO_ROOT}/relay" ]; then
+    echo "→ relay/ kaynak dosyaları Resources'a kopyalanıyor (node_modules hariç)"
+    mkdir -p "${APP_BUNDLE}/Contents/Resources/relay"
+    cp "${REPO_ROOT}/relay/wrangler.toml" "${APP_BUNDLE}/Contents/Resources/relay/"
+    cp "${REPO_ROOT}/relay/package.json" "${APP_BUNDLE}/Contents/Resources/relay/"
+    cp "${REPO_ROOT}/relay/package-lock.json" "${APP_BUNDLE}/Contents/Resources/relay/"
+    cp -R "${REPO_ROOT}/relay/src" "${APP_BUNDLE}/Contents/Resources/relay/"
+    [ -f "${REPO_ROOT}/relay/README.md" ] && cp "${REPO_ROOT}/relay/README.md" "${APP_BUNDLE}/Contents/Resources/relay/"
+fi
 
 cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

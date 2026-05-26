@@ -322,6 +322,8 @@ private struct ConnectionSettingsTab: View {
         if !autoStartEnabled {
             Image(systemName: "minus.circle.fill")
                 .foregroundStyle(.secondary)
+        } else if launcher.isInstallingDependencies {
+            ProgressView().controlSize(.small)
         } else if launcher.isRunning {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -336,6 +338,7 @@ private struct ConnectionSettingsTab: View {
 
     private var statusLabel: String {
         if !autoStartEnabled { return "Devre dışı" }
+        if launcher.isInstallingDependencies { return "İlk kurulum: npm install çalışıyor (~30 sn)" }
         if launcher.isRunning { return "Çalışıyor (port 8787)" }
         if launcher.lastError != nil { return "Hata" }
         return "Başlatılmamış"
