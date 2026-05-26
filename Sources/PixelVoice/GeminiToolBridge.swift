@@ -23,14 +23,20 @@ public enum GeminiToolBridge {
         )
     }
 
-    /// **Sprint 45:** Registry'den voice-safe tool'ları çıkar + convert +
-    /// `tools[]` array'inde tek `functionDeclarations` grubunda paketle.
-    /// `includeAll: true` whitelist bypass (Sprint 45+ opt-in).
-    public static func voiceTools(from registry: ToolRegistry, includeAll: Bool = false) -> [GeminiTools] {
+    /// **Sprint 45 / Sprint 46 (v0.2.74):** Registry'den kullanıcı'nın aktive
+    /// ettiği tool'ları çıkar + convert + Gemini `tools[]` spec'ine paketle.
+    /// `VoiceToolPreferences` ile filter (OpenAIToolBridge ile aynı pattern).
+    ///
+    /// `includeAll: true` — TEST için preferences bypass.
+    public static func voiceTools(
+        from registry: ToolRegistry,
+        preferences: VoiceToolPreferences = VoiceToolPreferences(),
+        includeAll: Bool = false
+    ) -> [GeminiTools] {
         let allTools = registry.all()
         let filtered = includeAll
             ? allTools
-            : allTools.filter { OpenAIToolBridge.voiceSafeToolNames.contains($0.name) }
+            : allTools.filter { preferences.isEnabled($0.name) }
         guard !filtered.isEmpty else { return [] }
         let declarations = filtered.map(convert)
         return [GeminiTools(functionDeclarations: declarations)]

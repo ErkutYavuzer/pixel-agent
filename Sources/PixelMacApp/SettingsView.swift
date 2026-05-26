@@ -1,6 +1,7 @@
 import AppKit
 import PixelBackends
 import PixelComputerUse
+import PixelMCPServer
 import PixelMemory
 import PixelVoice
 import SwiftUI
@@ -984,6 +985,9 @@ private struct VoiceSettingsTab: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            // Sprint 46 (v0.2.74): Voice tools opt-in.
+            VoiceToolsSection()
         }
         .formStyle(.grouped)
         .padding(.horizontal, 4)
@@ -1047,5 +1051,120 @@ private struct VoiceSettingsTab: View {
         Task {
             await VoiceCredentialsStore().setGeminiKey(value.isEmpty ? nil : value)
         }
+    }
+}
+
+// MARK: - Voice Tools (Sprint 46 / v0.2.74)
+
+/// **Sprint 46:** Per-tool opt-in section — Sesli Mod tab altında.
+/// Tüm BuiltInTools listele, her tool için Toggle. Risky kategori turuncu
+/// uyarı badge ile gösterilir.
+private struct VoiceToolsSection: View {
+    @State private var allTools: [ToolDefinition] = []
+    @State private var toggles: [String: Bool] = [:]
+    @State private var dirty: Bool = false
+    @State private var hasReset: Bool = false
+
+    var body: some View {
+        Section {
+            if allTools.isEmpty {
+                ProgressView()
+            } else {
+                ForEach(allTools, id: \.name) { tool in
+                    toolRow(tool)
+                }
+
+                HStack {
+                    Button("Önerilen Ayarlara Dön") {
+                        resetToDefaults()
+                    }
+                    .controlSize(.small)
+                    Spacer()
+                    if dirty {
+                        Text("Değişiklikler bir sonraki Sesli Mod başlatmada etkili.")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    } else if hasReset {
+                        Text("Sıfırlandı")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+        } header: {
+            Text("Voice Tools (Agent Aracı İzinleri)")
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Voice modunda agent'ın hangi MCP araçlarını çağırabileceğini buradan kontrol et. **Önerilen** (yeşil) yan etkisiz veya geri alınabilir tool'lardır; varsayılan açıktır. **Riskli** (turuncu) UI manipulation veya uzun süreli iş yapanlar; default kapalı, bilinçli açabilirsin.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Voice modu başlatıldıktan sonra değişiklik etkili olmaz — restart gerek.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { loadTools() }
+    }
+
+    @ViewBuilder
+    private func toolRow(_ tool: ToolDefinition) -> some View {
+        Toggle(isOn: toggleBinding(for: tool.name)) {
+            HStack(spacing: 6) {
+                Text(tool.name).font(.callout.monospaced())
+                badgeFor(tool.name)
+            }
+            Text(tool.description)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+    }
+
+    @ViewBuilder
+    private func badgeFor(_ toolName: String) -> some View {
+        if VoiceToolPreferences.isDefaultEnabled(toolName) {
+            Text("önerilen")
+                .font(.caption2.bold())
+                .foregroundStyle(.green)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Color.green.opacity(0.15), in: Capsule())
+        } else if VoiceToolPreferences.isRisky(toolName) {
+            Text("riskli")
+                .font(.caption2.bold())
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Color.orange.opacity(0.18), in: Capsule())
+        }
+    }
+
+    private func toggleBinding(for toolName: String) -> Binding<Bool> {
+        Binding(
+            get: { toggles[toolName] ?? false },
+            set: { newValue in
+                toggles[toolName] = newValue
+                VoiceToolPreferences().setEnabled(toolName, newValue)
+                dirty = true
+                hasReset = false
+            }
+        )
+    }
+
+    private func loadTools() {
+        let registry = BuiltInTools.makeRegistry()
+        allTools = registry.all().sorted { $0.name < $1.name }
+        let prefs = VoiceToolPreferences()
+        var current: [String: Bool] = [:]
+        for tool in allTools {
+            current[tool.name] = prefs.isEnabled(tool.name)
+        }
+        toggles = current
+    }
+
+    private func resetToDefaults() {
+        VoiceToolPreferences().resetAllOverrides()
+        loadTools()
+        dirty = false
+        hasReset = true
     }
 }

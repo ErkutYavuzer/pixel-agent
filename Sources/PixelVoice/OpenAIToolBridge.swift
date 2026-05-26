@@ -18,22 +18,10 @@ import PixelMCPServer
 /// `properties` + `required`).
 public enum OpenAIToolBridge {
 
-    /// **Sprint 44:** Voice modunda agent'in çağırabileceği tool'lar
-    /// (whitelist). Sprint 45+'da Settings opt-in toggle ile genişler.
-    public static let voiceSafeToolNames: Set<String> = [
-        // Saf-data / bilgi (yan etkisiz)
-        "get_clipboard",
-        "set_clipboard",
-        "get_current_time",
-        "get_active_app",
-        "get_lan_ip",
-        // Memory (Sprint 36-37 — agent öğrensin)
-        "save_memory",
-        "search_memory",
-        // Notification (ufak yan etki)
-        "notify",
-        "play_sound",
-    ]
+    /// **Sprint 44:** Default whitelist — backward-compat alias.
+    /// **Sprint 46 (v0.2.74):** Gerçek seçim artık `VoiceToolPreferences` ile;
+    /// bu alias `VoiceToolPreferences.defaultEnabledToolNames` ile aynı.
+    public static let voiceSafeToolNames: Set<String> = VoiceToolPreferences.defaultEnabledToolNames
 
     /// **Sprint 44:** Tek tool MCP → OpenAI dönüşümü.
     public static func convert(_ tool: ToolDefinition) -> OpenAITool {
@@ -44,13 +32,21 @@ public enum OpenAIToolBridge {
         )
     }
 
-    /// **Sprint 44:** Registry'den voice-safe tool'ları çıkar + convert.
-    /// `includeAll: true` ise whitelist atlanır (Sprint 45+ opt-in için).
-    public static func voiceTools(from registry: ToolRegistry, includeAll: Bool = false) -> [OpenAITool] {
+    /// **Sprint 46 (v0.2.74):** Registry'den kullanıcı'nın aktive ettiği
+    /// tool'ları çıkar + convert. `VoiceToolPreferences` UserDefaults
+    /// override'ları + default whitelist'i sırasıyla check eder.
+    ///
+    /// `includeAll: true` — TEST için tüm tool'ları döndürür (preferences
+    /// bypass). Production'da kullanılmamalı.
+    public static func voiceTools(
+        from registry: ToolRegistry,
+        preferences: VoiceToolPreferences = VoiceToolPreferences(),
+        includeAll: Bool = false
+    ) -> [OpenAITool] {
         let allTools = registry.all()
         let filtered = includeAll
             ? allTools
-            : allTools.filter { voiceSafeToolNames.contains($0.name) }
+            : allTools.filter { preferences.isEnabled($0.name) }
         return filtered.map(convert)
     }
 }
