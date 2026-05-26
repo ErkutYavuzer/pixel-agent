@@ -17,8 +17,11 @@ import Foundation
 /// - `currentWindowDwell: TimeInterval` — bu key'te geçirilen süre
 /// - `dwellFiredForCurrentWindow: Bool` — per-window dedup
 public actor WindowDwellDetector {
-    /// Mock'lanabilir frontmost window info kaynağı.
-    public typealias WindowSource = @Sendable () -> WindowInfo?
+    /// **Sprint 46 hot-fix (v0.2.73):** Mock'lanabilir frontmost window info
+    /// kaynağı. `@MainActor` annotation — production system source NSWorkspace +
+    /// AX API'lerini kullanır (MainActor zorunlu). Caller `tick()` `await`
+    /// ile çağırır → otomatik MainActor hop.
+    public typealias WindowSource = @MainActor @Sendable () -> WindowInfo?
 
     public struct WindowInfo: Sendable, Equatable {
         public let appName: String
@@ -100,8 +103,8 @@ public actor WindowDwellDetector {
     public init(
         thresholdSeconds: TimeInterval = defaultThresholdSeconds,
         pollIntervalSeconds: TimeInterval = defaultPollIntervalSeconds,
-        windowSource: @escaping WindowSource = {
-            MainActor.assumeIsolated { WindowDwellDetector.systemWindowInfo() }
+        windowSource: @escaping WindowSource = { @MainActor in
+            WindowDwellDetector.systemWindowInfo()
         },
         selfBundleID: String? = Bundle.main.bundleIdentifier,
         onFire: @escaping FireCallback
@@ -130,9 +133,11 @@ public actor WindowDwellDetector {
         pollTask = nil
     }
 
-    /// **Sprint 39:** Tek tick — key değişimi check + dwell artır veya reset.
+    /// **Sprint 39 / Sprint 46 hot-fix:** Tek tick — windowSource MainActor'a
+    /// hop, key değişimi check + dwell artır veya reset.
     public func tick() async {
-        guard let info = windowSource() else {
+        let info: WindowInfo? = await MainActor.run { windowSource() }
+        guard let info else {
             resetDwell()
             return
         }

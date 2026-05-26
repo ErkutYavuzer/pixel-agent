@@ -21,8 +21,10 @@ public actor TypedPauseDetector {
     /// Mock'lanabilir keyDown idle süre kaynağı (saniye).
     public typealias KeyDownIdleSource = @Sendable () -> TimeInterval
 
-    /// Mock'lanabilir frontmost app kaynağı (name, bundleID).
-    public typealias FrontAppSource = @Sendable () -> (name: String, bundleID: String)?
+    /// **Sprint 46 hot-fix (v0.2.73):** Mock'lanabilir frontmost app kaynağı.
+    /// `@MainActor` annotation — NSWorkspace.frontmostApplication MainActor
+    /// zorunlu. Caller `tick()` `await MainActor.run` hop.
+    public typealias FrontAppSource = @MainActor @Sendable () -> (name: String, bundleID: String)?
 
     public typealias FireCallback = @Sendable (_ name: String, _ bundleID: String) async -> Void
 
@@ -69,7 +71,7 @@ public actor TypedPauseDetector {
     public init(
         pollIntervalSeconds: TimeInterval = defaultPollIntervalSeconds,
         keyDownSource: @escaping KeyDownIdleSource = TypedPauseDetector.systemKeyDownSource,
-        frontAppSource: @escaping FrontAppSource = { MainActor.assumeIsolated { TypedPauseDetector.systemFrontAppSource() } },
+        frontAppSource: @escaping FrontAppSource = { @MainActor in TypedPauseDetector.systemFrontAppSource() },
         selfBundleID: String? = Bundle.main.bundleIdentifier,
         onFire: @escaping FireCallback
     ) {
@@ -122,8 +124,9 @@ public actor TypedPauseDetector {
         // Yeterli aktif streak yok → filter (küçük edit)
         guard typingActiveStreak >= Self.minActiveStreak else { return }
 
-        // Front app + self filter + per-bundle dedup
-        guard let front = frontAppSource() else { return }
+        // Front app + self filter + per-bundle dedup — MainActor hop.
+        let front: (name: String, bundleID: String)? = await MainActor.run { frontAppSource() }
+        guard let front else { return }
         if let selfBundleID, front.bundleID == selfBundleID { return }
         if typedPauseFiredFor == front.bundleID { return }
 

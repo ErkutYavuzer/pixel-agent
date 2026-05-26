@@ -15,8 +15,11 @@ import Foundation
 /// State:
 /// - `lastFiredEventKey: String?` — son fire edilen event'in `title@unix_start`
 public actor CalendarEventDetector {
-    /// Mock'lanabilir event source — test için EventKit dependency bypass.
-    public typealias EventSource = @Sendable () -> UpcomingEvent?
+    /// **Sprint 46 hot-fix (v0.2.73):** Mock'lanabilir event source.
+    /// `@MainActor` annotation — `EKEventStore.predicateForEvents` ve `events
+    /// (matching:)` MainActor (shared store). Caller `tick()` `await MainActor.run`
+    /// hop.
+    public typealias EventSource = @MainActor @Sendable () -> UpcomingEvent?
 
     public struct UpcomingEvent: Sendable, Equatable {
         public let title: String
@@ -132,8 +135,8 @@ public actor CalendarEventDetector {
         pollIntervalSeconds: TimeInterval = defaultPollIntervalSeconds,
         lowerBoundMinutes: Int = fireWindowLowerMinutes,
         upperBoundMinutes: Int = fireWindowUpperMinutes,
-        eventSource: @escaping EventSource = {
-            MainActor.assumeIsolated { CalendarEventDetector.systemEventSource() }
+        eventSource: @escaping EventSource = { @MainActor in
+            CalendarEventDetector.systemEventSource()
         },
         onFire: @escaping FireCallback
     ) {
@@ -161,10 +164,11 @@ public actor CalendarEventDetector {
         pollTask = nil
     }
 
-    /// **Sprint 39:** Tek tick — event source çağır, window check + dedup +
-    /// fire.
+    /// **Sprint 39 / Sprint 46 hot-fix:** Tek tick — eventSource MainActor'a
+    /// hop, window check + dedup + fire.
     public func tick(now: Date = Date()) async {
-        guard let event = eventSource() else { return }
+        let event: UpcomingEvent? = await MainActor.run { eventSource() }
+        guard let event else { return }
         let minutesUntil = Int(event.startDate.timeIntervalSince(now) / 60)
         guard minutesUntil >= lowerBoundMinutes,
               minutesUntil <= upperBoundMinutes else { return }
