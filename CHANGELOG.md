@@ -9,8 +9,33 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 
 ### Notes
 - v0.2 kalan: App Store signing.
-- Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
+- Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording; Cloudflare workers.dev cert reprovisioning (support ticket veya yeni subdomain).
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
+
+## [0.2.78] — 2026-05-27
+
+**Sprint 49.1 hot-fix — Auto-start default geri ON (Cloudflare cert provisioning sorunu).** Sprint 49'da production Cloudflare URL hardcoded edilmiş, auto-start default'u OFF'a alınmıştı; ancak `wrangler deploy` sonrası `pixel-agent-relay.erkutyavuzer.workers.dev` URL'i TLS handshake'i `Cipher 0000` ile reddediyor. Diagnostic: hesap subdomain'i (`erkutyavuzer.workers.dev`) Cloudflare dashboard'da allocated görünüyor (4.12k lifetime request) ama wildcard cert provisioning'i 2024 Workers Free Plan policy değişikliği sonrası de-provisioned. Bu kullanıcı/hesap için cert support ticket veya yeni subdomain ile çözülür — code-side bir şey yapılamaz.
+
+**Hot-fix:** `RelayLauncher.isAutoStartEnabled` default `false` → `true` revert. Fresh install kullanıcıları yine yerel wrangler subprocess + LAN ile çalışır; productionURL kodda kalır (Cloudflare side fix olursa resolver chain'inde otomatik devreye girer). Test güncellendi.
+
+**Test:** 1 RelayLauncherTests assertion swap (`testAutoStartDefaultFalse` → `testAutoStartDefaultTrue`) + `testStartWithoutRelayDirectoryFailsGracefully` simplified (Sprint 49'da eklenen UserDefaults boilerplate kaldırıldı). Toplam test 1368 — değişmez.
+
+### Changed — Sprint 49.1 hot-fix
+
+#### `Sources/PixelMacApp/RelayLauncher.swift`
+- **`isAutoStartEnabled` default `true`** (Sprint 49'da false yapılmıştı). Docstring güncellendi: Cloudflare cert issue açıklaması.
+
+#### `Tests/PixelMacAppTests/RelayLauncherTests.swift`
+- `testAutoStartDefaultTrue` (Sprint 49'da `testAutoStartDefaultFalse` olarak değişmişti).
+- `testStartWithoutRelayDirectoryFailsGracefully` orijinal forma döndü.
+
+### Notes — Sprint 49.1
+
+- **Cloudflare side:** Account-wide `erkutyavuzer.workers.dev` subdomain'i dashboard'da listelenir ama edge TLS handshake reddediyor; aynı sorun 15 gün önce deploy edilen `pa-relay` worker'ında da var. Lokal TLS stack sağlam (`cloudflare.com` ve `workers.cloudflare.com` ile handshake başarılı). Diagnostic detayı için bkz: Sprint 49 release notes + Cloudflare 2024 Workers Free Plan policy update.
+- **productionURL kodda kalır:** `RelayURLResolver.productionURL = "wss://pixel-agent-relay.erkutyavuzer.workers.dev"`. Resolver chain custom > env > production > LAN > localhost; kullanıcı Settings → Bağlantı → "Wrangler'ı Otomatik Başlat" toggle'ını manuel kapatırsa LAN/localhost yerine production URL devreye girer (Cloudflare side fix sonrası bağlanır).
+- **iOS pairing değişmez:** Yerel wrangler subprocess artık tekrar default → LAN üzerinden bağlanır. Mac sleep/quit'te düşer (Sprint 47 davranışı).
+- **Backward compat:** Sprint 49 (v0.2.77) kurulu kullanıcılar (sadece bir kişi: Erkut) auto-start UserDefaults set'li olmadığı için bu hot-fix sonrası default ON'a döner. Settings'ten ele alabilir.
+- **Forward path:** Cloudflare workers.dev cert provisioning Cloudflare support'la veya yeni subdomain seçimi ile çözülürse, Sprint 49.2 ile default'u tekrar false'a alabiliriz (productionURL hâlâ kodda).
 
 ## [0.2.77] — 2026-05-27
 

@@ -1,6 +1,9 @@
 name = "pixel-agent-relay"
 main = "src/index.ts"
 compatibility_date = "2026-05-01"
+# Sprint 49.1: workers_dev explicit true denendi ama Cloudflare cert
+# provisioning sorununu çözmüyor — config kalsın, ileride faydalı olabilir.
+workers_dev = true
 
 [durable_objects]
 bindings = [
