@@ -12,6 +12,79 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi (release tag + commit + PROJECT_MEMORY zaten döküman).
 
+## [0.2.63] — 2026-05-26
+
+**Sprint 36 — MemoryStore + PlaybookLearner MVP.** v3'e ilk kez **cross-session persistent memory** mekanizması: agent geçmiş benzer task'leri "hatırlıyor". v2'nin (~64k LOC monorepo) `MemoryStore.swift:1-115` + `MemoryConsolidator.swift` + `PlaybookLearner.swift:1-99` paterniyle uyumlu — ama embedding-free Jaccard MVP (CoreML/SwiftNLP v0.3+ aday).
+
+Her user mesajı öncesi `ChatViewModel.send` `MemoryStore.relevantContext(for:)` çağırır → `PlaybookLearner` top-N relevant entry'leri ranking sırasıyla döner (Jaccard similarity × category promptWeight × recipe tag boost) → `CLIBackend.send` `system` prompt'una `"[Kullanıcı geçmişinden benzer kayıtlar]"` prefix ile enjekte edilir. Claude/Codex/Gemini geçmiş context'i otomatik görür.
+
+**Test:** Mac 998 → **1043** (+45: 17 MemoryStore + 12 TextSimilarityScorer + 9 MemoryConsolidator + 13 PlaybookLearner + 4 regression fixes). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni `memoryStore` ChatViewModel parametresi opsiyonel default nil).
+
+### Added — Sprint 36 / MemoryStore + PlaybookLearner
+
+#### `Sources/PixelMemory/MemoryEntry.swift` (yeni)
+- **`MemoryEntry`** struct (`Codable`, `Identifiable`, `Equatable`, `Sendable`) — id (UUID), category, content, tags, createdAt, updatedAt, deleted (soft tombstone).
+- **`MemoryCategory`** enum: `profile` (4) / `preference` (3) / `project` (2) / `task` (1) / `note` (0) — `promptWeight` ranking boost katsayısı.
+- **`withNormalizedTags()`** — trim + lowercase + dedup (NSMutableOrderedSet).
+
+#### `Sources/PixelMemory/MemoryStore.swift` (yeni)
+- **`MemoryStore`** actor — `ConversationStore` paterniyle JSONL append-only persist.
+- Storage path: `~/Library/Application Support/pixel-agent/memory.jsonl`.
+- API: `add()` / `update(id:content:tags:category:)` / `delete(id:)` (soft tombstone) / `loadAll()` (latest-wins + deleted filter) / `loadByCategory()` / `loadByTag()` / `relevantContext(for:limit:minSimilarity:)` / `compact()`.
+- **Multi-process safe (best-effort):** MCP server + Mac app aynı dosyaya append; corrupt satır skip.
+
+#### `Sources/PixelMemory/TextSimilarityScorer.swift` (yeni saf helper)
+- **`score(_:_:) -> Double`** — Jaccard token similarity, 0.0-1.0 aralık.
+- **`tokenize(_:)`** — Latin alphanumeric split, lowercase, stopword filter (TR+EN 47 word), minTokenLength=3.
+- Embedding-free MVP; CoreML/SwiftNLP v0.3+ aday.
+
+#### `Sources/PixelMemory/MemoryConsolidator.swift` (yeni saf helper)
+- **`findDuplicates(in:threshold:)`** — Jaccard ≥ 0.85 + aynı category pair tespit (O(n²) — typical <500 entry için kabul edilebilir).
+- **`merge(older:newer:)`** — newer content wins + union tags (normalize) + earliest createdAt + fresh updatedAt.
+
+#### `Sources/PixelMemory/PlaybookLearner.swift` (yeni saf helper)
+- **`relevant(query:in:limit:minSimilarity:)`** — top-N ranker. Score = Jaccard × category weight × 0.05 + (recipe tag ? 0.1 : 0).
+- **`formatPrompt(_:)`** — entry list → markdown bullet (system prompt prefix için).
+- Default `limit=3`, `minSimilarity=0.55` — v2 uyumlu.
+
+#### `Sources/PixelMCPServer/MemoryTools.swift` (yeni MCP tools)
+- **`save_memory(category, content, tags?)`** — agent kendi entry kaydedebilir (örn "Beni Erkut diye çağır" → profile).
+- **`search_memory(query, limit?, category?, tag?, min_similarity?)`** — agent geçmiş entry'lerde arama yapar (örn "PR review template'i hatırlıyor musun?").
+- **Standalone** (bridge yok) — Mac app çalışmıyor olsa bile MCP server tek başına memory'ye erişir; `MemoryStore` fresh instance her handler içinde.
+
+#### `Sources/PixelMacApp/ChatViewModel.swift` (entegrasyon)
+- **`let memoryStore: MemoryStore?`** yeni property (init parametresi default nil — test/opt-out friendly).
+- **`send()` öncesi** `Task { memoryStore?.relevantContext(for:) }` → `PlaybookLearner.formatPrompt()` → backend `system:` prefix.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift` (composition root)
+- **`RootView.@State memoryStore: MemoryStore?`** — init'te `try? MemoryStore()` (fail-safe, nil ise injection devre dışı).
+- **`ChatHost` `memoryStore:` parametresi** — ChatView ve DualChatHost'lara iletilir.
+
+#### `Sources/PixelMacApp/SettingsView.swift`
+- **6. tab eklendi:** "Hafıza" (`brain.head.profile` icon).
+- **`MemorySettingsTab` struct** — entry list (kategori badge + tag chip + içerik) + swipe-to-delete + "Optimize Et" butonu (MemoryConsolidator + compact()).
+- Storage path footer'da görünür.
+
+#### `Sources/PixelMCPServer/JSONValue.swift`
+- **`doubleValue`** getter eklendi — JSON wire'da int olarak gelen `min_similarity` gibi float param'lar için.
+- **`intValue`** double'dan int dönüşümü destekler.
+
+### Tests — Sprint 36
+
+- `Tests/PixelMemoryTests/MemoryStoreTests.swift` — **17 yeni**: CRUD, normalize, update/delete, soft tombstone, filters, compact, relevantContext integration.
+- `Tests/PixelMemoryTests/TextSimilarityScorerTests.swift` — **12 yeni**: identical=1, different=0, case-insensitive, symmetry, stopwords, short token filter, Turkish chars, demo regression.
+- `Tests/PixelMemoryTests/MemoryConsolidatorTests.swift` — **9 yeni**: identical flag, different not flagged, category isolation, order, merge content/tags/dates, custom threshold.
+- `Tests/PixelMemoryTests/PlaybookLearnerTests.swift` — **13 yeni**: empty/zero edges, threshold filter, deleted skip, limit, recipe boost, category weight ranking, formatPrompt, demo scenario.
+- **Regression updates** (+4): `SettingsTabTests` 5→6 case, `ToolRegistryTests` 14→16 tool count + listResult name set.
+
+### Notes — Sprint 36
+
+- **Memory injection opt-out:** `ChatViewModel.memoryStore` nil ise hiçbir context enjekte edilmez (test'ler, regression). Composition root'ta `try? MemoryStore()` — fail-safe.
+- **Jaccard limitasyonu:** Kısa metinlerde (~5-10 token altı) similarity zayıf. Demo testte gösterildiği gibi "Beni Erkut diye çağır" + "Erkut burada" düşük skor verir. CoreML embedding v0.3+ aday — short-text retrieval kalitesi anlamlı artar.
+- **MemoryConsolidator:** Otomatik schedule yok — manuel `Settings → Hafıza → Optimize Et` veya `compact` MCP tool (gelecek versiyonda).
+- **Multi-process race:** MCP server (CLI agent) + Mac app aynı `memory.jsonl`'e append eder; worst case 1 entry corrupt → decode atlanır, kayıp ufak. Production-grade durability için file lock v0.3+ aday.
+- **iOS:** Memory UI iOS dashboard'da yok — Mac-only MVP. iOS read-only liste sonraki sprint'lerde.
+
 ## [0.2.62] — 2026-05-26
 
 **Sprint 35 — iOS stale-pairing detection + auto-recovery.** Kullanıcı raporladı: "her seferinde QR kod okutmam gerekiyor, otomatik bağlanmalı açık olduğu zaman". Tanı: Mac side stable (Sprint 34 `PairingCode` UserDefaults persist + signing key Keychain) ama iOS-tarafı eski random code veya değişmiş public key ile reconnect loop'unu sessizce sonsuza dek deniyordu. Banner "Bağlantı koptu" gösterir, kullanıcı manuel olarak Settings → Eşleştirmeyi Unut → yeni QR yolunu bulmak zorundaydı.

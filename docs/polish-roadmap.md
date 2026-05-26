@@ -456,6 +456,25 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 35 tamamlandı — iOS stale-pairing detection + auto-recovery.** Sprint 34 Mac side `PairingCode` UserDefaults persist + signing key Keychain'de stabil; ama iOS-tarafı eski random code veya değişmiş public key ile reconnect loop'unu sessizce sonsuza dek deniyordu. Bu release threshold-based detection ekledi (5 connect fail / 3 verify fail / 8s ready timeout) + UI prominent kırmızı banner + tek-tıkla recovery. Mac test 983 → 998 (+15 + 1 regression fix). iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 36 — "MemoryStore + PlaybookLearner MVP" (v0.2.63)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | data | `MemoryEntry` + 5 kategori (`profile`/`preference`/`project`/`task`/`note`) + `promptWeight` (0-4) ranking boost |
+| ✅ | persist | `MemoryStore` actor — JSONL append-only, `~/Library/Application Support/pixel-agent/memory.jsonl`, soft tombstone, latest-wins loadAll |
+| ✅ | scorer | `TextSimilarityScorer` saf helper — Jaccard token similarity (TR+EN stopword filter, minTokenLength=3) |
+| ✅ | dedup | `MemoryConsolidator` — Jaccard ≥ 0.85 + aynı category duplicate detection + merge (newer wins + union tags) |
+| ✅ | rank | `PlaybookLearner` — query → top-N relevant entries; score × category weight × recipe tag boost |
+| ✅ | wire | `ChatViewModel.send` → `relevantContext` → `formatPrompt` → backend `system:` prefix |
+| ✅ | MCP | `save_memory` + `search_memory` tool'ları (standalone, MCP server bağımsız) |
+| ✅ | UI | Settings → "Hafıza" 6. tab (entry list + swipe delete + Optimize Et) |
+| ⏸ | v0.2.64+ | CoreML/SwiftNLP embedding (kısa metin similarity kalitesi) |
+| ⏸ | v0.2.64+ | iOS memory list UI (read-only) |
+| ⏸ | v0.2.64+ | Otomatik post-task capture (Claude tool-call sonrası entry önerisi) |
+| ⏸ | v0.2.64+ | File lock multi-process race koruması (durability) |
+
+**26 May 2026: Sprint 36 tamamlandı — MemoryStore + PlaybookLearner MVP.** v3'e ilk kez cross-session persistent memory. Agent her user mesajı öncesi geçmiş benzer task'leri otomatik olarak `system` prompt'a enjekte eder (PlaybookLearner top-N ranking). v2'nin (~64k LOC) memory paterniyle uyumlu, ama embedding-free Jaccard MVP. Mac test 998 → 1043 (+45: 17 store + 12 scorer + 9 consolidator + 13 learner + 4 regression update). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
