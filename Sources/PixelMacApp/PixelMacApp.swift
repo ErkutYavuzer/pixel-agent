@@ -107,10 +107,10 @@ struct RootView: View {
     /// detector task'ları cancel eder).
     static let proactiveEngine = ProactiveEngine()
 
-    /// **Sprint 42-44:** Voice provider factory — UserDefaults'tan aktif
-    /// provider okur, runtime'da instance üretir. Apple (lokal) veya OpenAI
-    /// Realtime (Sprint 43 audio I/O + Sprint 44 function calling + interrupt).
-    /// Gemini Live Sprint 45'te.
+    /// **Sprint 42-45:** Voice provider factory — UserDefaults'tan aktif
+    /// provider okur, runtime'da instance üretir. Apple (lokal), OpenAI
+    /// Realtime (Sprint 43-44 full feature), Gemini Live (Sprint 45 full
+    /// feature, ~10x ucuz alternatif).
     static func makeVoiceProvider() -> any PixelVoice.VoiceProvider {
         let raw = UserDefaults.standard.string(forKey: VoiceProviderKind.activeProviderDefaultsKey)
         let kind = raw.flatMap { VoiceProviderKind(rawValue: $0) } ?? .apple
@@ -118,14 +118,15 @@ struct RootView: View {
         case .apple:
             return AppleVoiceProvider(locale: Locale(identifier: "tr-TR"))
         case .openaiRealtime:
-            // Sprint 44 (v0.2.71): MCP tool registry inject — agent voice
-            // modunda voice-safe tool'ları çağırabilsin (get_current_time,
-            // save_memory, vs.). OpenAIToolBridge.voiceSafeToolNames whitelist.
+            // Sprint 44 (v0.2.71): MCP tool registry inject — voice-safe whitelist.
             let registry = BuiltInTools.makeRegistry()
             return OpenAIRealtimeProvider(toolRegistry: registry)
         case .geminiLive:
-            // Sprint 45 aday — şu an Apple fallback
-            return AppleVoiceProvider(locale: Locale(identifier: "tr-TR"))
+            // Sprint 45 (v0.2.72): Google Gemini Live WebSocket. Aynı
+            // VoiceProvider abstraction, OpenAI'den ~10x ucuz. Aynı voice-safe
+            // whitelist (GeminiToolBridge → OpenAIToolBridge.voiceSafeToolNames).
+            let registry = BuiltInTools.makeRegistry()
+            return GeminiLiveProvider(toolRegistry: registry)
         }
     }
 

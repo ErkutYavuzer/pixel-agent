@@ -87,10 +87,11 @@ final class VoiceCredentialsStoreTests: XCTestCase {
     }
 
     func testRealtimeProvidersAvailability() {
-        // Sprint 43 (v0.2.70): OpenAI Realtime aktif.
-        // Sprint 44'te Gemini Live aktive olacak.
+        // Sprint 43-44 (v0.2.70-71): OpenAI Realtime aktif.
+        // Sprint 45 (v0.2.72): Gemini Live aktif.
+        XCTAssertTrue(VoiceProviderKind.apple.isAvailable)
         XCTAssertTrue(VoiceProviderKind.openaiRealtime.isAvailable)
-        XCTAssertFalse(VoiceProviderKind.geminiLive.isAvailable)
+        XCTAssertTrue(VoiceProviderKind.geminiLive.isAvailable)
     }
 
     func testAllCasesCount() {

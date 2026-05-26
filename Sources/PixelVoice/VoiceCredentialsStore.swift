@@ -74,7 +74,7 @@ public enum VoiceProviderKind: String, CaseIterable, Sendable, Codable {
         switch self {
         case .apple: return "Apple Speech (lokal)"
         case .openaiRealtime: return "OpenAI Realtime"
-        case .geminiLive: return "Gemini Live (Sprint 44)"
+        case .geminiLive: return "Gemini Live"
         }
     }
 
@@ -83,19 +83,20 @@ public enum VoiceProviderKind: String, CaseIterable, Sendable, Codable {
         case .apple:
             return "SFSpeechRecognizer + AVSpeechSynthesizer. Lokal, ücretsiz, sıfır API key, ~100ms latency. Function calling ve interrupt zayıf."
         case .openaiRealtime:
-            return "OpenAI Realtime WebSocket API. Server-side VAD otomatik segment + response. PCM16 24kHz audio. ~$0.06/min input, ~$0.24/min output. Function calling Sprint 44'te."
+            return "OpenAI Realtime WebSocket API. Server-side VAD, function calling, interrupt. PCM16 24kHz. ~$0.06/min input, ~$0.24/min output."
         case .geminiLive:
-            return "Gemini Live WebSocket API. Server-side VAD, interruptible, multimodal. (Sprint 44'te tam destek.)"
+            return "Google Gemini Live WebSocket API (BidiGenerateContent). Server-side VAD, function calling, interrupt. PCM16 16kHz input / 24kHz output. ~$0.006/min input, ~$0.024/min output (OpenAI'den ~10x ucuz)."
         }
     }
 
-    /// **Sprint 42:** Provider kullanıma hazır mı? `apple` her zaman true;
-    /// `openaiRealtime` Sprint 43'te aktif; `geminiLive` Sprint 44.
+    /// **Sprint 42-45:** Provider kullanıma hazır mı? `apple` her zaman true;
+    /// `openaiRealtime` Sprint 43 (audio I/O) + Sprint 44 (function calling +
+    /// interrupt); `geminiLive` Sprint 45.
     public var isAvailable: Bool {
         switch self {
         case .apple: return true
-        case .openaiRealtime: return true   // Sprint 43 (v0.2.70)
-        case .geminiLive: return false      // Sprint 44
+        case .openaiRealtime: return true   // Sprint 43-44 (v0.2.70-0.2.71)
+        case .geminiLive: return true       // Sprint 45 (v0.2.72)
         }
     }
 
