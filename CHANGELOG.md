@@ -10,7 +10,77 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
-- CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi (release tag + commit + PROJECT_MEMORY zaten döküman).
+- CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
+
+## [0.2.67] — 2026-05-26
+
+**Sprint 40 — Notification tap → ChatView draft inject (smooth handoff).** Sprint 38-39 proaktif bildirimleri kullanıcıyı uyarıyordu ama "tıklayınca ne olur?" muğlaktı (default app aktivasyon). Sprint 40 tap'i yakalayıp **trigger-spesifik hazır prompt** ile ChatView composer'ını otomatik dolduruyor. Kullanıcı düzenleyip Enter ile gönderir — **auto-send YOK** (confirm-first UX).
+
+**Akış:** Notification fire → `userInfo: trigger.userInfoPayload()` (kind + minutes/app/title vs.) embedded → kullanıcı tap → `UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:)` → `NotificationActionDispatcher` decode → `ProactivePromptComposer.prompt(for:)` Turkish first-person user voice → `NotificationCenter.default.post(.proactivePromptInject)` → `ChatView`/`DualChatHost` `.onReceive` → `ChatViewModel.injectDraft(_:)` → composer field dolu.
+
+**Test:** Mac 1150 → **1180** (+30: 9 PromptComposer + 12 TriggerUserInfoEncoding + 9 NotificationActionDispatcher; +8 Sprint 38 ProactiveEngineTests Delivery signature update). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok pratikte** (Delivery typealias eski 2-arg → 3-arg ama dış API (`ProactiveEngine.init`) yeni default ile uyumlu; test'ler güncellendi).
+
+### Added — Sprint 40 / Notification → ChatView smooth handoff
+
+#### `Sources/PixelMacApp/Proactive/ProactivePromptComposer.swift` (yeni saf helper)
+- **`prompt(for trigger: ProactiveTrigger) -> String`** — 5 trigger için Turkish first-person user voice prompt template:
+  - idle: "Son N dakikadır masaya dönmedim. Ne yapmam gerektiğini hatırlatır mısın?"
+  - appChanged: "X uygulamasına geçtim. Bu uygulamayla ilgili bir konuda yardımcı olabilir misin?"
+  - windowDwell (title var): "N dakikadır X — title penceresindeyim. Bir noktada tıkandım sanırım; gözden geçirip yardımcı olur musun?"
+  - windowDwell (title boş): "N dakikadır X uygulamasında çalışıyorum. Bir noktada tıkandım sanırım..."
+  - typedPause: "X'te yazıyordum ama tıkandım. Şu ana kadar yazdığım metni okuyup geri bildirim verir misin?"
+  - upcomingEvent: "N dakika sonra 'X' toplantım başlıyor (location?). Toplantıya hazırlanmak için ne tavsiye edersin?"
+- **First-person voice** kasıtlı: agent'a ne yapacağını söylemek yerine kullanıcının ne soracağını öneriyor. Memory injection sistem prompt'undan ayrı (PlaybookLearner sistem context'i — bu kullanıcı mesajı).
+
+#### `Sources/PixelMacApp/Proactive/ProactiveTrigger.swift` (genişletme)
+- **`userInfoPayload() -> [String: String]`** — UNNotification.userInfo Sendable string dict encoding. Int'ler String(int) ile encode; decoder Int(parse).
+- **`init?(userInfoPayload dict:)`** — Round-trip decode. Missing/corrupt → nil (defensive). Empty title default `""` (permission yoksa pencere durumu).
+
+#### `Sources/PixelTools/SystemNotifications.swift` (genişletme)
+- **`post(title:body:userInfo:identifier:)`** yeni overload — `UNMutableNotificationContent.userInfo` set eder. Eski 3-arg `post(title:body:identifier:)` artık bu yenisine forward eder (backward-compat).
+- **`buildContent(title:body:userInfo:)`** — userInfo default `[:]`.
+
+#### `Sources/PixelMacApp/Proactive/NotificationActionDispatcher.swift` (yeni)
+- **`final class NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable`** — singleton, `register()` `UNUserNotificationCenter.current().delegate = self`.
+- **`didReceive` tap handler:** UNNotificationDefaultActionIdentifier filter + opt-out check + payload normalize + Trigger decode + Composer prompt + broadcast.
+- **`willPresent`:** App foreground'da `.banner + .sound` (default macOS suppress'i override).
+- **Saf helpers (test edilebilir):**
+  - `normalizePayload(_ raw: [AnyHashable: Any]) -> [String: String]?` — non-string key/value filter.
+  - `isInjectEnabled(defaults:)` — UserDefaults nil-safe default true.
+  - `broadcast(draft:)` — `NotificationCenter.default.post(.proactivePromptInject)`.
+- **`Notification.Name.proactivePromptInject`** extension — `userInfo["draft"]: String`.
+
+#### `Sources/PixelMacApp/Proactive/ProactiveEngine.swift` (signature change)
+- **`Delivery` typealias** `(String, String) async -> Void` → `(String, String, [String: String]) async -> Void`. `userInfo` parametresi 3. arg.
+- `defaultDelivery` `SystemNotifications.post(title:body:userInfo:)` forward.
+- `handle(_:)` `await deliver(title, body, trigger.userInfoPayload())`.
+
+#### `Sources/PixelMacApp/ChatViewModel.swift`
+- **`injectDraft(_ text: String)`** yeni method — `draft = text`. Streaming aktif olsa bile override (kullanıcı isteği saymanın yolu yok).
+
+#### `Sources/PixelMacApp/ChatView.swift` + `DualChatHost.swift`
+- **`.onReceive(.proactivePromptInject)`** listener — single mode'da `viewModel.injectDraft(draft)`, dual mode'da `leftVM.injectDraft(draft)` (subagent dispatch ile aynı sütun seçimi).
+
+#### `Sources/PixelMacApp/PixelMacApp.swift` (lifecycle)
+- `RootView .task` `NotificationActionDispatcher.shared.register()` çağrısı (SystemNotifications.requestAuthorization sonrası, ProactiveEngine.start öncesi).
+
+#### `Sources/PixelMacApp/SettingsView.swift`
+- **Proaktif tab "Ana Anahtar" section'a** ikinci toggle: **"Bildirimi tıklayınca sohbete prompt aktar"** (default ON, opt-out). `@AppStorage(NotificationActionDispatcher.enabledDefaultsKey)`.
+
+### Tests — Sprint 40
+
+- `Tests/PixelMacAppTests/ProactivePromptComposerTests.swift` — **9 yeni**: idle minutes, appChanged name, windowDwell with/without title, typedPause, upcomingEvent with/without/empty location, all-triggers regression (first-person, non-empty, >20 char).
+- `Tests/PixelMacAppTests/TriggerUserInfoEncodingTests.swift` — **12 yeni**: 5 trigger round-trip, location nil, missing kind/unknown kind/missing minutes/missing bundle/corrupt minutes → nil, windowDwell empty title default.
+- `Tests/PixelMacAppTests/NotificationActionDispatcherTests.swift` — **9 yeni**: normalizePayload empty/filtered/all-strings/only-non-strings, isInjectEnabled default/false/true, broadcast emits notification, **end-to-end Trigger → payload → normalize → decode → compose → broadcast round-trip**.
+- **Sprint 38 regression update** — `ProactiveEngineTests` 8 test Delivery signature 2-arg → 3-arg (sed bulk replace).
+
+### Notes — Sprint 40
+
+- **Confirm-first UX (auto-send YOK):** Notification tap composer'a yazıyor ama Enter'a basmıyor. Kullanıcı promptu görür, gerekirse düzenler, kontrolünde gönderir. Agent'a güvenli intervene noktası.
+- **First-person voice rationale:** v2 (`AppDelegate+Lifecycle.swift:181-203`) trigger sonrası arka planda LLM oneShot çağırıyordu (agent ağzı). v3 farklı paradigma — kullanıcı ağzından soru, agent cevaplayacak. Confirm-first + system prompt'a inject zaten Sprint 36'da (PlaybookLearner) yapılmıştı; bu Sprint 40 katmanı user message draft için.
+- **Notification.Name namespace:** `pixel.proactive.promptInject` — uygulama içi event bus. Çakışma riski yok (3rd party app'ler bu name'i bilemez).
+- **Dual mode strategy:** Subagent dispatch ile aynı kural — sol sütuna inject. v0.2.68+ aday: aktif focus'taki sütun seçimi (last-active VM track).
+- **Tap → app aktif:** macOS UNNotification framework default davranışı. Pixel Agent kapalıysa açılır, açıksa öne gelir.
 
 ## [0.2.66] — 2026-05-26
 

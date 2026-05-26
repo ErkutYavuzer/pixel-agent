@@ -528,6 +528,25 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **26 May 2026: Sprint 39 tamamlandı — v2 paritesi.** v2'nin 5 trigger enum case'in tamamı v3'e modüler SPM mimarisinde indi. typedPause permission YOK (CGEventSource public API). windowDwell Accessibility (yoksa downgrade). upcomingEvent Calendar (yoksa no-op). Settings UI permission badge + System Settings deep-link. Mac test 1124 → 1150 (+26 net). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 40 — "Notification tap → ChatView smooth handoff" (v0.2.67)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | composer | `ProactivePromptComposer` saf helper — 5 trigger için Turkish first-person user voice prompt |
+| ✅ | encode | `ProactiveTrigger.userInfoPayload()` + `init?(userInfoPayload:)` — UNNotification.userInfo Sendable dict round-trip |
+| ✅ | system | `SystemNotifications.post(title:body:userInfo:)` overload — UNMutableNotificationContent.userInfo set |
+| ✅ | dispatch | `NotificationActionDispatcher` UNUserNotificationCenterDelegate — didReceive tap → normalize → decode → compose → broadcast |
+| ✅ | engine | `ProactiveEngine.Delivery` typealias 2-arg → 3-arg (`userInfo`); defaultDelivery + handle(_:) trigger.userInfoPayload() forward |
+| ✅ | wire | `ChatViewModel.injectDraft(_:)` + ChatView/DualChatHost `.onReceive(.proactivePromptInject)` listener |
+| ✅ | lifecycle | RootView .task `NotificationActionDispatcher.shared.register()` |
+| ✅ | UI | Settings → Proaktif tab "Bildirimi tıklayınca sohbete prompt aktar" opt-out toggle (default ON) |
+| ✅ | tests | 30 yeni (9 composer + 12 userInfo round-trip + 9 dispatcher) + 8 Sprint 38 regression update |
+| ⏸ | v0.2.68+ | Dual mode: aktif focus sütun (left-only yerine last-active track) |
+| ⏸ | v0.2.68+ | Calendar trigger: location → harita link + attendees ChatView pre-fill |
+| ⏸ | v0.2.68+ | iOS proactive — Background App Refresh sınırlı calendar widget candidate |
+
+**26 May 2026: Sprint 40 tamamlandı — smooth handoff.** Sprint 38-39 notification tap'i muğlaktı (sadece app aktivasyon). Sprint 40 trigger-spesifik hazır prompt'la ChatView composer'ı otomatik doldurur. **Confirm-first UX** (auto-send YOK) — kullanıcı kontrolünde. Mac test 1150 → 1180 (+30). iOS BUILD SUCCEEDED. Breaking change yok pratikte (Delivery typealias 3-arg ama dış API uyumlu).
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
