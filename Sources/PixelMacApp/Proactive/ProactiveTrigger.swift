@@ -59,6 +59,68 @@ public enum ProactiveTrigger: Sendable, Equatable {
         }
     }
 
+    // MARK: - Sprint 40 (v0.2.67) — userInfo encoding
+
+    /// **Sprint 40:** UNNotification.userInfo için Sendable string dictionary.
+    /// `[AnyHashable: Any]`'ın primitive value kısıtı: sadece Codable basic
+    /// types. Bu yüzden Int'ler bile `String(int)` ile encode edilir;
+    /// decoder tarafında parse.
+    public func userInfoPayload() -> [String: String] {
+        var dict: [String: String] = ["kind": kind.rawValue]
+        switch self {
+        case .idle(let minutes):
+            dict["minutes"] = String(minutes)
+        case .appChanged(let name, let bundleID):
+            dict["app"] = name
+            dict["bundleID"] = bundleID
+        case .windowDwell(let app, let title, let minutes, let bundleID):
+            dict["app"] = app
+            dict["title"] = title
+            dict["minutes"] = String(minutes)
+            dict["bundleID"] = bundleID
+        case .typedPause(let app, let bundleID):
+            dict["app"] = app
+            dict["bundleID"] = bundleID
+        case .upcomingEvent(let title, let minutesUntil, let location):
+            dict["title"] = title
+            dict["minutesUntil"] = String(minutesUntil)
+            if let location { dict["location"] = location }
+        }
+        return dict
+    }
+
+    /// **Sprint 40:** userInfo dict'ten Trigger geri inşa. Missing/corrupt
+    /// fields → nil. `NotificationActionDispatcher` userNotificationCenter
+    /// didReceive callback'ta kullanır.
+    public init?(userInfoPayload dict: [String: String]) {
+        guard let kindRaw = dict["kind"], let kind = TriggerKind(rawValue: kindRaw) else {
+            return nil
+        }
+        switch kind {
+        case .idle:
+            guard let minutesStr = dict["minutes"], let minutes = Int(minutesStr) else { return nil }
+            self = .idle(minutes: minutes)
+        case .appChange:
+            guard let name = dict["app"], let bundleID = dict["bundleID"] else { return nil }
+            self = .appChanged(name: name, bundleID: bundleID)
+        case .windowDwell:
+            guard let app = dict["app"],
+                  let bundleID = dict["bundleID"],
+                  let minutesStr = dict["minutes"],
+                  let minutes = Int(minutesStr) else { return nil }
+            let title = dict["title"] ?? ""
+            self = .windowDwell(app: app, title: title, minutes: minutes, bundleID: bundleID)
+        case .typedPause:
+            guard let app = dict["app"], let bundleID = dict["bundleID"] else { return nil }
+            self = .typedPause(app: app, bundleID: bundleID)
+        case .calendar:
+            guard let title = dict["title"],
+                  let minutesStr = dict["minutesUntil"],
+                  let minutesUntil = Int(minutesStr) else { return nil }
+            self = .upcomingEvent(title: title, minutesUntil: minutesUntil, location: dict["location"])
+        }
+    }
+
     /// **Sprint 38:** Notification başlığı + body için kısa human-readable
     /// metin. Settings UI'da ayrıca açıklayıcı string ile gösterilir.
     public var humanDescription: String {

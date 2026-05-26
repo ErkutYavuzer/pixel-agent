@@ -26,7 +26,7 @@ public actor ProactiveEngine {
     public static let idleThresholdDefaultsKey = "pixel.proactive.idleThresholdMinutes"
     public static let defaultIdleThresholdMinutes: Int = 15
 
-    public typealias Delivery = @Sendable (_ title: String, _ body: String) async -> Void
+    public typealias Delivery = @Sendable (_ title: String, _ body: String, _ userInfo: [String: String]) async -> Void
 
     private var idleDetector: IdleDetector?
     private var appObserver: AppChangeObserver?
@@ -54,9 +54,11 @@ public actor ProactiveEngine {
         self.deliver = deliver
     }
 
-    /// **Sprint 38:** Production delivery — `SystemNotifications.post` wrap.
-    public static let defaultDelivery: Delivery = { title, body in
-        await SystemNotifications.post(title: title, body: body)
+    /// **Sprint 38 + 40:** Production delivery — `SystemNotifications.post`
+    /// wrap. Sprint 40'da `userInfo` ile trigger context iletilir; tap
+    /// `NotificationActionDispatcher`'a ulaşır → ChatView draft inject.
+    public static let defaultDelivery: Delivery = { title, body, userInfo in
+        await SystemNotifications.post(title: title, body: body, userInfo: userInfo)
     }
 
     /// **Sprint 38:** Engine başlat. Master toggle kapalıysa no-op.
@@ -142,7 +144,9 @@ public actor ProactiveEngine {
         // 3. Record + deliver
         rateLimiter.record(kind: trigger.kind, at: now)
         let (title, body) = format(trigger)
-        await deliver(title, body)
+        // Sprint 40 (v0.2.67): userInfo trigger payload — tap sonrası
+        // dispatcher decode edip ChatView draft inject eder.
+        await deliver(title, body, trigger.userInfoPayload())
     }
 
     /// **Sprint 38:** Suppression store güncellendiğinde UserDefaults'a yaz +

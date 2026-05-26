@@ -139,6 +139,17 @@ final class ChatViewModel: ObservableObject {
     /// originated mesajlar (`ChatView.incomingRemoteText` path'ı) tekrar
     /// iOS'a echo edilmesin. Default true: Mac kullanıcısı composer'a
     /// yazıp gönderdiyse iOS'a yansıt.
+    /// **Sprint 40 (v0.2.67):** Proaktif notification tap'ten gelen draft
+    /// text'i composer field'ına yazar. `ChatView`/`DualChatHost`
+    /// `.onReceive(.proactivePromptInject)` üzerinden çağırır.
+    ///
+    /// Streaming aktifse no-op değil — kullanıcı composer'ı düzenlemek
+    /// isteyebilir; eski draft'ı override eder. UI feedback `@Published`
+    /// üzerinden otomatik.
+    func injectDraft(_ text: String) {
+        draft = text
+    }
+
     func send(text: String, broadcastToRemote: Bool = true) {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !isStreaming else { return }

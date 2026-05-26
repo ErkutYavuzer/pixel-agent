@@ -29,8 +29,22 @@ public enum SystemNotifications {
         body: String,
         identifier: String = UUID().uuidString
     ) async {
+        await post(title: title, body: body, userInfo: [:], identifier: identifier)
+    }
+
+    /// **Sprint 40 (v0.2.67):** `userInfo` parametresi ile notification post.
+    /// `UNNotificationResponse.notification.request.content.userInfo`
+    /// üzerinden delegate `didReceive` callback'inde okunabilir.
+    /// Caller `Sendable`-friendly `[String: String]` dict geçer; method
+    /// içeride `[AnyHashable: Any]` formatına yükseltir.
+    public static func post(
+        title: String,
+        body: String,
+        userInfo: [String: String],
+        identifier: String = UUID().uuidString
+    ) async {
         guard isBundledApp else { return }
-        let content = buildContent(title: title, body: body)
+        let content = buildContent(title: title, body: body, userInfo: userInfo)
         let request = UNNotificationRequest(
             identifier: identifier,
             content: content,
@@ -39,11 +53,14 @@ public enum SystemNotifications {
         try? await UNUserNotificationCenter.current().add(request)
     }
 
-    public static func buildContent(title: String, body: String) -> UNMutableNotificationContent {
+    public static func buildContent(title: String, body: String, userInfo: [String: String] = [:]) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        if !userInfo.isEmpty {
+            content.userInfo = userInfo  // [AnyHashable: Any] upcast
+        }
         return content
     }
 }

@@ -90,6 +90,13 @@ struct ChatView: View {
             viewModel.send(text: text, broadcastToRemote: false)
             incomingRemoteText = nil
         }
+        // Sprint 40 (v0.2.67): Proaktif notification tap → composer draft inject.
+        // NotificationActionDispatcher userNotificationCenter callback'inde
+        // broadcast eder; burada current ChatViewModel'a yazılır.
+        .onReceive(NotificationCenter.default.publisher(for: .proactivePromptInject)) { note in
+            guard let draft = note.userInfo?["draft"] as? String, !draft.isEmpty else { return }
+            viewModel.injectDraft(draft)
+        }
     }
 
     private func dispatchSubagent() {

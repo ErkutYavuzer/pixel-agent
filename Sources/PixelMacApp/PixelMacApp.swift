@@ -89,6 +89,9 @@ struct RootView: View {
         }
         .task {
             _ = await SystemNotifications.requestAuthorization()
+            // Sprint 40 (v0.2.67): UNUserNotificationCenter delegate kayıt.
+            // Bildirim tap'i yakalanıp ChatView draft inject edilir.
+            NotificationActionDispatcher.shared.register()
             await Self.startControlBridge()
             // Sprint 38 (v0.2.65): Proaktif tetikleyiciler başlat. Master toggle
             // (`pixel.proactive.masterEnabled` UserDefaults) kapalıysa engine

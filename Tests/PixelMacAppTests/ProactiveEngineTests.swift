@@ -15,7 +15,7 @@ final class ProactiveEngineTests: XCTestCase {
 
     func testHandleDeliversTriggerWhenNotSuppressed() async {
         let recorder = DeliveryRecorder()
-        let engine = ProactiveEngine(deliver: { title, body in
+        let engine = ProactiveEngine(deliver: { title, body, _ in
             await recorder.record(title, body)
         })
         await engine.handle(.idle(minutes: 15))
@@ -29,7 +29,7 @@ final class ProactiveEngineTests: XCTestCase {
         store.setKind(.idle, suppressed: true)
         let engine = ProactiveEngine(
             suppression: store,
-            deliver: { t, b in await recorder.record(t, b) }
+            deliver: { t, b, _ in await recorder.record(t, b) }
         )
         await engine.handle(.idle(minutes: 20))
         let count = await recorder.count()
@@ -42,7 +42,7 @@ final class ProactiveEngineTests: XCTestCase {
         store.setBundle("com.apple.safari", suppressed: true)
         let engine = ProactiveEngine(
             suppression: store,
-            deliver: { t, b in await recorder.record(t, b) }
+            deliver: { t, b, _ in await recorder.record(t, b) }
         )
         await engine.handle(.appChanged(name: "Safari", bundleID: "com.apple.safari"))
         let count = await recorder.count()
@@ -51,7 +51,7 @@ final class ProactiveEngineTests: XCTestCase {
 
     func testRateLimitBlocksSecondTrigger() async {
         let recorder = DeliveryRecorder()
-        let engine = ProactiveEngine(deliver: { t, b in await recorder.record(t, b) })
+        let engine = ProactiveEngine(deliver: { t, b, _ in await recorder.record(t, b) })
         let now = Date(timeIntervalSince1970: 10_000)
         await engine.handle(.idle(minutes: 15), now: now)
         await engine.handle(.idle(minutes: 16), now: now.addingTimeInterval(10))
@@ -60,14 +60,14 @@ final class ProactiveEngineTests: XCTestCase {
     }
 
     func testFormatProducesTurkishTitle() async {
-        let engine = ProactiveEngine(deliver: { _, _ in })
+        let engine = ProactiveEngine(deliver: { _, _, _ in })
         let (title, body) = await engine.format(.idle(minutes: 20))
         XCTAssertTrue(title.contains("Pixel Agent"))
         XCTAssertTrue(body.contains("20"))
     }
 
     func testFormatAppChangedUsesName() async {
-        let engine = ProactiveEngine(deliver: { _, _ in })
+        let engine = ProactiveEngine(deliver: { _, _, _ in })
         let (title, body) = await engine.format(.appChanged(name: "Xcode", bundleID: "com.apple.dt.Xcode"))
         XCTAssertTrue(title.contains("Xcode"))
         XCTAssertFalse(body.isEmpty)
@@ -77,7 +77,7 @@ final class ProactiveEngineTests: XCTestCase {
         let recorder = DeliveryRecorder()
         let engine = ProactiveEngine(
             defaults: UserDefaults(suiteName: "test.engine.\(UUID().uuidString)")!,
-            deliver: { t, b in await recorder.record(t, b) }
+            deliver: { t, b, _ in await recorder.record(t, b) }
         )
         // İlk: deliver
         await engine.handle(.appChanged(name: "Slack", bundleID: "com.slack"))
@@ -100,7 +100,7 @@ final class ProactiveEngineTests: XCTestCase {
     func testCurrentSuppressionReturnsLatest() async {
         var store = SuppressionStore()
         store.setKind(.idle, suppressed: true)
-        let engine = ProactiveEngine(suppression: store, deliver: { _, _ in })
+        let engine = ProactiveEngine(suppression: store, deliver: { _, _, _ in })
         let snap = await engine.currentSuppression()
         XCTAssertTrue(snap.suppressedKinds.contains(.idle))
     }

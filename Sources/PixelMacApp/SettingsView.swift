@@ -624,6 +624,9 @@ private struct ProactiveSettingsTab: View {
     @State private var newBundleDraft: String = ""
     @State private var accessibilityGranted: Bool = false
     @State private var calendarGranted: Bool = false
+    /// **Sprint 40 (v0.2.67):** Notification tap → ChatView draft inject.
+    /// Default ON. UserDefaults nil-safe.
+    @AppStorage(NotificationActionDispatcher.enabledDefaultsKey) private var notificationInjectEnabled: Bool = true
 
     var body: some View {
         Form {
@@ -632,6 +635,15 @@ private struct ProactiveSettingsTab: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Proaktif Tetikleyiciler")
                         Text("Boş kaldığınızda veya uygulama değiştiğinizde sistem bildirimiyle Pixel Agent'a yönlendiriliyorsunuz. Kapatılırsa hiçbir tetikleyici çalışmaz. Etkili olması için uygulamayı yeniden başlatın.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Toggle(isOn: $notificationInjectEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Bildirimi tıklayınca sohbete prompt aktar")
+                        Text("Proaktif bildirime tıkladığında ChatView composer'ına trigger-spesifik bir hazır prompt yazılır. Düzenleyip Enter ile gönderebilirsin (otomatik gönderme YOK).")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

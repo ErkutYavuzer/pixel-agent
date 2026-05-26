@@ -102,6 +102,12 @@ struct DualChatHost: View {
                 leftVM?.appendSubagentResult(text)
             }
         }
+        // Sprint 40 (v0.2.67): Proaktif notification tap draft → dual mode'da
+        // sol sütuna inject (subagent dispatch ile aynı sütun seçimi).
+        .onReceive(NotificationCenter.default.publisher(for: .proactivePromptInject)) { note in
+            guard let draft = note.userInfo?["draft"] as? String, !draft.isEmpty else { return }
+            leftVM.injectDraft(draft)
+        }
         .onChange(of: planMode) { _, newValue in
             leftVM.planMode = newValue
             rightVM.planMode = newValue
