@@ -12,6 +12,64 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording.
 - CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
+## [0.2.74] — 2026-05-26
+
+**Sprint 46 — Voice tools opt-in (per-tool UserDefaults override).** Sprint 44'teki `OpenAIToolBridge.voiceSafeToolNames` static whitelist artık kullanıcı tarafından **per-tool override** edilebilir. Settings → Sesli Mod → "Voice Tools" section'da tüm BuiltInTools listelenir, her tool için Toggle. Risky tool'lar (UI manipulation, subagent) turuncu badge'le default kapalıdır — kullanıcı bilinçli aktive edebilir.
+
+**Kategori sistemi:**
+1. **Default-enabled (önerilen, 9 tool):** clipboard, time, active_app, lan_ip, save_memory, search_memory, notify, play_sound — yeşil "önerilen" badge, default ON.
+2. **Risky (7 tool):** ui_click, ui_type, ui_screenshot, ui_query, ui_resolve, dispatch_subagent, dock_badge_set — turuncu "riskli" badge, default OFF.
+3. **Override:** `VoiceToolPreferences` UserDefaults `pixel.voice.toolOverrides` `[String: Bool]` dict; per-tool kullanıcı kararı default'a göre öncelikli.
+
+**Karar zinciri (`VoiceToolPreferences.isEnabled(_:)`):**
+1. UserDefaults override varsa → onu kullan
+2. `defaultEnabledToolNames` içindeyse → true
+3. Aksi halde (risky veya bilinmeyen) → false
+
+**OpenAI + Gemini ToolBridge** artık `VoiceToolPreferences` ile filter eder (eski `includeAll: true` test-only şimdi).
+
+**Test:** Mac 1312 → **1335** (+23: 15 VoiceToolPreferences + 8 ToolBridgePreferences). iOS xcodebuild simulator BUILD SUCCEEDED. **Breaking change yok** (Sprint 44 `voiceSafeToolNames` alias olarak korundu).
+
+### Added — Sprint 46 / Voice tools opt-in
+
+#### `Sources/PixelVoice/VoiceToolPreferences.swift` (yeni saf helper)
+- **`VoiceToolPreferences` struct** (`@unchecked Sendable`) — UserDefaults-backed per-tool override.
+- **`defaultEnabledToolNames: Set<String>`** — Sprint 44 9-tool whitelist (clipboard, time, memory, notification).
+- **`riskyToolNames: Set<String>`** — 7 tool (UI 5 + subagent + dock_badge).
+- **`isEnabled(_:) -> Bool`** — UserDefaults override > default whitelist > false (3-tier).
+- **`setEnabled(_:_:)` / `clearOverride(_:)` / `resetAllOverrides()`** — mutation API.
+- **`isDefaultEnabled(_:)` / `isRisky(_:)`** — UI badge için classification statics.
+
+#### `Sources/PixelVoice/OpenAIToolBridge.swift` (güncelleme)
+- `voiceSafeToolNames` artık `VoiceToolPreferences.defaultEnabledToolNames` alias (backward-compat).
+- `voiceTools(from:preferences:includeAll:)` — yeni `preferences` parametresi default `VoiceToolPreferences()`. Filter `preferences.isEnabled($0.name)`.
+- `includeAll: true` test/debug bypass (preferences ignore).
+
+#### `Sources/PixelVoice/GeminiToolBridge.swift` (güncelleme)
+- Aynı pattern — `voiceTools(from:preferences:includeAll:)` `VoiceToolPreferences` ile filter.
+- `tools[]` array'i ya tek `GeminiTools` grubu yada empty (all opted-out → Gemini setup'ta tools field omit).
+
+#### `Sources/PixelMacApp/SettingsView.swift` (Voice Tools section)
+- **`VoiceToolsSection` struct** — Sesli Mod tab altında 4. section.
+- **Per-tool Toggle** — `BuiltInTools.makeRegistry().all()` sorted by name; her satır: tool name (monospaced) + kategori badge + 2-satır description.
+- **Yeşil "önerilen" badge** — `isDefaultEnabled`.
+- **Turuncu "riskli" badge** — `isRisky`.
+- **"Önerilen Ayarlara Dön" button** — `resetAllOverrides()`.
+- **Dirty state caption** — değişiklik sonrası "Voice modu başlatıldıktan sonra restart gerek" uyarısı.
+
+### Tests — Sprint 46
+
+- `Tests/PixelVoiceTests/VoiceToolPreferencesTests.swift` — **15 yeni**: default whitelist içerik, risky içerik, disjoint set, helper methods (isDefaultEnabled/isRisky), default isEnabled decision (3 case), setEnabled override (true/false), persistence across instances, clearOverride (default-enabled + risky), resetAllOverrides, Sprint 44 backward-compat alias.
+- `Tests/PixelVoiceTests/ToolBridgePreferencesTests.swift` — **8 yeni**: OpenAI default whitelist filter, risky opt-in, default opt-out, includeAll bypass; Gemini aynı 3 case + all opted-out empty; cross-provider consistency (same prefs → same tool set).
+
+### Notes — Sprint 46
+
+- **Sprint 44 backward-compat:** `OpenAIToolBridge.voiceSafeToolNames` static alias olarak korundu (`VoiceToolPreferences.defaultEnabledToolNames`'e referans). Sprint 44 kodu hâlâ derlenir.
+- **Restart-required:** Provider singleton app launch'ta yaratılır (Sprint 42'den beri böyle). Tool preferences değiştiğinde voice mode kapalı/açık geçiş gerekmez, ama provider zaten başlamış session'da yeni tool listesi devreye girmez — kullanıcı bir sonraki mic FAB tıklamasında veya app restart sonrasında yeni preferences aktif. Settings UI orange uyarı verir.
+- **Risky tool aktive etmenin pratik anlamı:** Kullanıcı `ui_click`'i açarsa, agent voice modunda komutla "Safari'de X butonuna tıkla" deyince gerçekten click event yollar. Recovery zor (yanlış yere tıklamak undo gerektirir). Sadece güvendiğiniz workflow'larda açın.
+- **iOS Voice yok:** Tüm voice infra hâlâ Mac-only.
+- **Test coverage:** Sprint 46 testleri unit-level (saf helper + bridge filter). Real WebSocket round-trip Sprint 43-45'teki gibi manuel test.
+
 ## [0.2.73] — 2026-05-26
 
 **Hot-fix: Proaktif Tier 2 detector crash (SIGTRAP).** Kullanıcı v0.2.72 sonrası app launch'ta "pixel-agent beklenmedik şekilde kesildi" crash dialog raporladı. Crash log analizi:
