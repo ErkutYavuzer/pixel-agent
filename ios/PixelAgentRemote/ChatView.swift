@@ -25,10 +25,14 @@ struct ChatView: View {
                     ConnectionLostBanner(
                         pulseTrigger: lastDisconnectAt,
                         nextReconnectAt: session.nextReconnectAt,
+                        pairingStaleSuspected: session.pairingStaleSuspected,
                         onRetry: {
                             if let pairing = session.pairing {
                                 Task { await session.connect(pairing: pairing) }
                             }
+                        },
+                        onForgetAndRescan: {
+                            Task { await session.forgetAndRescan() }
                         }
                     )
                 }

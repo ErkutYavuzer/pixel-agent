@@ -96,9 +96,30 @@ final class RemoteSession: ObservableObject {
     /// ile değiştirir; Mac side bağımsız state tutar, iOS optimistic.
     @Published var isStreamingScreenshots: Bool = false
 
+    /// **Sprint 35 (v0.2.62):** Reconnect loop sürekli fail ediyorsa veya
+    /// Mac side signing key/code değişmişse `true` olur — UI prominent
+    /// "Mac eşleştirmesi değişmiş olabilir — QR'ı Yeniden Tara" banner'ı
+    /// gösterir. `ReconnectAttemptTracker.isPairingStaleSuspected`'ın ayna'sı,
+    /// SwiftUI binding için @Published mirror.
+    @Published var pairingStaleSuspected: Bool = false
+
     private var transport: (any RemoteTransport)?
     private var receiveTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
+
+    /// **Sprint 35 (v0.2.62):** Connect/verify fail sayaçları. Threshold
+    /// aşıldığında `pairingStaleSuspected` true — UI auto-recovery prompt.
+    private var attemptTracker = ReconnectAttemptTracker()
+
+    /// **Sprint 35 (v0.2.62):** Connect başarılı olduktan sonra ilk
+    /// verify-passed envelope için bekleme task'i. 8 saniye içinde gelmezse
+    /// silent fail (key mismatch) → `recordVerifyFailure()`.
+    private var readyTimeoutTask: Task<Void, Never>?
+
+    /// **Sprint 35 (v0.2.62):** Aktif bağlantıda en az bir verify-passed
+    /// envelope alındı mı? `establishConnection` başında false; ilk
+    /// `handle()` verify pass'inde true + `attemptTracker.recordSuccess()`.
+    private var hasReceivedVerifiedEnvelope: Bool = false
 
     private let signingKey: Curve25519.Signing.PrivateKey
     private var macPublicKey: Curve25519.Signing.PublicKey?
@@ -165,6 +186,10 @@ final class RemoteSession: ObservableObject {
               let macKey = try? Curve25519.Signing.PublicKey(rawRepresentation: macKeyData)
         else {
             lastError = "Eşleşme bilgisinde Mac public key geçersiz. QR'ı yeniden tarayın."
+            // **Sprint 35 (v0.2.62):** PairingInfo bozuk = stale pairing
+            // sentinel'i; UI prompt'u hemen tetiklensin.
+            attemptTracker.recordVerifyFailure()
+            pairingStaleSuspected = attemptTracker.isPairingStaleSuspected
             return
         }
         self.macPublicKey = macKey
@@ -172,6 +197,11 @@ final class RemoteSession: ObservableObject {
         let transport = transportFactory(pairing)
         self.transport = transport
         self.pairing = pairing
+
+        // **Sprint 35 (v0.2.62):** Yeni connect denemesi başlıyor —
+        // ready timeout için flag/task reset.
+        hasReceivedVerifiedEnvelope = false
+        readyTimeoutTask?.cancel()
 
         do {
             let stream = try await transport.connect()
@@ -182,6 +212,16 @@ final class RemoteSession: ObservableObject {
 
             // Handshake: hello envelope (unsigned — chicken-and-egg).
             try await transport.send(RemoteEnvelope.hello(publicKey: publicKeyBase64))
+
+            // **Sprint 35 (v0.2.62):** Connect başarılı — ready timeout
+            // task'i başlat. 8 saniye içinde verify-passed envelope gelmezse
+            // sessiz key mismatch demektir; verify counter artırılır.
+            readyTimeoutTask = Task { [weak self] in
+                let seconds = ReconnectAttemptTracker.defaultReadyTimeoutSeconds
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await self?.handleReadyTimeout()
+            }
 
             receiveTask = Task { [weak self] in
                 guard let self else { return }
@@ -196,8 +236,35 @@ final class RemoteSession: ObservableObject {
                 }
             }
         } catch {
+            // **Sprint 35 (v0.2.62):** Connect fail counter — exponential
+            // backoff ile threshold'a ulaşırsa UI stale prompt'u açar.
+            attemptTracker.recordConnectFailure()
+            pairingStaleSuspected = attemptTracker.isPairingStaleSuspected
             await self.onConnectionLost(error: error)
         }
+    }
+
+    /// **Sprint 35 (v0.2.62):** Connect başarılı olduktan sonra ilk
+    /// verify-passed envelope gelmezse (default 8 saniye) çağrılır.
+    /// Mac signing key değiştiyse `EnvelopeSigner.verify` her envelope'ı
+    /// sessizce reject eder — bu timeout o durumu yakalar.
+    private func handleReadyTimeout() async {
+        guard !hasReceivedVerifiedEnvelope else { return }
+        attemptTracker.recordVerifyFailure()
+        pairingStaleSuspected = attemptTracker.isPairingStaleSuspected
+    }
+
+    /// **Sprint 35 (v0.2.62):** UI'dan tetiklenir — saved pairing'i
+    /// UserDefaults'tan sil, tracker sayaçlarını sıfırla, `pairing = nil`
+    /// → `ContentView` otomatik `PairingScannerView`'a düşer. Kullanıcı
+    /// yeni QR'ı tarar, fresh pairing UserDefaults'a yazılır.
+    func forgetAndRescan() async {
+        await disconnect(forget: true)
+        attemptTracker = ReconnectAttemptTracker()
+        pairingStaleSuspected = false
+        hasReceivedVerifiedEnvelope = false
+        readyTimeoutTask?.cancel()
+        readyTimeoutTask = nil
     }
 
     func send(text: String) async {
@@ -506,7 +573,22 @@ final class RemoteSession: ObservableObject {
         guard let macKey = macPublicKey,
               EnvelopeSigner.verify(envelope, with: macKey)
         else {
+            // **Sprint 35 (v0.2.62):** Verify fail = Mac signing key
+            // değişmiş olabilir. Counter artır; threshold aşılırsa UI
+            // prominent banner gösterir.
+            attemptTracker.recordVerifyFailure()
+            pairingStaleSuspected = attemptTracker.isPairingStaleSuspected
             return
+        }
+
+        // **Sprint 35 (v0.2.62):** İlk verify-passed envelope —
+        // bağlantı sağlıklı. Ready timeout iptal et, tracker reset.
+        if !hasReceivedVerifiedEnvelope {
+            hasReceivedVerifiedEnvelope = true
+            readyTimeoutTask?.cancel()
+            readyTimeoutTask = nil
+            attemptTracker.recordSuccess()
+            pairingStaleSuspected = false
         }
 
         switch envelope.type {
