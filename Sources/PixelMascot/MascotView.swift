@@ -65,6 +65,8 @@ public struct MascotView: View {
             return MascotAnimationClock.idleOffset(time: time)
         case .thinking:
             return MascotAnimationClock.thinkingOffset(time: time)
+        case .listening:
+            return MascotAnimationClock.listeningOffset(time: time)
         case .speaking:
             return .zero
         case .error:

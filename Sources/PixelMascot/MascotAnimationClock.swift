@@ -21,6 +21,18 @@ public enum MascotAnimationClock {
         return CGSize(width: 0, height: y)
     }
 
+    // MARK: - Listening nod
+
+    /// **Sprint 50 (v0.2.79):** Listening state için dikkatli baş sallama —
+    /// idle'dan daha tetik (daha hızlı, biraz daha küçük). 1.67s periyot,
+    /// ±1.0pt amplitude. Dikey eksen; idle nefes (4s/±1.5pt) ile karışmaz.
+    public static func listeningOffset(time: Double) -> CGSize {
+        let amplitude: CGFloat = 1.0
+        let frequency: Double = 0.6  // ~1.67s period — idle'dan daha tetik
+        let y = amplitude * CGFloat(sin(time * 2 * .pi * frequency))
+        return CGSize(width: 0, height: y)
+    }
+
     // MARK: - Thinking wobble
 
     /// Thinking state için hafif yatay wobble — kafa sağa-sola hafifçe.

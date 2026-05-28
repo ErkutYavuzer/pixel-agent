@@ -5,6 +5,9 @@ public enum MascotState: String, CaseIterable, Sendable {
     case thinking
     case speaking
     case error
+    /// **Sprint 50 (v0.2.79):** Sesli modda mikrofon açık ve kullanıcı
+    /// konuşurken — dikkatli "dinliyorum" hali. VoiceSession sürer (Mac-only).
+    case listening
 }
 
 public struct MascotPalette: Sendable {
@@ -84,6 +87,7 @@ public enum PixelMascot {
         case .speaking:
             return index % 2 == 0 ? speakingFrame : speakingFrameClosed
         case .error: return errorFrame
+        case .listening: return listeningFrame
         }
     }
 
@@ -157,6 +161,25 @@ public enum PixelMascot {
     ..HXXXXXXS..
     ..XxXXXXxX..
     ..XxXXXXxX..
+    ..XXX__XXX..
+    ..XSXXXXSX..
+    ...SXXXXS...
+    ....SXXS....
+    ............
+    ............
+    """)
+
+    /// **Sprint 50 (v0.2.79):** Dinleme hali — gözler 2 hücre genişliğinde
+    /// (idle'da tek hücre), "dikkatle dinliyorum" görüntüsü. Ağız idle gibi
+    /// kapalı/nötr (`_`). Hareket `MascotAnimationClock.listeningOffset` ile
+    /// idle'dan daha tetik yumuşak baş sallama.
+    public static let listeningFrame = MascotFrame(ascii: """
+    ............
+    ....XXXX....
+    ...HXXXXS...
+    ..HXXXXXXS..
+    ..XOOXXOOX..
+    ..XOOXXOOX..
     ..XXX__XXX..
     ..XSXXXXSX..
     ...SXXXXS...

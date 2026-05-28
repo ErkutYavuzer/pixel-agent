@@ -26,11 +26,29 @@ final class MascotFrameTests: XCTestCase {
         let thinking = PixelMascot.frame(for: .thinking)
         let speaking = PixelMascot.frame(for: .speaking)
         let error = PixelMascot.frame(for: .error)
+        let listening = PixelMascot.frame(for: .listening)
 
         XCTAssertNotEqual(idle, thinking)
         XCTAssertNotEqual(idle, speaking)
         XCTAssertNotEqual(idle, error)
         XCTAssertNotEqual(speaking, thinking)
+        // Sprint 50: listening idle'dan görsel olarak farklı (geniş gözler).
+        XCTAssertNotEqual(idle, listening)
+        XCTAssertNotEqual(listening, speaking)
+    }
+
+    func testListeningFrameHasWiderEyesThanIdle() {
+        // Sprint 50: listening gözleri 2 hücre genişliğinde (x=3,4 ve x=7,8);
+        // idle'da göz tek hücre (x=3, x=8) → x=4/x=7 body ("X").
+        let idle = PixelMascot.idleFrame
+        let listening = PixelMascot.listeningFrame
+        // İç göz hücreleri: idle'da body, listening'de göz.
+        XCTAssertEqual(idle.cell(x: 4, y: 4), "X")
+        XCTAssertEqual(listening.cell(x: 4, y: 4), "O")
+        XCTAssertEqual(idle.cell(x: 7, y: 4), "X")
+        XCTAssertEqual(listening.cell(x: 7, y: 4), "O")
+        // Ağız idle gibi kapalı (`_`), konuşma ağzı (`M`) değil.
+        XCTAssertEqual(listening.cell(x: 5, y: 6), "_")
     }
 
     func testCellOutOfBoundsReturnsDot() {

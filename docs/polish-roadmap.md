@@ -693,6 +693,19 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **27 May 2026: Sprint 49.1 hot-fix (v0.2.78) — Auto-start default ON revert.** Cloudflare workers.dev wildcard cert provisioning'i hesap seviyesinde de-provisioned (2024 Workers Free Plan policy değişikliği sonrası). `wrangler deploy` başarılı, subdomain dashboard'da listelenir (`erkutyavuzer.workers.dev` — 4.12k lifetime request) ama TLS handshake `Cipher 0000` ile reddediliyor; lokal TLS stack sağlam (`cloudflare.com` ile handshake OK). Çözüm Cloudflare side: support ticket veya yeni subdomain. Code-side hot-fix: `RelayLauncher.isAutoStartEnabled` default `false → true` revert; productionURL kodda kalır, ileride Cloudflare side fix olursa Sprint 49.2 ile default tekrar OFF. Test 1368 — değişmez.
 
+## Sprint 50 — "Mascot listening state" (v0.2.79)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | mascot | `MascotState.listening` + `listeningFrame` (geniş gözler) + `frame()` switch |
+| ✅ | animation | `MascotAnimationClock.listeningOffset` (tetik baş sallama) + `MascotView` wire |
+| ✅ | saf helper | `VoiceMascotResolver` (voice event → `MascotState?`; nil = dokunma) |
+| ✅ | wire | `VoiceSession` capture/interim → listening, final → handoff, stop/error → idle, interrupt → listening |
+| ✅ | UI | `ChatViewModel.statusText` "Dinliyor..." |
+| ⏸ | v0.2.80+ | TTS "agent speaking" ayrımı + continuous voice'ta turn sonrası otomatik listening (`speakAssistantReply` wire + turn-state coupling) |
+
+**29 May 2026: Sprint 50 tamamlandı — Mascot listening state.** Voice feature'ının (Sprint 42-46) görsel hikâyesi tamamlandı: sesli modda mikrofon açıkken mascot dikkatli "dinliyorum" haline geçer (geniş gözler + idle'dan tetik baş sallama), kullanıcı segmenti bitirince `send()` devralır (`.thinking`). Interrupt'ta tekrar `.listening` (kesme feedback'i). Eşleme saf `VoiceMascotResolver`'da (test edilebilir). Mac test 1368 → 1380 (+12: MascotFrame +1, MascotAnimationClock +4, VoiceMascotResolver +7). iOS additive (MascotState shared enum, voice Mac-only). Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

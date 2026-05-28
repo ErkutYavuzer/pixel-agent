@@ -340,6 +340,7 @@ final class ChatViewModel: ObservableObject {
         case .idle: return messages.isEmpty ? "Hazır" : "Hazır • \(messages.count) mesaj"
         case .thinking: return "Düşünüyor..."
         case .speaking: return "Yazıyor..."
+        case .listening: return "Dinliyor..."
         case .error: return "Hata"
         }
     }

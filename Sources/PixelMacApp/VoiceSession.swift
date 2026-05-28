@@ -1,4 +1,5 @@
 import Foundation
+import PixelMascot
 import PixelVoice
 
 /// **Sprint 42 (v0.2.69):** Voice session orchestrator — `VoiceProvider`
@@ -13,7 +14,11 @@ import PixelVoice
 ///    final `onAssistantComplete`'te `provider.speak(text)`.
 /// 3. `stopCapture()` — provider.stop(); session bitti.
 ///
-/// Voice modunda mascotState `.thinking` capture'da, `.speaking` TTS'te.
+/// **Sprint 50 (v0.2.79):** Mascot wiring — capture açıkken/kullanıcı
+/// konuşurken `.listening` (dikkatli dinleme hali); segment `.final` olunca
+/// `send()` devralır (`.thinking`); interrupt'ta tekrar `.listening`. Eşleme
+/// `VoiceMascotResolver` saf helper'ında (test edilebilir). `nil` dönüş
+/// "mascot'a dokunma" → text-turn akışı sahipliği korur.
 ///
 /// `@MainActor ObservableObject` — SwiftUI binding için. ChatView mic
 /// FAB butonu state'i bu objeden okur.
@@ -49,7 +54,10 @@ final class VoiceSession: ObservableObject {
         streamTask = Task { [weak self] in
             do {
                 try await providerRef.start()
-                await MainActor.run { self?.isActive = true }
+                await MainActor.run {
+                    self?.isActive = true
+                    self?.applyMascot(.captureStarted)
+                }
                 for await event in stream {
                     if Task.isCancelled { break }
                     await self?.handle(event: event)
@@ -72,6 +80,7 @@ final class VoiceSession: ObservableObject {
         }
         isActive = false
         liveTranscript = ""
+        applyMascot(.captureStopped)
     }
 
     /// **Sprint 42:** Agent cevabını seslendirmek için ChatHost'tan çağrılır
@@ -86,6 +95,7 @@ final class VoiceSession: ObservableObject {
     /// soru sormaya başladı). Sprint 43 OpenAI Realtime'da server-side VAD
     /// otomatik handle eder; Apple'da manuel.
     func interruptSpeech() {
+        applyMascot(.interrupted)
         Task { [provider] in
             await provider.cancelSpeech()
         }
@@ -97,10 +107,12 @@ final class VoiceSession: ObservableObject {
         switch event {
         case .interim(let text):
             liveTranscript = text
+            applyMascot(.transcriptInterim)
             // Composer canlı preview — kullanıcı görsün
             viewModel?.injectDraft(text)
         case .final(let text):
             liveTranscript = ""
+            // Mascot'a dokunma (.transcriptFinal → nil): send() .thinking set eder
             // Otomatik gönder — voice akışı doğal
             if !text.trimmingCharacters(in: .whitespaces).isEmpty {
                 viewModel?.send(text: text)
@@ -108,6 +120,14 @@ final class VoiceSession: ObservableObject {
         case .error(let message):
             lastError = message
             isActive = false
+            applyMascot(.failed)
         }
+    }
+
+    /// **Sprint 50 (v0.2.79):** Voice olayını `VoiceMascotResolver` ile mascot
+    /// state'ine eşler ve (nil değilse) viewModel'a uygular.
+    private func applyMascot(_ event: VoiceMascotResolver.Event) {
+        guard let state = VoiceMascotResolver.mascotState(for: event) else { return }
+        viewModel?.mascotState = state
     }
 }

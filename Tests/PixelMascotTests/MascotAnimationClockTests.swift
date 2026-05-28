@@ -54,6 +54,38 @@ final class MascotAnimationClockTests: XCTestCase {
         }
     }
 
+    // MARK: - Listening nod
+
+    func testListeningOffsetIsZeroAtTimeZero() {
+        let offset = MascotAnimationClock.listeningOffset(time: 0)
+        XCTAssertEqual(offset.width, 0, accuracy: 0.001)
+        XCTAssertEqual(offset.height, 0, accuracy: 0.001)
+    }
+
+    func testListeningOffsetVerticalOnly() {
+        for t in [0.4, 0.9, 1.3, 2.1, 3.3] {
+            let offset = MascotAnimationClock.listeningOffset(time: t)
+            XCTAssertEqual(offset.width, 0,
+                           "t=\(t) için width=0 bekleniyor; got \(offset.width)")
+        }
+    }
+
+    func testListeningOffsetAmplitudeWithinBounds() {
+        // amplitude 1.0 → |height| ≤ 1.0.
+        for t in stride(from: 0.0, through: 6.0, by: 0.1) {
+            let offset = MascotAnimationClock.listeningOffset(time: t)
+            XCTAssertLessThanOrEqual(abs(offset.height), 1.0 + 0.001,
+                                     "t=\(t) → \(offset.height) bound aşıldı")
+        }
+    }
+
+    func testListeningOffsetPeriodicityAt1_67Seconds() {
+        // 0.6 Hz → ~1.667s periyot; t=0 ve t=1/0.6 değerleri yakın olmalı.
+        let a = MascotAnimationClock.listeningOffset(time: 0)
+        let b = MascotAnimationClock.listeningOffset(time: 1.0 / 0.6)
+        XCTAssertEqual(a.height, b.height, accuracy: 0.001)
+    }
+
     // MARK: - Speaking frame index
 
     func testSpeakingFrameIndexAtZero() {

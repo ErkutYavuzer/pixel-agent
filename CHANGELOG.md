@@ -11,6 +11,42 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording; Cloudflare workers.dev cert reprovisioning (support ticket veya yeni subdomain).
 
+## [0.2.79] — 2026-05-29
+
+**Sprint 50 — Mascot "listening" state (sesli mod görsel feedback).** Sesli modda mikrofon açıkken/kullanıcı konuşurken mascot artık dikkatli bir "dinliyorum" haline geçer. Önceden voice capture sırasında mascot `.idle`/`.thinking` kalıyordu — görsel feedback yoktu. Mascot proje marka kimliği olduğundan bu, voice feature'ının görsel hikâyesini tamamlar + demo değeri taşır.
+
+**Akış:** mic aç → `.listening` (geniş dikkatli gözler + tetik baş sallama) · kullanıcı konuşur (interim) → `.listening` sürer · segment biter (`.final`) → `send()` devralır (`.thinking`) · agent cevabı → `.speaking` (mevcut) · kullanıcı keser (interrupt) → tekrar `.listening`.
+
+**Test:** Mac 1368 → **1380** (+12: 1 MascotFrame geniş-göz + 4 MascotAnimationClock listeningOffset + 7 VoiceMascotResolver). 0 failure. `swift build` temiz. iOS additive (MascotState shared enum; iOS mascotState'i lokal set eder, wire'da taşınmaz → eski client etkilenmez). Breaking change yok.
+
+### Added — Sprint 50 / Mascot listening
+
+#### `Sources/PixelMascot/PixelMascot.swift`
+- **`MascotState.listening`** — 5. state (rawValue `"listening"`).
+- **`listeningFrame`** — gözler 2 hücre genişliğinde ("dikkatle dinliyorum"; idle'da tek hücre), ağız idle gibi kapalı. `frame(for:atFrameIndex:)` switch'e eklendi.
+
+#### `Sources/PixelMascot/MascotAnimationClock.swift`
+- **`listeningOffset(time:)`** — dikkatli baş sallama; ±1.0pt / 0.6Hz (~1.67s), idle nefesinden (±1.5pt / 0.25Hz) daha tetik. Dikey eksen.
+
+#### `Sources/PixelMacApp/VoiceMascotResolver.swift` (yeni, saf helper)
+- **`VoiceMascotResolver`** — voice olayı (`captureStarted`/`transcriptInterim`/`transcriptFinal`/`interrupted`/`captureStopped`/`failed`) → `MascotState?`. `nil` = "mascot'a dokunma" (text-turn akışı `.thinking`/`.speaking` sahipliğini korur). Test edilebilir; View'dan ayrık.
+
+### Changed — Sprint 50
+
+#### `Sources/PixelMacApp/VoiceSession.swift`
+- Capture başla + interim → `.listening`; `.final` → handoff (mascot'a dokunmaz); stop + error → `.idle`; `interruptSpeech()` → `.listening` (kesme feedback'i). Eşleme `VoiceMascotResolver` üzerinden.
+
+#### `Sources/PixelMacApp/ChatViewModel.swift`
+- `statusText` → `.listening` case: "Dinliyor...".
+
+#### `Sources/PixelMascot/MascotView.swift`
+- `currentOffset` → `.listening` → `listeningOffset`.
+
+### Notes — Sprint 50
+- **Defer:** TTS sırasında ayrı "agent speaking" + continuous voice'ta turn bitince otomatik `.listening`'e dönüş — `speakAssistantReply` henüz wire'lı değil + turn-state coupling gerektirir. Şu an turn sonrası mascot `.idle`'a döner, kullanıcı tekrar konuşunca interim ile `.listening`'e geçer.
+- **iOS:** voice Mac-only → iOS'ta `.listening` tetiklenmez (MascotState enum + view paylaşılır, hazır).
+- Bağlam: [ADR-0035 PixelVoice](docs/adr/0035-pixel-voice.md).
+
 ## [0.2.78] — 2026-05-27
 
 **Sprint 49.1 hot-fix — Auto-start default geri ON (Cloudflare cert provisioning sorunu).** Sprint 49'da production Cloudflare URL hardcoded edilmiş, auto-start default'u OFF'a alınmıştı; ancak `wrangler deploy` sonrası `pixel-agent-relay.erkutyavuzer.workers.dev` URL'i TLS handshake'i `Cipher 0000` ile reddediyor. Diagnostic: hesap subdomain'i (`erkutyavuzer.workers.dev`) Cloudflare dashboard'da allocated görünüyor (4.12k lifetime request) ama wildcard cert provisioning'i 2024 Workers Free Plan policy değişikliği sonrası de-provisioned. Bu kullanıcı/hesap için cert support ticket veya yeni subdomain ile çözülür — code-side bir şey yapılamaz.
