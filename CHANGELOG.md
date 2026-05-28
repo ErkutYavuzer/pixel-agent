@@ -10,7 +10,6 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 ### Notes
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording; Cloudflare workers.dev cert reprovisioning (support ticket veya yeni subdomain).
-- CHANGELOG borç: v0.2.56 → v0.2.61 entry'leri henüz eklenmedi.
 
 ## [0.2.78] — 2026-05-27
 
@@ -1061,6 +1060,115 @@ Threshold aşılınca iOS `ConnectionLostBanner` prominent kırmızı moda geçe
 - **Threshold seçimleri:** Connect fail 5 = ~30 saniyelik exponential backoff, gerçek transient network kopukluğu bu süre içinde kendini düzeltir. Verify fail 3 = key mismatch çok güvenilir sinyal (parse race değil). Ready timeout 8 saniye = Mac normalde `hostStatus`/`assistantChunk` push'larını anlık tetikler; 8s sessizlik mismatch göstergesi.
 - **Backward compat:** Yeni `@Published` field + opsiyonel callback + opsiyonel constructor parametreleri additive. Eski iOS app aynı protokol ile bağlanır; iOS-only UX değişikliği.
 - **Future direction:** Mac side teşhis görseli (PairingView'da current code + public key fingerprint kopyalanabilir + auto-refresh on regenerate); iOS Settings'te "Tracker debug" expand (count + threshold gözlemlemek). Şu an gizli — beklenen UX hep healthy.
+
+## [0.2.61] — 2026-05-26
+
+**Sprint 34 — Auto-connect on launch + persist pairing code.** Kullanıcı "iOS app bağlanmıyor" raporladı. İki kök sebep: (1) Mac auto-connect yoktu — `remoteHost.connect()` yalnız `PairingView` "Bağlan" butonuyla çağrılıyordu, her launch'ta manuel tıklamak gerekiyordu; (2) `PairingCode` persist edilmiyordu — `RemoteHost.init` her seferinde `PairingCode.generate()` ile yeni kod üretiyordu, iOS saved pairing eski kodu beklediği için Mac restart sonrası auto-reconnect fail oluyordu.
+
+**Test:** Mac 983 (değişmedi — bağlantı davranış fix'i). Mac BUILD SUCCEEDED. iOS değişmedi (auto-reconnect zaten Sprint 6.1'den beri saved pairing'den çalışıyor). Breaking change yok (UserDefaults yeni key; eski install first-launch'ta yeni code üretip persist eder, sonrası stabil).
+
+### Added — Sprint 34 / Pairing persistence
+
+#### `Sources/PixelRemote/PairingCode.swift`
+- **`storedCodeKey`** static UserDefaults key.
+- **`loadOrGenerate(userDefaults:)`** — saved valid code varsa yükle, yoksa yeni üret + save.
+- **`save(_:userDefaults:)`** — explicit persist.
+
+### Changed — Sprint 34
+
+#### `Sources/PixelRemote/RemoteHost.swift`
+- 3 init `PairingCode.loadOrGenerate()` kullanır (eski `.generate()` yerine).
+- **`regenerateCode()`** yeni üretip ek olarak `PairingCode.save(fresh)` çağırır.
+
+#### `Sources/PixelMacApp/PixelMacApp.swift`
+- `ChatHost.body`'ye yeni `.task` — app launch'ta `remoteHost.connect()` otomatik (`isConnected` guard ile idempotent). Mac dinlemeye başlar, iOS saved pairing aynı code ile auto-reconnect olur.
+
+## [0.2.60] — 2026-05-25
+
+**Sprint 33 v2 — Per-backend conversation sync to iOS.** Kullanıcı "Mac'te claude/codex/gemini ayrı sohbet ama iOS'ta hepsi aynı sohbette devam ediyor" raporladı. Mac per-backend `ConversationStore` izolasyonu (v0.2.25 `a941eac`, `conversation-{kind}.jsonl`) iOS'ta yansımıyordu; iOS tek `RemoteSession.messages` array'ine her şey karışıyordu. Yeni `conversationSync` envelope ile Mac aktif sohbetin tam snapshot'ını iOS'a yansıtır, iOS messages array'ini replace eder.
+
+**Test:** Mac 983. Mac + iOS simulator + device BUILD SUCCEEDED. Breaking change yok (additive envelope + opsiyonel callback). **Not:** Bu sprint `conversationSync` envelope ekledi ama `RemoteEnvelopeTests.testEnvelopeTypeContainsAllExpectedCases` regression set'i güncellenmedi — v0.2.62'de (Sprint 35) düzeltildi.
+
+### Added — Sprint 33 v2 / conversation sync
+
+#### `Sources/PixelRemote/RemoteEnvelope.swift`
+- **`EnvelopeType.conversationSync`** (forward-compat unknown fallback).
+- **`EnvelopePayload.conversationSync(messages: [Message])`** + `payload?.conversationMessages` getter + `PayloadKey.conversationMessages` wire field + `RemoteEnvelope.conversationSync(messages:)` factory.
+
+#### `Sources/PixelRemote/RemoteHost.swift`
+- **`sendConversationSync(_ messages:)`** public method.
+
+### Changed — Sprint 33 v2
+
+#### `Sources/PixelMacApp/ChatViewModel.swift`
+- **`onSnapshotBroadcast: (([Message]) -> Void)?`** callback — `restoreIfNeeded` sonu (backend/model `.id()` rebuild) + `newConversation` sonu (boş array) fire eder.
+
+#### `ios/PixelAgentRemote/RemoteSession.swift`
+- `.conversationSync` case → `messages` replace + `mascotState = .idle`.
+
+### Notes — Sprint 33 v2
+- **Sync tetikleyiciler:** (1) backend değişimi → ChatView `.id()` → snapshot; (2) ⌘N → boş snapshot; (3) archive load → arşiv mesajları.
+- **Open follow-up:** iOS reconnect/initial pair anında Mac otomatik snapshot push'lamıyor; kullanıcı backend toggle veya mesaj ile tetikler. (Sprint 34 auto-connect kısmen amortize eder.)
+
+## [0.2.59] — 2026-05-25
+
+**Sprint 33 — Bidirectional message sync.** v0.2.25'ten beri Mac→iOS sync yalnız assistant cevaplarını gönderiyordu; Mac composer'a yazılan user mesajları iOS'ta görünmüyordu. iOS→Mac yönü zaten `userMessage` envelope ile çalışıyordu (incomingRemoteText path). Çift yönlü sync wire-up ile her iki yön de user mesajlarını taşır; echo loop UUID dedup ile engellenir.
+
+**Test:** Mac 983. Mac + iOS simulator + device BUILD SUCCEEDED. Breaking change yok (additive opsiyonel callback + flag default).
+
+### Added — Sprint 33 / bidirectional sync
+
+#### `Sources/PixelRemote/RemoteHost.swift`
+- **`sendUserMessage(text:messageID:)`** public — `sendAssistantChunk` paterniyle userMessage envelope sign+send.
+
+### Changed — Sprint 33
+
+#### `Sources/PixelMacApp/ChatViewModel.swift`
+- **`send(text:broadcastToRemote: = true)`** — `true` → `onUserMessage` callback (Mac composer); `false` → yutulur (iOS-originated, incomingRemoteText path).
+- **`onUserMessage: ((String, String) -> Void)?`** yeni callback.
+
+#### `ios/PixelAgentRemote/RemoteSession.swift`
+- `.userMessage` case (yeni) — UUID dedup (`messages.contains { $0.id == msgID }` skip): iOS-originated Mac echo'su yutulur, Mac-originated yeni UUID append.
+
+### Notes — Sprint 33
+- **Echo loop önleme:** `ChatView.onChange(incomingRemoteText)` → `send(broadcastToRemote: false)`; Mac echo iOS'a geri gitmez.
+
+## [0.2.58] — 2026-05-25
+
+**Sprint 32 follow-up — Force TextField rebuild on send via `.id()`.** v0.2.57 defocus-refocus workaround SwiftUI `TextField(axis: .vertical)` binding sync bug için yeterli olmadı — bazı SwiftUI sürümlerinde defocus async tamamlanıyor, binding commit cycle eski NSTextField buffer'a yazıyor. Garantili çözüm: `@State sendCounter` + `.id("composer-\(sendCounter)")`; her send'de counter increment SwiftUI TextField'i tamamen yeniden inşa eder (eski buffer yok).
+
+**Test:** Mac 983. Mac BUILD SUCCEEDED. iOS version parity için bumped (iOS'ta bug yok). Breaking change yok.
+
+### Fixed — Sprint 32 follow-up
+
+#### `Sources/PixelMacApp/ChatComposer.swift`
+- **`@State sendCounter`** + `TextField(...).id("composer-\(sendCounter)")` — her send'de `&+= 1` (overflow-safe wrap) → tam rebuild, eski NSTextField instance silinir.
+- `DispatchQueue.main.asyncAfter` 50ms ile rebuild sonrası `isComposerFocused` restore — kullanıcı klavyeden devam edebilir.
+
+## [0.2.57] — 2026-05-25
+
+**Sprint 32 — Composer draft persists after send.** Kullanıcı "Mac'te chate yazdığım yazı sürekli kalıyor, her mesajda eski mesajı silmem gerekiyor" raporladı. Root cause: v0.2.20'den beri `ChatComposer.TextField(axis: .vertical)` (Shift+Enter newline için) kullanılıyor; macOS'ta bilinen SwiftUI bug — focus active iken parent'in `draft = ""` yazması NSTextField internal buffer'a yansımıyor.
+
+**Test:** Mac 983. Mac BUILD SUCCEEDED + iOS device install/launch başarılı. iOS version parity için bumped (TextField yapısı farklı, bug yok). Breaking change yok.
+
+### Fixed — Sprint 32
+
+#### `Sources/PixelMacApp/ChatComposer.swift`
+- **`performSend()`** send'den önce briefly defocus (`isComposerFocused = false`) → SwiftUI binding clear cycle'ını deterministik commit; sonra `DispatchQueue.main.asyncAfter` (50ms) refocus.
+- 3 send path (`.onSubmit`, "Gönder" `.return` shortcut, subagent dispatch) hepsi `performSend()`'den geçer — tek fix 3'ünü de düzeltir.
+
+## [0.2.56] — 2026-05-25
+
+**Sprint 31 — Backend/model picker in chat header (iOS).** v0.2.25'ten beri backend / model / planMode picker yalnız iOS Mac Paneli tab'ında erişilebilirdi; kullanıcı sohbet sırasında provider değiştirmek isteyince oraya gitmek zorundaydı (Sohbet tab'ında pick edememe bug olarak raporlandı). Chat header'a inline Menu eklendi: başlık altında "claude · opus" özeti, tap → Section'lı dropdown (Arka Uç / Model / Plan Modu), aynı `session.updateConfig` ile wire'lı.
+
+**Test:** Mac değişmedi (iOS-only UI). iOS xcodebuild simulator + device BUILD SUCCEEDED. Breaking change yok.
+
+### Added — Sprint 31 / iOS chat header picker
+
+#### `ios/PixelAgentRemote/ChatView.swift`
+- **`backendModelMenu`** @ViewBuilder — Section'lı Menu (Arka Uç / Model / Plan Modu); seçili için checkmark; transport badge (LAN/Relay) inline label'a alındı (ana satır temizlendi); plan modu açıkken turuncu `list.bullet.clipboard.fill` rozet.
+- **`isConnected` gate** — bağlantı yokken menu disabled.
+- **Defensive:** `availableBackends` boşsa `selectedBackend` tek seçenek (pairing yok / hostStatus gelmedi).
 
 ## [0.2.55] — 2026-05-25
 
