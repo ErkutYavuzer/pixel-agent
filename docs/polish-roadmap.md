@@ -706,6 +706,21 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **29 May 2026: Sprint 50 tamamlandı — Mascot listening state.** Voice feature'ının (Sprint 42-46) görsel hikâyesi tamamlandı: sesli modda mikrofon açıkken mascot dikkatli "dinliyorum" haline geçer (geniş gözler + idle'dan tetik baş sallama), kullanıcı segmenti bitirince `send()` devralır (`.thinking`). Interrupt'ta tekrar `.listening` (kesme feedback'i). Eşleme saf `VoiceMascotResolver`'da (test edilebilir). Mac test 1368 → 1380 (+12: MascotFrame +1, MascotAnimationClock +4, VoiceMascotResolver +7). iOS additive (MascotState shared enum, voice Mac-only). Breaking change yok.
 
+## Sprint 51 — "Skill / Recipe Extraction (Faz 1)" (v0.2.80)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | data | `SkillEntry` + `SkillStore` (skills.jsonl, lineage-aware versioning, supersede/recordUsage/compact) |
+| ✅ | ranking | `SkillRanker` (EmbeddingScorer reuse + usageCount boost + formatPrompt) |
+| ✅ | intent | `CaptureIntentDetector.detectSkillIntent` + `extractStepHints` |
+| ✅ | MCP | `SkillTools` — create/update/list/apply_skill (4 tool, standalone) |
+| ✅ | wiring | ChatViewModel skillStore injection + MemoryCaptureInstruction skillSection + App→ChatHost→ChatView/Dual zinciri |
+| ✅ | UI | Settings "Hafıza" tab skill Section (versiyon/usage/origin + adım disclosure + sil) |
+| ✅ | ADR | ADR-0037 + README |
+| ⏸ | v0.2.81+ | Faz 2: otomatik görev-sonrası extraction (toggle default OFF) + origin:.auto + iOS read-only |
+
+**29 May 2026: Sprint 51 (Faz 1) tamamlandı — Skill extraction.** Memory subsystem (ADR-0033) tekrarlanabilir çok-adımlı, versiyonlu, self-improving workflow'larla genişletildi (Hermes Agent paritesi). Agent `create_skill`/`update_skill`/`apply_skill` ile skill yönetir; ilgili skill'ler her mesaj öncesi system prompt'a ayrı section olarak enjekte edilir; sık kullanılan skill ranking'de öne çıkar (usageCount boost). Self-improving altyapısı (lineage versioning) Faz 1'de; otomatik extraction Faz 2'ye ertelendi (FP riski). Mac test 1380 → 1418 (+38). iOS BUILD SUCCEEDED. Breaking change yok.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.

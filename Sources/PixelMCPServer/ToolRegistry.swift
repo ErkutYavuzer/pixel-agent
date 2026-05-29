@@ -107,6 +107,12 @@ public enum BuiltInTools {
         // erişebilir; file-level JSONL append-only, multi-process race minimal.
         registry.register(MemoryTools.saveMemory)
         registry.register(MemoryTools.searchMemory)
+        // Skill tools (Sprint 51 / v0.2.80) — standalone (PixelMemory.SkillStore
+        // direkt). Çok-adımlı, versiyonlu, self-improving workflow'lar.
+        registry.register(SkillTools.createSkill)
+        registry.register(SkillTools.updateSkill)
+        registry.register(SkillTools.listSkills)
+        registry.register(SkillTools.applySkill)
         return registry
     }
 

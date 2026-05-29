@@ -50,6 +50,10 @@ struct RootView: View {
     /// instance, backend'den bağımsız (memory kullanıcıya ait). Init'te
     /// fail olursa nil → injection devre dışı, chat normal çalışır.
     @State private var memoryStore: MemoryStore?
+    /// **Sprint 51 (v0.2.80):** Self-improving skill store — memoryStore gibi
+    /// tek instance, backend'den bağımsız. Fail olursa nil → skill injection
+    /// devre dışı, chat normal çalışır.
+    @State private var skillStore: SkillStore?
     @State private var initErrorMessage: String?
 
     init() {
@@ -62,10 +66,13 @@ struct RootView: View {
             _conversationStores = State(initialValue: stores)
             // Sprint 36: Memory store opsiyonel — fail olursa chat çalışmaya devam.
             _memoryStore = State(initialValue: try? MemoryStore())
+            // Sprint 51: Skill store opsiyonel — aynı şekilde best-effort.
+            _skillStore = State(initialValue: try? SkillStore())
             _initErrorMessage = State(initialValue: nil)
         } catch {
             _conversationStores = State(initialValue: [:])
             _memoryStore = State(initialValue: nil)
+            _skillStore = State(initialValue: nil)
             _initErrorMessage = State(initialValue: "Mesaj depoları açılamadı: \(error.localizedDescription)")
         }
     }
@@ -80,7 +87,7 @@ struct RootView: View {
                     onRetry: rescan
                 )
             } else if !conversationStores.isEmpty {
-                ChatHost(backends: backends, conversationStores: conversationStores, memoryStore: memoryStore)
+                ChatHost(backends: backends, conversationStores: conversationStores, memoryStore: memoryStore, skillStore: skillStore)
                     // Backends seti değişirse (rescan) ChatHost re-init → SubagentManager
                     // backendResolver closure'u yeni snapshot ile yakalanır. Trade-off:
                     // aktif subagent kartları kaybolur (rescan nadir bir event).
@@ -216,6 +223,9 @@ struct ChatHost: View {
     /// **Sprint 36 (v0.2.63):** Cross-session memory injection. nil ise chat
     /// normal çalışır, sadece `PlaybookLearner` prompt prefix atlanır.
     let memoryStore: MemoryStore?
+    /// **Sprint 51 (v0.2.80):** Self-improving skill injection. nil ise skill
+    /// section atlanır.
+    let skillStore: SkillStore?
     @State private var selectedKind: CLIKind
     @State private var secondaryKind: CLIKind
     @State private var mode: ChatMode = .single
@@ -294,10 +304,11 @@ struct ChatHost: View {
         return address
     }
 
-    init(backends: [CLIKind: CLIBackend], conversationStores: [CLIKind: ConversationStore], memoryStore: MemoryStore? = nil) {
+    init(backends: [CLIKind: CLIBackend], conversationStores: [CLIKind: ConversationStore], memoryStore: MemoryStore? = nil, skillStore: SkillStore? = nil) {
         self.backends = backends
         self.conversationStores = conversationStores
         self.memoryStore = memoryStore
+        self.skillStore = skillStore
         let primary = CLIKind.allCases.first(where: { backends[$0] != nil }) ?? .gemini
         let secondary = CLIKind.allCases.first(where: { backends[$0] != nil && $0 != primary }) ?? primary
         _selectedKind = State(initialValue: primary)
@@ -468,6 +479,7 @@ struct ChatHost: View {
                     backendKind: selectedKind,
                     conversationStore: store,
                     memoryStore: memoryStore,
+                    skillStore: skillStore,
                     subagentManager: subagentManager,
                     incomingRemoteText: $incomingFromRemote,
                     planMode: planMode,
@@ -511,6 +523,7 @@ struct ChatHost: View {
                     leftStoreFileName: "conversation-\(selectedKind.rawValue).jsonl",
                     rightStoreFileName: "conversation-\(secondaryKind.rawValue).jsonl",
                     memoryStore: memoryStore,
+                    skillStore: skillStore,
                     subagentManager: subagentManager,
                     planMode: planMode
                 )

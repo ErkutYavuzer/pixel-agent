@@ -101,4 +101,56 @@ public enum CaptureIntentDetector {
 
         return nil
     }
+
+    // MARK: - Skill intent (Sprint 51)
+
+    /// **Sprint 51 (v0.2.80):** Çok-adımlı workflow ("skill") niyeti pattern'leri.
+    /// `detectCategory`'nin tek-satır preference'ından farklı — burada
+    /// **adım dizisi / iş akışı / rutin** sinyali aranır. `create_skill`
+    /// aracının tetiklenmesi için contextual hint'e dönüşür.
+    public static let skillTurkishPatterns: [String] = [
+        "şu adımlar", "şu adımları", "şu iş akış", "iş akışı", "şu sırayla",
+        "adım adım", "şu rutin", "şu prosedür", "her seferinde şunları",
+        "şu workflow", "şu akışı izle", "şu şekilde sırayla",
+    ]
+
+    public static let skillEnglishPatterns: [String] = [
+        "these steps", "the following steps", "step by step", "this workflow",
+        "this routine", "this procedure", "in this order", "follow this flow",
+        "every time do these", "whenever, do",
+    ]
+
+    /// **Sprint 51:** Mesaj çok-adımlı bir skill bildiriyor mu?
+    /// Case-insensitive substring. Conservative — FP'den kaçın.
+    public static func detectSkillIntent(_ message: String) -> Bool {
+        let lowered = message.lowercased()
+        for pattern in skillTurkishPatterns where lowered.contains(pattern) { return true }
+        for pattern in skillEnglishPatterns where lowered.contains(pattern) { return true }
+        return false
+    }
+
+    /// **Sprint 51:** Mesajdan kaba adım listesi çıkar (best-effort hint —
+    /// gerçek adım çıkarımını LLM yapar). Öncelik: numaralı satırlar
+    /// (`1.` / `1)` / `2-`) → satır bazlı; yoksa sıra bağlaçları
+    /// (`önce`/`sonra`/`ardından`/`then`/`next`). Boş → adım bulunamadı.
+    public static func extractStepHints(_ message: String) -> [String] {
+        // 1) Numaralı işaretçileri yakala (satır içi de olabilir).
+        let numberedPattern = #"(?:(?<=\s)|^)\d+\s*[.)\-]\s+"#
+        if let regex = try? NSRegularExpression(pattern: numberedPattern) {
+            let ns = message as NSString
+            let matches = regex.matches(in: message, range: NSRange(location: 0, length: ns.length))
+            if matches.count >= 2 {
+                var steps: [String] = []
+                for (i, m) in matches.enumerated() {
+                    let start = m.range.location + m.range.length
+                    let end = (i + 1 < matches.count) ? matches[i + 1].range.location : ns.length
+                    let piece = ns.substring(with: NSRange(location: start, length: end - start))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !piece.isEmpty { steps.append(piece) }
+                }
+                if steps.count >= 2 { return steps }
+            }
+        }
+        return []
+    }
 }

@@ -44,13 +44,20 @@ public enum MemoryCaptureInstruction {
     /// system prompt'a eklenen contextual hint. nil → niyet yok, base
     /// instruction yeterli.
     public static func contextualPrefix(for userMessage: String) -> String? {
-        guard CaptureIntentDetector.hasCaptureIntent(userMessage) else { return nil }
-        let suggestedCategory = CaptureIntentDetector.detectCategory(userMessage)
-        let categoryHint = suggestedCategory.map { "Önerilen kategori: `\($0.rawValue)`." } ?? ""
-        return """
-        [Capture niyet sinyali]
-        Kullanıcı şu anda muhtemelen kalıcı bir bilgi bildiriyor — `save_memory` aracını çağırmayı bu turda özellikle değerlendir. \(categoryHint)
-        """
+        let hasCapture = CaptureIntentDetector.hasCaptureIntent(userMessage)
+        let hasSkill = CaptureIntentDetector.detectSkillIntent(userMessage)
+        guard hasCapture || hasSkill else { return nil }
+        var parts: [String] = []
+        if hasCapture {
+            let categoryHint = CaptureIntentDetector.detectCategory(userMessage)
+                .map { "Önerilen kategori: `\($0.rawValue)`." } ?? ""
+            parts.append("Kullanıcı şu anda muhtemelen kalıcı bir bilgi bildiriyor — `save_memory` aracını bu turda özellikle değerlendir. \(categoryHint)")
+        }
+        if hasSkill {
+            // Sprint 51: çok-adımlı workflow niyeti → create_skill nudge.
+            parts.append("Kullanıcı çok-adımlı, tekrarlanabilir bir workflow tarif ediyor olabilir — uygunsa `create_skill` aracını çağır (başlık + trigger + adımlar).")
+        }
+        return "[Capture niyet sinyali]\n" + parts.joined(separator: " ")
     }
 
     /// **Sprint 41:** Tam system prompt assembly — PlaybookLearner output
@@ -58,18 +65,20 @@ public enum MemoryCaptureInstruction {
     /// `playbookSection` `PlaybookLearner.formatPrompt()` çıktısı; boş ise
     /// boş string. Eğer auto-capture disabled ise sadece playbookSection
     /// döndürür (Sprint 36 davranışı).
+    /// **Sprint 51 (v0.2.80):** `skillSection` (SkillRanker.formatPrompt çıktısı)
+    /// eklendi. Section sırası: playbook → skills → baseInstruction → contextual.
+    /// `skillSection` default "" → mevcut caller'lar değişmeden çalışır.
     public static func assembleSystemPrompt(
         playbookSection: String,
+        skillSection: String = "",
         userMessage: String,
         defaults: UserDefaults = .standard
     ) -> String? {
+        let contextSections = [playbookSection, skillSection].filter { !$0.isEmpty }
         guard isAutoCaptureEnabled(defaults: defaults) else {
-            return playbookSection.isEmpty ? nil : playbookSection
+            return contextSections.isEmpty ? nil : contextSections.joined(separator: "\n\n")
         }
-        var sections: [String] = []
-        if !playbookSection.isEmpty {
-            sections.append(playbookSection)
-        }
+        var sections = contextSections
         sections.append(baseInstruction)
         if let prefix = contextualPrefix(for: userMessage) {
             sections.append(prefix)

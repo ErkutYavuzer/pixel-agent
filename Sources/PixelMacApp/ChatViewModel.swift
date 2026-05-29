@@ -29,6 +29,10 @@ final class ChatViewModel: ObservableObject {
     /// prompt'una `PlaybookLearner.formatPrompt` ile prepend edilir.
     /// `nil` ise injection devre dışı (test'lerde veya kullanıcı opt-out).
     let memoryStore: MemoryStore?
+    /// **Sprint 51 (v0.2.80):** Self-improving skill store. `send()` öncesi
+    /// `SkillRanker.relevant` ile ilgili skill'ler system prompt'a ayrı bir
+    /// "[İlgili skill'ler]" section olarak enjekte edilir. `nil` → devre dışı.
+    let skillStore: SkillStore?
     var onAssistantChunk: ((String, String) -> Void)?
     var onAssistantComplete: ((String, String) -> Void)?
     /// **Sprint 33 (v0.2.59):** Mac user mesajı iOS'a yansıması için callback.
@@ -56,6 +60,7 @@ final class ChatViewModel: ObservableObject {
         backend: any ChatBackend,
         conversationStore: ConversationStore,
         memoryStore: MemoryStore? = nil,
+        skillStore: SkillStore? = nil,
         onAssistantChunk: ((String, String) -> Void)? = nil,
         onAssistantComplete: ((String, String) -> Void)? = nil,
         onUserMessage: ((String, String) -> Void)? = nil,
@@ -64,6 +69,7 @@ final class ChatViewModel: ObservableObject {
         self.backend = backend
         self.conversationStore = conversationStore
         self.memoryStore = memoryStore
+        self.skillStore = skillStore
         self.onAssistantChunk = onAssistantChunk
         self.onAssistantComplete = onAssistantComplete
         self.onUserMessage = onUserMessage
@@ -175,6 +181,7 @@ final class ChatViewModel: ObservableObject {
         let backend = self.backend
         let store = self.conversationStore
         let memoryStore = self.memoryStore
+        let skillStore = self.skillStore
         let options = ChatOptions(planMode: planMode)
         let queryForMemory = trimmed
 
@@ -190,11 +197,23 @@ final class ChatViewModel: ObservableObject {
                 // section + base instruction + contextual prefix
                 // (CaptureIntentDetector pattern match olursa) birleştirir.
                 var systemPrompt: String? = nil
-                if let memoryStore {
-                    let entries = (try? await memoryStore.relevantContext(for: queryForMemory)) ?? []
-                    let playbookSection = PlaybookLearner.formatPrompt(entries)
+                if memoryStore != nil || skillStore != nil {
+                    var playbookSection = ""
+                    if let memoryStore {
+                        let entries = (try? await memoryStore.relevantContext(for: queryForMemory)) ?? []
+                        playbookSection = PlaybookLearner.formatPrompt(entries)
+                    }
+                    // Sprint 51: ilgili skill'leri ayrı section olarak enjekte et.
+                    var skillSection = ""
+                    if let skillStore {
+                        let skills = (try? await skillStore.loadActive()) ?? []
+                        skillSection = SkillRanker.formatPrompt(
+                            SkillRanker.relevant(query: queryForMemory, in: skills)
+                        )
+                    }
                     systemPrompt = MemoryCaptureInstruction.assembleSystemPrompt(
                         playbookSection: playbookSection,
+                        skillSection: skillSection,
                         userMessage: queryForMemory
                     )
                 }

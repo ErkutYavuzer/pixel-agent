@@ -73,7 +73,7 @@ Bu kararların altında yatan ve yeni kod yazılırken korunması gereken ilkele
 | [0030](0030-window-content-crop.md) | Window Content-Area Screenshot Crop | Accepted |
 | [0031](0031-set-of-mark-annotation.md) | Set-of-Mark Visual Annotation | Accepted |
 
-### Remote dashboard & zeka & bağlantı (0032-0036)
+### Remote dashboard & zeka & bağlantı (0032-0037)
 | # | Başlık | Status |
 |---|---|---|
 | [0032](0032-ios-dashboard-control-protocol.md) | iOS Dashboard Remote Control Protocol | Accepted |
@@ -81,10 +81,11 @@ Bu kararların altında yatan ve yeni kod yazılırken korunması gereken ilkele
 | [0034](0034-proactive-engine.md) | ProactiveEngine — Trigger-Based Passive UX | Accepted |
 | [0035](0035-pixel-voice.md) | PixelVoice — Realtime Voice Provider Abstraction | Accepted |
 | [0036](0036-relay-launcher-url-resolver.md) | Relay Launcher + URL Resolver | Accepted · ⚠️ production Cloudflare cert ile bloke |
+| [0037](0037-skill-recipe-extraction.md) | Skill / Recipe Extraction — Self-Improving Workflows | Accepted (Faz 1) |
 
 ## Yeni ADR yazarken
 
-- Numara sıradakini al (`0037+`).
+- Numara sıradakini al (`0038+`).
 - Şablonu koru (Status/Date/Tags/Context/Decision/Alternatives/Consequences/Plan/References).
 - References'ta gerçek kaynak dosya yolları + ilgili ADR linkleri ver.
 - Bu README tablosuna satır ekle.

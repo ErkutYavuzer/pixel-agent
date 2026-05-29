@@ -518,6 +518,10 @@ private struct MemorySettingsTab: View {
     /// Kapatılırsa system prompt'a capture instruction inject edilmez —
     /// agent sadece kullanıcı `save_memory` aracını explicit isteyince çağırır.
     @AppStorage(MemoryCaptureInstruction.autoCaptureEnabledDefaultsKey) private var autoCaptureEnabled: Bool = true
+    /// **Sprint 51 (v0.2.80):** Skill listesi state.
+    @State private var skills: [SkillEntry] = []
+    @State private var skillsError: String?
+    @State private var skillsLoading: Bool = true
 
     var body: some View {
         Form {
@@ -584,6 +588,38 @@ private struct MemorySettingsTab: View {
             }
 
             Section {
+                if skillsLoading {
+                    HStack { ProgressView().controlSize(.small); Text("Yükleniyor…").foregroundStyle(.secondary) }
+                } else if let skillsError {
+                    Text("Yüklenemedi: \(skillsError)").foregroundStyle(.red).font(.caption)
+                } else if skills.isEmpty {
+                    Text("Henüz skill yok. Çok-adımlı bir workflow tarif ettiğinde (\"şu adımları izle…\") agent `create_skill` ile kaydeder.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(skills) { skill in
+                        skillRow(skill)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Skill'ler (\(skills.count))")
+                    Spacer()
+                    Button {
+                        Task { await loadSkills() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .controlSize(.small)
+                    .help("Listeyi yenile")
+                }
+            } footer: {
+                Text("Çok-adımlı, versiyonlu workflow'lar. İlgili olduğunda her mesaj öncesi SkillRanker ile system prompt'a eklenir. `skills.jsonl` append-only.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
                 HStack {
                     Button {
                         Task { await optimize() }
@@ -610,7 +646,71 @@ private struct MemorySettingsTab: View {
         }
         .formStyle(.grouped)
         .padding(.horizontal, 4)
-        .task { await load() }
+        .task { await load(); await loadSkills() }
+    }
+
+    private func skillRow(_ skill: SkillEntry) -> some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(skill.steps.enumerated()), id: \.offset) { idx, step in
+                    Text("\(idx + 1). \(step)")
+                        .font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 2)
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(skill.title).font(.callout.bold())
+                        Text("v\(skill.version)").font(.caption2).foregroundStyle(.secondary)
+                        Text(skill.origin.displayName)
+                            .font(.caption2)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.purple.opacity(0.15), in: Capsule())
+                        if skill.usageCount > 0 {
+                            Text("\(skill.usageCount)×").font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    Text(skill.trigger).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Button(role: .destructive) {
+                    Task { await deleteSkill(skill.lineageID) }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help("Bu skill'i sil")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    @MainActor
+    private func loadSkills() async {
+        skillsLoading = true
+        skillsError = nil
+        do {
+            let store = try SkillStore()
+            skills = try await store.loadActive()
+        } catch {
+            skillsError = error.localizedDescription
+        }
+        skillsLoading = false
+    }
+
+    @MainActor
+    private func deleteSkill(_ lineageID: UUID) async {
+        do {
+            let store = try SkillStore()
+            try await store.delete(lineageID: lineageID)
+            await loadSkills()
+        } catch {
+            skillsError = error.localizedDescription
+        }
     }
 
     private func memoryRow(_ entry: MemoryEntry) -> some View {

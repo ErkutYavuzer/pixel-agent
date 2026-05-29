@@ -11,6 +11,42 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording; Cloudflare workers.dev cert reprovisioning (support ticket veya yeni subdomain).
 
+## [0.2.80] — 2026-05-29
+
+**Sprint 51 — Skill / Recipe Extraction (Faz 1).** Agent artık yeniden kullanılabilir, çok-adımlı, **versiyonlu ve self-improving** workflow'ları ("skill") kaydedebilir/uygulayabilir — Nous Research Hermes Agent'ın "self-improving skill loop"una parity. `save_memory` atomik fact içindi; skill'ler tekrarlanabilir prosedürler için (örn "PR review akışı: 1… 2… 3…"). İlgili skill'ler her mesaj öncesi system prompt'a ayrı bir "[İlgili skill'ler]" section olarak enjekte edilir. Mimari gerekçe: [ADR-0037](docs/adr/0037-skill-recipe-extraction.md).
+
+**Test:** Mac 1380 → **1418** (+38: 4 SkillEntry + 10 SkillStore + 7 SkillRanker + 6 SkillIntent + 7 SkillTools + 3 MemoryCaptureInstruction + ToolRegistry regression update). 0 failure. iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (yeni store/tipler additive; `assembleSystemPrompt` skillSection default "").
+
+### Added — Sprint 51 / Skill subsystem
+
+#### `Sources/PixelMemory/SkillEntry.swift` (yeni)
+- **`SkillEntry`** — lineageID + version + supersedesID + title + trigger + steps[] + usageCount + origin(.explicit/.auto) + deleted. `withNormalized()` (tag/step trim+dedup).
+
+#### `Sources/PixelMemory/SkillStore.swift` (yeni, actor)
+- JSONL append-only `skills.jsonl` (MemoryStore paterni). **Lineage-aware latest-wins:** aktif head = lineage içi en yüksek version. `create`/`update` (supersede, yeni versiyon)/`recordUsage` (aynı versiyon usageCount++)/`delete` (tombstone)/`loadActive`/`compact`.
+
+#### `Sources/PixelMemory/SkillRanker.swift` (yeni)
+- `EmbeddingScorer` reuse (zero yeni dep) + usageCount boost (`min(.,5)×0.02`, self-reinforcing) + `formatPrompt`. Skor `trigger + " " + title` üzerinden.
+
+#### `Sources/PixelMCPServer/SkillTools.swift` (yeni, standalone)
+- 4 MCP tool: `create_skill` / `update_skill` (self-improve) / `list_skills` / `apply_skill` (usageCount++). `BuiltInTools.makeRegistry`'ye kayıtlı (16 → 20 tool).
+
+### Changed — Sprint 51
+
+#### `Sources/PixelMemory/CaptureIntentDetector.swift`
+- **`detectSkillIntent`** (çok-adımlı workflow niyeti: "şu adımları izle / step by step / this workflow") + **`extractStepHints`** (numaralı satır kaba bölme).
+
+#### `Sources/PixelMemory/MemoryCaptureInstruction.swift`
+- `assembleSystemPrompt`'a `skillSection: String = ""` (geriye uyumlu); sıra playbook → skills → base → contextual. `contextualPrefix` skill-intent'te `create_skill` nudge'u ekler.
+
+#### `Sources/PixelMacApp/` (wiring)
+- `ChatViewModel`: `skillStore: SkillStore?` property/init + `send()` injection (`SkillRanker.relevant` → skillSection). App → ChatHost → ChatView/DualChatHost → ChatViewModel zinciri boyunca `skillStore` threadlendi (PixelMacApp/ChatView/DualChatHost).
+- `SettingsView` "Hafıza" tab'a skill `Section` — başlık + versiyon + usageCount + origin rozeti + adım `DisclosureGroup` + sil.
+
+### Notes — Sprint 51
+- **Faz 2 (defer):** Otomatik görev-sonrası extraction (system prompt talimatı + Settings toggle, default OFF — FP riski) + `origin:.auto` ayrımı + iOS read-only skill listesi. Self-improving altyapısı (versiyon + usageCount) Faz 1'de hazır.
+- JSONL şişmesi `SkillStore.compact()` (lineage-aware purge) ile sınırlanır; multi-process lock yok (ADR-0033 ile aynı bilinen sınır).
+
 ## [0.2.79] — 2026-05-29
 
 **Sprint 50 — Mascot "listening" state (sesli mod görsel feedback).** Sesli modda mikrofon açıkken/kullanıcı konuşurken mascot artık dikkatli bir "dinliyorum" haline geçer. Önceden voice capture sırasında mascot `.idle`/`.thinking` kalıyordu — görsel feedback yoktu. Mascot proje marka kimliği olduğundan bu, voice feature'ının görsel hikâyesini tamamlar + demo değeri taşır.

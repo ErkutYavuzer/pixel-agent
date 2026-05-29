@@ -148,4 +148,42 @@ final class MemoryCaptureInstructionTests: XCTestCase {
         XCTAssertLessThan(playbookRange.lowerBound, baseRange.lowerBound)
         XCTAssertLessThan(baseRange.lowerBound, prefixRange.lowerBound)
     }
+
+    // MARK: - Sprint 51: skill section + skill intent
+
+    func testAssembleIncludesSkillSectionInOrder() {
+        let prompt = MemoryCaptureInstruction.assembleSystemPrompt(
+            playbookSection: "[PLAYBOOK]",
+            skillSection: "[SKILLS]",
+            userMessage: "Hello",
+            defaults: defaults
+        )!
+        XCTAssertTrue(prompt.contains("[PLAYBOOK]"))
+        XCTAssertTrue(prompt.contains("[SKILLS]"))
+        // Sıra: playbook → skills → base
+        let pb = prompt.range(of: "[PLAYBOOK]")!
+        let sk = prompt.range(of: "[SKILLS]")!
+        let base = prompt.range(of: "Memory capture talimatı")!
+        XCTAssertLessThan(pb.lowerBound, sk.lowerBound)
+        XCTAssertLessThan(sk.lowerBound, base.lowerBound)
+    }
+
+    func testAssembleDisabledKeepsSkillSection() {
+        defaults.set(false, forKey: MemoryCaptureInstruction.autoCaptureEnabledDefaultsKey)
+        let prompt = MemoryCaptureInstruction.assembleSystemPrompt(
+            playbookSection: "",
+            skillSection: "[SKILLS]",
+            userMessage: "Hello",
+            defaults: defaults
+        )
+        XCTAssertEqual(prompt, "[SKILLS]")  // disabled → sadece context section'lar
+    }
+
+    func testContextualPrefixSkillIntentMentionsCreateSkill() {
+        let prefix = MemoryCaptureInstruction.contextualPrefix(
+            for: "Deploy için şu adımları izle: 1. build 2. test"
+        )
+        XCTAssertNotNil(prefix)
+        XCTAssertTrue(prefix?.contains("create_skill") ?? false)
+    }
 }
