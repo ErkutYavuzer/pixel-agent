@@ -157,10 +157,15 @@ final class RelayLauncher: ObservableObject {
             self.lastError = nil
             self.didStartOnce = true
 
-            // Watchdog: process exit'i izle, beklenmedik exit'te restart
-            watchdogTask = Task { [weak self] in
-                proc.waitUntilExit()
-                await self?.handleProcessExit(code: proc.terminationStatus)
+            // **Sprint 52 hotfix (v0.2.82):** Process exit'i `terminationHandler`
+            // ile izle. Önceki `Task { proc.waitUntilExit() }` — RelayLauncher
+            // @MainActor olduğu için plain Task MAIN ACTOR'da koşuyordu; wrangler
+            // dev hiç çıkmadığı için `waitUntilExit()` main thread'i sonsuza dek
+            // blokluyordu (app donuyor). terminationHandler bloklamaz — process
+            // gerçekten çıkınca bg queue'da tetiklenir, MainActor'a hop ederiz.
+            proc.terminationHandler = { [weak self] finished in
+                let code = finished.terminationStatus
+                Task { @MainActor in self?.handleProcessExit(code: code) }
             }
         } catch {
             lastError = "Wrangler başlatılamadı: \(error.localizedDescription)"

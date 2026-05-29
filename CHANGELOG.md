@@ -11,6 +11,19 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording; Cloudflare workers.dev cert reprovisioning (support ticket veya yeni subdomain).
 
+## [0.2.82] — 2026-05-29
+
+**Hotfix — RelayLauncher main-thread freeze.** v0.2.78'de auto-start tekrar ON yapılmıştı; wrangler kurulu bir Mac'te app açılışta **donuyordu**. Kök neden: `RelayLauncher.launchWranglerProcess` watchdog'u `Task { proc.waitUntilExit() }` ile kuruyordu — `RelayLauncher` `@MainActor` olduğundan bu plain `Task` **main actor'da** koşuyor; wrangler dev hiç çıkmadığı için `waitUntilExit()` main thread'i sonsuza dek blokluyordu (`sample` ile teşhis edildi: main thread `-[NSConcreteTask waitUntilExit]` içinde).
+
+**Fix:** Bloklayan `waitUntilExit()` Task'ı yerine `proc.terminationHandler` (Foundation'ın bloklamayan exit-bildirimi) — process gerçekten çıkınca background queue'da tetiklenir, `handleProcessExit`'e MainActor'a hop ederek gider. Main thread hiç bloklanmaz; restart/stop semantiği korunur (`handleProcessExit` `guard isRunning` ile stop'ta restart'ı bastırır).
+
+**Doğrulama:** v0.2.82 açılışta responsive (sample: main thread normal RunLoop, `waitUntilExit` yok, CPU %0 idle); wrangler relay 8787'de bloklamadan canlı. Test sayısı değişmedi (1457).
+
+### Fixed — Hotfix
+
+#### `Sources/PixelMacApp/RelayLauncher.swift`
+- `launchWranglerProcess`: watchdog `Task { proc.waitUntilExit(); … }` → `proc.terminationHandler = { … Task { @MainActor in handleProcessExit(…) } }`. Main actor bloklanmaz.
+
 ## [0.2.81] — 2026-05-29
 
 **Sprint 52 — Computer-Use Macro Recorder (F1 Faz 1: A+B+C).** Agent'ın/kullanıcının bir dizi computer-use aksiyonunu (ui_click/ui_type) **kaydedip** sonra tek komutla **replay** etmesi. **Koordinat değil semantik:** her tıklama AX referansı (UIQuery + opaqueID) olarak saklanır; replay'de element AX ile yeniden çözülür → pencere taşınsa/boyut değişse bile çalışır. pixel'in AX moat'ını sergileyen "Show HN" demo özelliği. Mimari: [ADR-0038](docs/adr/0038-computer-use-macro-recorder.md).
