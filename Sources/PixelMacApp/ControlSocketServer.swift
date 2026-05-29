@@ -4,6 +4,7 @@ import PixelBackends
 import PixelComputerUse
 import PixelCore
 import PixelMCPServer
+import PixelMemory
 import PixelSubagent
 import PixelTools
 
@@ -51,6 +52,15 @@ public actor ControlSocketServer {
     /// C12: ChatHost wire-up'ı bunu kullanır.
     func attachToolCallListener(_ listener: @Sendable @escaping (String, String, String?) -> Void) {
         self.onToolCalled = listener
+    }
+
+    /// **Sprint 52 (F1):** Başarılı `ui_click`/`ui_type` aksiyonlarını semantik
+    /// `MacroStep` olarak iletir (makro recording hook). `nil` ise no-op.
+    /// `ui_query`/`ui_resolve`/`ui_screenshot` kaydedilmez (exploratory/read-only).
+    var onUIActionRecorded: (@Sendable (MacroStep) -> Void)?
+
+    func attachUIActionListener(_ listener: @Sendable @escaping (MacroStep) -> Void) {
+        self.onUIActionRecorded = listener
     }
 
     public func start() throws {
@@ -237,6 +247,9 @@ public actor ControlSocketServer {
         case "ui_resolve":
             return await uiResolve(request.arguments)
 
+        case "replay_macro":
+            return await replayMacro(request.arguments)
+
         default:
             return .failure("Bilinmeyen bridge tool: \(request.tool)")
         }
@@ -278,6 +291,8 @@ public actor ControlSocketServer {
         do {
             let query = try Self.decodeUIQuery(from: queryArg)
             let element = try await computer.click(query, count: count, modifiers: modifiers)
+            // Sprint 52: makro recording — semantik (query + opaqueID) kayıt.
+            onUIActionRecorded?(.click(query: query, opaqueID: element.opaqueID, count: count, modifiers: modifiers))
             let payload = try Self.encodeJSON(element)
             return .success(payload)
         } catch let error as ComputerUseError {
@@ -303,6 +318,7 @@ public actor ControlSocketServer {
         }
         do {
             try await computer.type(text, into: intoQuery)
+            onUIActionRecorded?(.type(text: text, into: intoQuery))
             return .success(.string("Yazıldı (\(text.count) karakter)."))
         } catch let error as ComputerUseError {
             return .failure(error.errorDescription ?? "\(error)")
@@ -328,6 +344,28 @@ public actor ControlSocketServer {
             return .failure(error.errorDescription ?? "\(error)")
         } catch {
             return .failure("ui_resolve: \(error.localizedDescription)")
+        }
+    }
+
+    /// **Sprint 52 (F1):** Kayıtlı makroyu `MacroReplayer` ile replay eder.
+    /// Click/type'lar `computer`'a doğrudan gider (execute'a re-enter etmez →
+    /// recording hook tetiklenmez, döngü yok).
+    private func replayMacro(_ args: JSONValue) async -> BridgeResponse {
+        guard let idRaw = args["macro_id"]?.stringValue, let id = UUID(uuidString: idRaw) else {
+            return .failure("`macro_id` geçerli bir UUID olmalı.")
+        }
+        do {
+            let store = try MacroStore()
+            guard let recording = try await store.loadActive().first(where: { $0.id == id }) else {
+                return .failure("Makro bulunamadı: \(idRaw)")
+            }
+            let replayer = MacroReplayer(computer: computer)
+            let report = try await replayer.replay(recording.steps)
+            return .success(.string("Replay tamam: \(report.executed)/\(report.total) adım çalıştı (\(report.skipped) atlandı)."))
+        } catch let error as MacroReplayError {
+            return .failure("Replay başarısız: \(error)")
+        } catch {
+            return .failure("replay_macro: \(error.localizedDescription)")
         }
     }
 

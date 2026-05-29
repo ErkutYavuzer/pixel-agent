@@ -125,6 +125,20 @@ public actor PixelComputerUse {
         return try await axBridge.resolve(opaqueID: opaqueID)
     }
 
+    /// **Sprint 52 (F1):** `opaqueID`'yi re-resolve edip tıklar. `ui_resolve`'un
+    /// "resolve-and-click" tamamlayıcısı — makro replay'in çekirdeği. Element
+    /// artık yoksa `nil` döner (caller `query` fallback / notFound politikası
+    /// uygular); tıklama başarısızlığı `.axCallFailed` fırlatır.
+    @discardableResult
+    public func clickResolved(opaqueID: String, count: Int = 1, modifiers: ModifierFlags = []) async throws -> UIElement? {
+        try await ensureAccessibility()
+        guard let target = try await axBridge.resolve(opaqueID: opaqueID) else {
+            return nil
+        }
+        try await PointerControl.click(at: target.frame.center, count: count, modifiers: modifiers)
+        return target
+    }
+
     // MARK: - Permission preflight
 
     private func ensureAccessibility() async throws {

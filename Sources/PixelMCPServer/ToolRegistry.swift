@@ -113,6 +113,10 @@ public enum BuiltInTools {
         registry.register(SkillTools.updateSkill)
         registry.register(SkillTools.listSkills)
         registry.register(SkillTools.applySkill)
+        // Macro tools (Sprint 52 / v0.2.81 — F1). list_macros standalone
+        // (MacroStore direkt); replay_macro bridge (Mac app'te AX replay).
+        registry.register(MacroTools.listMacros)
+        registry.register(replayMacro)
         return registry
     }
 
@@ -339,6 +343,36 @@ public enum BuiltInTools {
                 args["follow_ups"] = followUps
             }
             return await callBridge(tool: "dispatch_subagent", arguments: .object(args))
+        }
+    )
+
+    /// **Sprint 52 (F1):** Kayıtlı makroyu Mac app'te replay eder (AX re-resolve,
+    /// koordinat değil). Destructive → Plan modunda bloklanır. PixelAgent.app
+    /// çalışıyor olmalı.
+    static let replayMacro = ToolDefinition(
+        name: "replay_macro",
+        description: """
+            Kayıtlı bir computer-use makrosunu (list_macros'tan `macro_id`) yeniden \
+            oynatır — her adımda element AX ile yeniden çözülür (koordinat değil), \
+            pencere taşınsa bile çalışır. Destructive (ui_click/ui_type içerir) → \
+            Plan modunda çağrılamaz. PixelAgent.app çalışıyor olmalı.
+            """,
+        inputSchema: .object([
+            "type": .string("object"),
+            "properties": .object([
+                "macro_id": .object([
+                    "type": .string("string"),
+                    "description": .string("list_macros sonucundaki makro id (UUID)."),
+                ]),
+            ]),
+            "required": .array([.string("macro_id")]),
+        ]),
+        handler: { params in
+            if let err = planModeGuard("replay_macro") { return err }
+            guard let id = params?["macro_id"]?.stringValue, !id.isEmpty else {
+                return ToolResultBuilder.error("`macro_id` zorunlu.")
+            }
+            return await callBridge(tool: "replay_macro", arguments: .object(["macro_id": .string(id)]))
         }
     )
 

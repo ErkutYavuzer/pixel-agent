@@ -38,6 +38,7 @@ struct SettingsView: View {
         case .memory: MemorySettingsTab()
         case .proactive: ProactiveSettingsTab()
         case .voice: VoiceSettingsTab()
+        case .macros: MacroSettingsTab()
         case .permissions: PermissionsSettingsTab()
         }
     }
@@ -46,7 +47,7 @@ struct SettingsView: View {
 // MARK: - Tab enum (testable)
 
 enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
-    case general, models, connection, subagent, memory, proactive, voice, permissions
+    case general, models, connection, subagent, memory, proactive, voice, macros, permissions
 
     var id: String { rawValue }
 
@@ -59,6 +60,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .memory: return "Hafıza"
         case .proactive: return "Proaktif"
         case .voice: return "Sesli Mod"
+        case .macros: return "Makrolar"
         case .permissions: return "İzinler"
         }
     }
@@ -72,6 +74,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Sendable {
         case .memory: return "brain.head.profile"
         case .proactive: return "bell.badge"
         case .voice: return "mic"
+        case .macros: return "record.circle"
         case .permissions: return "lock.shield"
         }
     }

@@ -11,7 +11,8 @@ final class SettingsTabTests: XCTestCase {
         // Sprint 36 (v0.2.63): memory 6. tab eklendi.
         // Sprint 38 (v0.2.65): proactive 7. tab eklendi.
         // Sprint 42 (v0.2.69): voice 8. tab eklendi.
-        XCTAssertEqual(SettingsTab.allCases.count, 8)
+        // Sprint 52 (v0.2.81): macros 9. tab eklendi.
+        XCTAssertEqual(SettingsTab.allCases.count, 9)
         XCTAssertTrue(SettingsTab.allCases.contains(.general))
         XCTAssertTrue(SettingsTab.allCases.contains(.models))
         XCTAssertTrue(SettingsTab.allCases.contains(.connection))
@@ -19,6 +20,7 @@ final class SettingsTabTests: XCTestCase {
         XCTAssertTrue(SettingsTab.allCases.contains(.memory))
         XCTAssertTrue(SettingsTab.allCases.contains(.proactive))
         XCTAssertTrue(SettingsTab.allCases.contains(.voice))
+        XCTAssertTrue(SettingsTab.allCases.contains(.macros))
         XCTAssertTrue(SettingsTab.allCases.contains(.permissions))
     }
 

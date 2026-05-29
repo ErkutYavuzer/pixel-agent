@@ -26,7 +26,7 @@ let package = Package(
         .target(name: "PixelCore"),
         .target(name: "PixelBackends", dependencies: ["PixelCore"]),
         .target(name: "PixelTools", dependencies: ["PixelCore"]),
-        .target(name: "PixelMemory", dependencies: ["PixelCore"]),
+        .target(name: "PixelMemory", dependencies: ["PixelCore", "PixelComputerUse"]),
         .target(name: "PixelMascot"),
         .target(name: "PixelRemote", dependencies: ["PixelCore"]),
         .target(name: "PixelLAN", dependencies: ["PixelRemote"]),

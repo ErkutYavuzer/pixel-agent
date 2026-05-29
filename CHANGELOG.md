@@ -11,6 +11,40 @@ sürümleme [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) kur
 - v0.2 kalan: App Store signing.
 - Bekleyen kullanıcı aksiyonu: Apple Developer ID + notarization; demo GIF recording; Cloudflare workers.dev cert reprovisioning (support ticket veya yeni subdomain).
 
+## [0.2.81] — 2026-05-29
+
+**Sprint 52 — Computer-Use Macro Recorder (F1 Faz 1: A+B+C).** Agent'ın/kullanıcının bir dizi computer-use aksiyonunu (ui_click/ui_type) **kaydedip** sonra tek komutla **replay** etmesi. **Koordinat değil semantik:** her tıklama AX referansı (UIQuery + opaqueID) olarak saklanır; replay'de element AX ile yeniden çözülür → pencere taşınsa/boyut değişse bile çalışır. pixel'in AX moat'ını sergileyen "Show HN" demo özelliği. Mimari: [ADR-0038](docs/adr/0038-computer-use-macro-recorder.md).
+
+**Akış:** Settings → Makrolar → "Kayda Başla" → agent'a iş yaptır → "Durdur ve Kaydet" → makro listede → "Oynat" (AX re-resolve). MCP: `list_macros` + `replay_macro`.
+
+**Test:** Mac 1418 → **1457** (+39: A 25 [MacroStep 8 + MacroReplayPlan 9 + MacroStore 8] + B 8 [MacroRecorder] + C 6 [MacroReplayer 3 + MacroTools 3] + ToolRegistry/SettingsTab regression). 0 failure. iOS xcodebuild simulator BUILD SUCCEEDED. Breaking change yok (`PixelMemory → PixelComputerUse` dep eklendi, döngü yok).
+
+### Added — Sprint 52 / Macro recorder
+
+#### `Sources/PixelComputerUse/` (Faz 1A + 1C)
+- **`MacroStep`** enum (`.click(query:opaqueID:count:modifiers:)`/`.type`/`.screenshot`/`.wait`) + `summary` + `isDestructive`; `MacroReplayOptions`/`NotFoundPolicy`/`MacroReplayError`.
+- **`MacroReplayPlan`** (saf): `validate` (boş/runaway cap) + `decideOnNotFound` (retry/skip/abort) + `isBlockedByPlanMode`.
+- **`MacroReplayer`** (actor): opaqueID re-resolve → query fallback → notFound policy; runaway (maxSteps + maxDuration + Task.checkCancellation); Plan Mode guard.
+- **`PixelComputerUse.clickResolved(opaqueID:)`** — resolve-and-click primitifi.
+
+#### `Sources/PixelMemory/` (Faz 1A)
+- **`MacroRecording`** + **`MacroStore`** (`macros.jsonl`, append-only, latest-wins, tombstone). `Package.swift`: PixelMemory → PixelComputerUse dep.
+
+#### `Sources/PixelMacApp/` (Faz 1B + 1C)
+- **`MacroRecorder`** (@MainActor, `static let shared` + `init(store:)`) — start/record/stop/cancel.
+- **`MacroSettingsTab`** (9. tab "Makrolar") — kayıt toggle + canlı adım + liste + "Oynat" (progress/Durdur) + sil.
+
+#### `Sources/PixelMCPServer/` (Faz 1C)
+- **`MacroTools.listMacros`** (standalone) + **`replayMacro`** (bridge, plan-guarded). `BuiltInTools` 20 → 22 tool.
+
+### Changed — Sprint 52
+- **`ControlSocketServer`**: `onUIActionRecorded` hook (başarılı ui_click/ui_type → semantik MacroStep) + `attachUIActionListener` + `replay_macro` bridge handler. PixelMacApp wire-up.
+
+### Notes — Sprint 52
+- **Privacy (Faz 2):** `.type` düz metin saklar (şifre dahil) — secure-field maskeleme Faz 2'ye ertelendi. Kullanıcı uyarılmalı.
+- **Faz 2 defer:** secure-field maskeleme; adaptif wait; atomik replay (ToolArbiter re-entrancy); MenuBarExtra/⌘⇧R + mascot recording state; agent-tetikli start/stop_macro_recording; (düşük) CGEventTap insan-recording.
+- Replay click'leri `computer`'a doğrudan gider (execute'a re-enter etmez) → recording hook tetiklenmez (döngü yok).
+
 ## [0.2.80] — 2026-05-29
 
 **Sprint 51 — Skill / Recipe Extraction (Faz 1).** Agent artık yeniden kullanılabilir, çok-adımlı, **versiyonlu ve self-improving** workflow'ları ("skill") kaydedebilir/uygulayabilir — Nous Research Hermes Agent'ın "self-improving skill loop"una parity. `save_memory` atomik fact içindi; skill'ler tekrarlanabilir prosedürler için (örn "PR review akışı: 1… 2… 3…"). İlgili skill'ler her mesaj öncesi system prompt'a ayrı bir "[İlgili skill'ler]" section olarak enjekte edilir. Mimari gerekçe: [ADR-0037](docs/adr/0037-skill-recipe-extraction.md).

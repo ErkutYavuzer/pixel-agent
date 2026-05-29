@@ -724,6 +724,10 @@ struct ChatHost: View {
             await RootView.controlServer.attachToolCallListener { [weak remoteHost] tool, status, summary in
                 Task { await remoteHost?.sendToolCallEvent(toolName: tool, status: status, summary: summary) }
             }
+            // Sprint 52 (F1): başarılı ui_click/ui_type → makro recorder (aktif kayıttaysa).
+            await RootView.controlServer.attachUIActionListener { step in
+                Task { @MainActor in MacroRecorder.shared.record(step) }
+            }
 
             // Sprint 5: iOS archive viewer — handler'lar Mac arşivlerini
             // listele / yükle, response envelope ile dön.

@@ -19,8 +19,8 @@ final class ToolRegistryTests: XCTestCase {
         let registry = BuiltInTools.makeRegistry()
         let result = registry.listResult()
         let tools = result["tools"]?.arrayValue ?? []
-        // Sprint 36: +2 memory tool. Sprint 51 (v0.2.80): +4 skill tool.
-        XCTAssertEqual(tools.count, 20)  // 5 saf-data + 4 bridge + 5 ui_* + 2 memory + 4 skill
+        // Sprint 36: +2 memory tool. Sprint 51: +4 skill. Sprint 52: +2 macro.
+        XCTAssertEqual(tools.count, 22)  // 5 saf-data + 4 bridge + 5 ui_* + 2 memory + 4 skill + 2 macro
         // alfabetik sıra
         let names = tools.compactMap { $0["name"]?.stringValue }
         XCTAssertEqual(names, names.sorted())
@@ -51,6 +51,9 @@ final class ToolRegistryTests: XCTestCase {
             "update_skill",
             "list_skills",
             "apply_skill",
+            // Sprint 52 (v0.2.81) — macro tools.
+            "list_macros",
+            "replay_macro",
         ])
         let actual = Set(registry.all().map { $0.name })
         XCTAssertEqual(actual, expected)

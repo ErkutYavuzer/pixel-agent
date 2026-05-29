@@ -721,6 +721,18 @@ B2 (conversation history sidebar — büyük), B1 (Settings scene), B8 (iOS sett
 
 **29 May 2026: Sprint 51 (Faz 1) tamamlandı — Skill extraction.** Memory subsystem (ADR-0033) tekrarlanabilir çok-adımlı, versiyonlu, self-improving workflow'larla genişletildi (Hermes Agent paritesi). Agent `create_skill`/`update_skill`/`apply_skill` ile skill yönetir; ilgili skill'ler her mesaj öncesi system prompt'a ayrı section olarak enjekte edilir; sık kullanılan skill ranking'de öne çıkar (usageCount boost). Self-improving altyapısı (lineage versioning) Faz 1'de; otomatik extraction Faz 2'ye ertelendi (FP riski). Mac test 1380 → 1418 (+38). iOS BUILD SUCCEEDED. Breaking change yok.
 
+## Sprint 52 — "Computer-Use Macro Recorder (F1 Faz 1)" (v0.2.81)
+
+| Status | # | Item |
+|---|---|---|
+| ✅ | 1A | `MacroStep` + `MacroReplayPlan` (saf) + `MacroRecording` + `MacroStore` (macros.jsonl) |
+| ✅ | 1B | `ControlSocketServer` recording hook + `MacroRecorder` + Settings "Makrolar" kayıt/liste |
+| ✅ | 1C | `clickResolved` + `MacroReplayer` (AX re-resolve + runaway + plan guard) + `list_macros`/`replay_macro` MCP + Settings "Oynat" |
+| ✅ | ADR | ADR-0038 + README |
+| ⏸ | Faz 2 | secure-field maskeleme (privacy); adaptif wait; atomik replay; MenuBarExtra/⌘⇧R + mascot state; agent-tetikli start/stop_macro_recording; CGEventTap insan-recording |
+
+**29 May 2026: Sprint 52 (F1 Faz 1) tamamlandı — Computer-Use Macro Recorder.** Killer demo: agent/kullanıcı ui_click/ui_type dizisini kaydeder, "Oynat" ile tekrarlar. **Semantik (koordinat değil)** — replay'de element AX ile re-resolve edilir (opaqueID → query fallback), pencere taşınsa bile çalışır. Recording `ControlSocketServer` choke-point hook'undan (CGEventTap değil — privacy/kırılganlık). Mac test 1418 → 1457 (+39). iOS BUILD SUCCEEDED. **Privacy notu:** type düz metin saklar, secure-field maskeleme Faz 2.
+
 ## Demo Senaryosu (Sprint 1 sonrası)
 
 > Kullanıcı pixel-agent'ı açar. `⌘N` ile yeni sohbet. **Empty state'te 4 prompt chip görür** ("Bu klasörü özetle" / "Code review yap" / "Plan modunda araştırma" / "Subagent ile karşılaştır"). "Plan modunda araştırma" chip'ine tıklar. **Plan toggle otomatik açılır**, sağ tarafta **read-only tool list paneli** belirir (Read ✓ / Glob ✓ / Edit ✗ / Bash ✗). Send'e basar. **Typing indicator 3 dot pulse** ile başlar. Claude yanıtı **markdown formatında** stream eder; kod bloğunun sağ üstünde **"Kopyala" butonu**. Kullanıcı subagent panelinden Gemini'ye "PDF özetle" dispatch eder. Subagent panelde çalışırken, **bittiğinde ana chat'e `[subagent gemini] sonuç:` mesajı düşer**. Bu sırada telefonundan iOS dashboard ile backend'i Codex'e değiştirir; **Mac üstte "📱 Telefon: Codex'e geçildi" toast** belirir. Authentication exparit olursa **"Authenticate Claude" butonu**na basıp `claude login` Terminal'i açılır. Sohbet bitince "About" → **"MCP Entegrasyonu"** menüsünden JSON snippet'i kopyalayıp Claude Code config'ine yapıştırır.
